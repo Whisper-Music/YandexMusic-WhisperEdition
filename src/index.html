@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Моя Музыка</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="dim"></div>
+  <div id="titlebar" class="titlebar">
+    <div class="tbtitle"><span class="tbdot"></span>Моя Музыка</div>
+    <div class="tbctl">
+      <button id="wMin" title="Свернуть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 6h8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button id="wMax" title="Развернуть"></button>
+      <button id="wClose" class="wclose" title="Закрыть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="tabs" id="tabs"></header>
+
+    <aside class="panel side">
+      <input id="search" class="search" type="search" placeholder="Поиск" />
+      <button class="nav" id="wave">Моя волна</button>
+      <button class="nav active" id="likes">Лайки</button>
+      <button class="nav" id="settingsBtn">Настройки</button>
+      <div class="spacer"></div>
+      <button class="nav" id="profile">Профиль</button>
+    </aside>
+
+    <main class="main">
+      <div class="head">
+        <button id="back" class="round" hidden title="Назад">←</button>
+        <img id="headImg" class="headimg" alt="" hidden />
+        <div class="headtext">
+          <h2 id="title">Лайки</h2>
+          <div id="sub" class="sub" hidden></div>
+          <div id="stWrap" class="stwrap" hidden>
+            <button id="stBtn" class="nav stbtn">Жанры и настроения</button>
+            <button id="stReset" class="streset" title="Вернуть обычную Мою волну" hidden>✕</button>
+            <div id="stations" class="stations" hidden>
+              <div id="stChips" class="chips"></div>
+              <div id="stGrid" class="stgrid"></div>
+            </div>
+          </div>
+        </div>
+        <div id="waveInfo" class="waveinfo headinfo" hidden>
+          <p id="waveHint" class="wavehint">Нажми, чтобы включить Мою волну</p>
+          <div id="nowplay" class="nowplay" hidden>
+            <div id="npTitle" class="nptitle"></div>
+            <div id="npArtist" class="npartist"></div>
+          </div>
+        </div>
+        <button id="pinBtn" class="nav pin" hidden>Закрепить</button>
+      </div>
+      <div id="chips" class="chips" hidden></div>
+
+      <div class="cols">
+        <ul id="list" class="list"></ul>
+        <aside id="lastAlbum" class="lastAlbum" hidden></aside>
+      </div>
+      <section id="similar" class="similar" hidden>
+        <h3 id="simTitle">Похожие альбомы</h3>
+        <div id="simGrid" class="simgrid"></div>
+      </section>
+      <button id="more" class="nav more" hidden>Показать ещё</button>
+      <p id="status" class="status"></p>
+
+      <section id="wavePage" class="wavepage" hidden>
+        <div class="stage viz">
+          <canvas id="viz"></canvas>
+          <button id="waveBtn" class="wavebtn" title="Моя волна"></button>
+        </div>
+      </section>
+
+      <section id="settingsPage" class="settings" hidden>
+        <div class="card">
+          <h3>Цвета</h3>
+          <div class="swatches">
+            <label class="swatch"><input type="color" id="cAccent" /><span>Основной</span></label>
+            <label class="swatch"><input type="color" id="cAccent2" /><span>Второй</span></label>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Стекло и свечение</h3>
+          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
+          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
+          <label class="slide"><span>Затемнение фона</span><input type="range" id="cDim" min="0" max="85" /></label>
+        </div>
+        <div class="card">
+          <h3>Фон</h3>
+          <label class="slide"><span>Размытие фона</span><input type="range" id="cBlur" min="0" max="40" /></label>
+          <label class="drop" id="drop">
+            <input type="file" id="bgFile" accept="image/*" hidden />
+            <svg viewBox="0 0 24 24" width="30" height="30"><path fill="currentColor" d="M12 3l5 5h-3.5v6h-3V8H7zM5 17h14v3H5z"/></svg>
+            <b>Выбрать картинку или гиф</b>
+            <span>или перетащи файл сюда</span>
+          </label>
+          <button class="nav palette" id="paletteBtn">✦ Подобрать цвета под фон</button>
+          <div class="row">
+            <button class="nav" id="bgReset">Убрать фон</button>
+            <button class="nav" id="cfgReset">Сбросить всё</button>
+          </div>
+          <p id="setNote" class="status"></p>
+        </div>
+        <div class="card">
+          <h3>Моя волна</h3>
+          <label class="switch"><input type="checkbox" id="cViz" /><i></i><span>Аудиовизуализатор</span></label>
+          <p class="status">Живые неровные круги в ритм музыке. Для анализа звука трек волны сначала загружается целиком, поэтому старт чуть дольше. Выключено: обычная потоковая загрузка и минимум нагрузки.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="panel player">
+      <div class="pinfo">
+        <img id="cover" class="cover" alt="" />
+        <div class="meta"><b id="pTitle">Загрузка…</b><span id="pArtist"></span></div>
+        <button id="likeBtn" class="likebtn" title="В лайки"></button>
+      </div>
+
+      <div class="pcenter">
+        <div class="seekrow">
+          <span class="time" id="tCur">0:00</span>
+          <input id="seek" type="range" min="0" max="1000" value="0" />
+          <span class="time" id="tDur">0:00</span>
+        </div>
+        <div class="ctrls">
+          <button id="shuffleBtn" class="modebtn"></button>
+          <button id="prev" title="Предыдущий"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+          <button id="play" class="playbtn" title="Пуск/пауза"></button>
+          <button id="next" title="Следующий"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+          <button id="repeatBtn" class="modebtn"></button>
+        </div>
+      </div>
+
+      <div class="volwrap" id="volWrap">
+        <button id="volBtn" title="Громкость (клик — выключить звук)"></button>
+        <div class="volpop">
+          <span id="volVal" class="volval">80</span>
+          <div class="volbox"><input id="vol" type="range" min="0" max="100" value="80" /></div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="full" class="full" data-mode="cover" hidden>
+    <div id="fBg" class="fbg"></div>
+    <div class="fwrap">
+      <button id="fClose" class="round fclose" title="Свернуть (Esc)">✕</button>
+      <header id="fHead" class="fhead">
+        <img id="fCover" class="fcover" alt="" />
+        <div id="fTitles" class="ftitles">
+          <div id="fTitle" class="ftitle"></div>
+          <div id="fArtist" class="fartist"></div>
+        </div>
+      </header>
+      <div id="fLyrics" class="flyrics"></div>
+      <footer class="fctrl">
+        <div class="fseek">
+          <span id="fTCur" class="time">0:00</span>
+          <input id="fSeek" type="range" min="0" max="1000" value="0" />
+          <span id="fTDur" class="time">0:00</span>
+        </div>
+        <div class="fbtns">
+          <button id="fLike" class="likebtn"></button>
+          <button id="fPrev" title="Предыдущий"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+          <button id="fPlay" class="playbtn" title="Пуск/пауза"></button>
+          <button id="fNext" title="Следующий"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <div id="login" class="login hidden">
+    <div class="panel login-box">
+      <h2>Вход</h2>
+      <p>1. <a href="#" id="getToken">Открыть страницу авторизации Яндекса</a><br />
+         2. После входа скопируй из адресной строки значение после <code>access_token=</code> (до символа &amp;).<br />
+         3. Вставь его сюда:</p>
+      <input id="tokenInput" type="password" placeholder="Токен" />
+      <button id="loginBtn" class="nav active">Войти</button>
+      <p id="loginErr" class="status"></p>
+    </div>
+  </div>
+</body>
+</html>
