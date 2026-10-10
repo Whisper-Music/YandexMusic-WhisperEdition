@@ -1,3 +1,4 @@
+mod auth;
 use std::{collections::HashMap, sync::OnceLock};
 use tauri_plugin_http::reqwest;
 use tauri::{
@@ -97,7 +98,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![md5_hex, http_request, fetch_bytes, win_minimize, win_toggle_max, win_is_max, win_close, win_drag])
+        .invoke_handler(tauri::generate_handler![md5_hex, http_request, fetch_bytes, win_minimize, win_toggle_max, win_is_max, win_close, win_drag, auth::secret_get, auth::secret_set, auth::secret_delete, auth::yandex_login])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_min_size(Some(tauri::LogicalSize::new(780.0, 540.0)));

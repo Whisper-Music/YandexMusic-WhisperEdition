@@ -24,7 +24,7 @@ ICON.repeat = svgp("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2
 ICON.repeatOne = svgp("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z");
 const fmtTime = (s) => { s = Math.floor(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 
-let token = localStorage.getItem("ym_token");
+let token = null;   // токен живёт в системном хранилище, а в памяти — только пока приложение открыто (см. «хранилище токена»)
 let uid = localStorage.getItem("ym_uid");
 let shown = [];          // треки на экране
 let queue = [];          // очередь воспроизведения
@@ -40,10 +40,12 @@ let likedIds = new Set();
 let playCtx = "other", shuffle = false, repeat = 0, order = [], ordPos = 0, orderFor = null;
 try { const m = JSON.parse(localStorage.getItem("ym_modes") || "{}"); shuffle = !!m.shuffle; repeat = m.repeat || 0; } catch {}
 const LK = { ctx: "likes" };
-const pins = JSON.parse(localStorage.getItem("ym_pins") || "[]");      // закреплённые альбомы
-let tabsActive = false, pinAlbum = null;
+const pins = JSON.parse(localStorage.getItem("ym_pins") || "[]");      // закреплённое в верхней панели: { type: "album" | "artist", id, title, year? }
+pins.forEach((p) => { p.type ||= "album"; });                           // старые закладки — это альбомы
+let tabsActive = false, pinItem = null;
 const DEFAULT_SEED = "user:onyourwave";
-const wave = { on: false, session: null, batch: null, loading: false, queue: [], pos: -1, seed: DEFAULT_SEED, name: "" };
+const wave = { on: false, session: null, batch: null, loading: false, queue: [], pos: -1, seed: DEFAULT_SEED, name: "", album: null };   // album: { id, title } — волна по альбому
+let playAlbum = null;   // альбом, который сейчас играет целиком: { id, title }
 const heard = new Set(JSON.parse(localStorage.getItem("ym_heard") || "[]"));   // что уже играло в волне
 try { const sv = JSON.parse(localStorage.getItem("ym_wave_seed") || "null"); if (sv?.seed) { wave.seed = sv.seed; wave.name = sv.name || ""; } } catch {}
 const savedVol = parseFloat(localStorage.getItem("ym_vol"));
@@ -68,18 +70,40 @@ async function api(path, opts = {}) {
 }
 
 // ---------- внешний вид ----------
-const DEF = { accent: "#a66bff", accent2: "#e060ff", glow: 22, panel: 70, dim: 10, blur: 6, viz: true, bg: "" };
-let cfg = { ...DEF, ...JSON.parse(localStorage.getItem("ym_cfg2") || "{}") };
+const STYLE_DEF = {
+  neon:  { accent: "#a66bff", accent2: "#e060ff", glow: 22, panel: 70 },
+  royal: { accent: "#c9a24b", accent2: "#8b1e2d", glow: 6, panel: 92 },
+};
+const STYLE_KEYS = ["accent", "accent2", "glow", "panel"];
+const freshCfg = () => ({ style: "royal", dim: 10, blur: 6, viz: true, bg: "", s: { neon: { ...STYLE_DEF.neon }, royal: { ...STYLE_DEF.royal } } });
+function loadCfg() {
+  let saved = null, old = null;
+  try { saved = JSON.parse(localStorage.getItem("ym_cfg3") || "null"); } catch {}
+  try { old = JSON.parse(localStorage.getItem("ym_cfg2") || "null"); } catch {}
+  const c = freshCfg();
+  if (saved) {
+    for (const k of ["style", "dim", "blur", "viz", "bg"]) if (saved[k] !== undefined) c[k] = saved[k];
+    for (const st of ["neon", "royal"]) Object.assign(c.s[st], saved.s?.[st] || {});
+  } else if (old) {                       // прежние настройки (до выбора стиля) относились к неону
+    for (const k of ["dim", "blur", "viz", "bg"]) if (old[k] !== undefined) c[k] = old[k];
+    for (const k of STYLE_KEYS) if (old[k] !== undefined) c.s.neon[k] = old[k];
+  }
+  if (!c.s[c.style]) c.style = "royal";
+  return c;
+}
+let cfg = loadCfg();
+const sty = () => cfg.s[cfg.style];
 
 function fill(el) { el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%"); }
 function fillAll() { document.querySelectorAll("input[type=range]").forEach(fill); }
 
 function applyCfg() {
-  const r = document.documentElement.style;
-  r.setProperty("--accent", cfg.accent);
-  r.setProperty("--accent2", cfg.accent2);
-  r.setProperty("--glow", cfg.glow + "px");
-  r.setProperty("--panel-a", cfg.panel / 100);
+  const r = document.documentElement.style, st = sty();
+  document.documentElement.dataset.style = cfg.style;
+  r.setProperty("--accent", st.accent);
+  r.setProperty("--accent2", st.accent2);
+  r.setProperty("--glow", st.glow + "px");
+  r.setProperty("--panel-a", st.panel / 100);
   r.setProperty("--dim", cfg.dim / 100);
   r.setProperty("--bgblur", cfg.blur + "px");
   const img = cfg.bg ? `url("${cfg.bg}")` : "none";
@@ -88,16 +112,24 @@ function applyCfg() {
   applyViz();
 }
 function saveCfg() {
-  try { localStorage.setItem("ym_cfg2", JSON.stringify(cfg)); $("#setNote").textContent = ""; }
+  try { localStorage.setItem("ym_cfg3", JSON.stringify(cfg)); $("#setNote").textContent = ""; }
   catch { $("#setNote").textContent = "Файл слишком большой: фон сработает, но после перезапуска пропадёт."; }
 }
 const SLIDERS = [["#cAccent", "accent"], ["#cAccent2", "accent2"], ["#cGlow", "glow", 1], ["#cPanel", "panel", 1], ["#cDim", "dim", 1], ["#cBlur", "blur", 1]];
+const getv = (k) => (STYLE_KEYS.includes(k) ? sty()[k] : cfg[k]);
+const setv = (k, v) => { if (STYLE_KEYS.includes(k)) sty()[k] = v; else cfg[k] = v; };
+function syncControls() {                    // подставляет значения текущего стиля в настройки
+  for (const [id, k] of SLIDERS) $(id).value = getv(k);
+  $("#cViz").checked = cfg.viz;
+  document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
+  fillAll();
+}
 for (const [id, key, num] of SLIDERS) {
   const el = $(id);
-  el.value = cfg[key];
-  el.addEventListener("input", () => { cfg[key] = num ? +el.value : el.value; applyCfg(); saveCfg(); });
+  el.addEventListener("input", () => { setv(key, num ? +el.value : el.value); applyCfg(); saveCfg(); });
 }
 document.querySelectorAll("input[type=range]").forEach((el) => el.addEventListener("input", () => fill(el)));
+document.querySelectorAll(".stylecard").forEach((b) => (b.onclick = () => { cfg.style = b.dataset.style; applyCfg(); saveCfg(); syncControls(); }));
 
 function loadBg(f) {
   if (!f || !f.type.startsWith("image/")) return;
@@ -111,13 +143,7 @@ drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); loadBg(e.dataTransfer.files[0]); };
 $("#bgReset").onclick = () => { cfg.bg = ""; applyCfg(); saveCfg(); };
-$("#cfgReset").onclick = () => {
-  cfg = { ...DEF }; applyCfg(); saveCfg();
-  SLIDERS.forEach(([id, k]) => ($(id).value = cfg[k]));
-  $("#cViz").checked = cfg.viz;
-  fillAll();
-};
-$("#cViz").checked = cfg.viz;
+$("#cfgReset").onclick = () => { const keep = cfg.style; cfg = freshCfg(); cfg.style = keep; applyCfg(); saveCfg(); syncControls(); };
 $("#cViz").onchange = (e) => { cfg.viz = e.target.checked; applyViz(); saveCfg(); };
 
 // ---------- подбор цветов под фон ----------
@@ -174,31 +200,80 @@ $("#paletteBtn").onclick = async () => {
   if (!cfg.bg) { note.textContent = "Сначала загрузи фон: цвета подбираются по нему."; return; }
   try {
     const p = await paletteFrom(cfg.bg);
-    cfg.accent = p.accent; cfg.accent2 = p.accent2;
+    sty().accent = p.accent; sty().accent2 = p.accent2;
     $("#cAccent").value = p.accent; $("#cAccent2").value = p.accent2;
     applyCfg(); saveCfg();
     note.textContent = p.mono ? "Фон почти без цвета, поэтому палитра получилась сдержанной серебристой." : "Цвета подобраны по фону.";
   } catch { note.textContent = "Не удалось разобрать изображение."; }
 };
 
-applyCfg(); fillAll();
+applyCfg(); syncControls();
+
+// ---------- хранилище токена ----------
+// Токен лежит в системном хранилище секретов (на Windows — «Диспетчер учётных данных») через команды secret_* на стороне Rust,
+// а не в localStorage, откуда его мог бы прочитать любой скрипт или человек с доступом к папке профиля.
+// Пока Rust-часть не обновлена, всё работает по-старому (localStorage), чтобы ничего не сломалось.
+const TOKEN_KEY = "ym_token";
+async function loadToken() {
+  const legacy = localStorage.getItem(TOKEN_KEY);
+  let stored;
+  try { stored = (await invoke("secret_get", { key: TOKEN_KEY })) || null; }
+  catch { return legacy; }                       // хранилище недоступно — запасной путь
+  if (stored) { localStorage.removeItem(TOKEN_KEY); return stored; }
+  if (legacy) {                                  // перенос старого токена в защищённое хранилище
+    try { await invoke("secret_set", { key: TOKEN_KEY, value: legacy }); localStorage.removeItem(TOKEN_KEY); } catch {}
+    return legacy;
+  }
+  return null;
+}
+async function saveToken(t) {
+  try { await invoke("secret_set", { key: TOKEN_KEY, value: t }); localStorage.removeItem(TOKEN_KEY); }
+  catch { localStorage.setItem(TOKEN_KEY, t); }
+}
+async function clearToken() {
+  try { await invoke("secret_delete", { key: TOKEN_KEY }); } catch {}
+  localStorage.removeItem(TOKEN_KEY);
+}
 
 // ---------- вход ----------
 async function login(t) {
   token = t.trim();
-  const st = await api("/account/status");
-  uid = st.account.uid;
-  localStorage.setItem("ym_token", token);
+  try {
+    const st = await api("/account/status");
+    uid = st.account.uid;
+  } catch (e) { token = null; throw e; }
+  await saveToken(token);
   localStorage.setItem("ym_uid", uid);
 }
 function showLogin(msg = "") { $("#login").classList.remove("hidden"); $("#loginErr").textContent = msg; }
+function afterLogin() { $("#login").classList.add("hidden"); goTop(showLikes); restorePlayer(); loadLikedIds(); }
+
+// вход одной кнопкой: Rust открывает окно авторизации Яндекса и сам забирает токен из адреса перехода — копировать ничего не нужно
+$("#oauthBtn").onclick = async () => {
+  const btn = $("#oauthBtn");
+  btn.disabled = true;
+  $("#loginErr").textContent = "Войди в аккаунт Яндекса в открывшемся окне — оно закроется само.";
+  try {
+    const t = await invoke("yandex_login");
+    await login(t);
+    $("#loginErr").textContent = "";
+    afterLogin();
+  } catch (e) {
+    const m = String(e?.message || e);
+    if (/not found/i.test(m)) { $("#manual").open = true; showLogin("В этой сборке ещё нет автоматического входа — войди вручную по токену ниже."); }
+    else if (/закрыто|уже открыто/.test(m)) showLogin(m + ".");
+    else showLogin("Не удалось войти: " + m);
+  } finally { btn.disabled = false; }
+};
+
+// запасной путь: ручной ввод токена
 $("#getToken").onclick = (e) => { e.preventDefault(); window.__TAURI__.opener.openUrl(OAUTH_URL); };
 $("#loginBtn").onclick = async () => {
-  try { await login($("#tokenInput").value); $("#login").classList.add("hidden"); goTop(showLikes); restorePlayer(); loadLikedIds(); }
+  try { await login($("#tokenInput").value); $("#tokenInput").value = ""; afterLogin(); }
   catch (e) { showLogin("Не удалось войти: " + e.message); }
 };
-$("#profile").onclick = () => {
-  if (confirm("Выйти из аккаунта?")) { localStorage.removeItem("ym_token"); localStorage.removeItem("ym_uid"); location.reload(); }
+$("#profile").onclick = async () => {
+  if (confirm("Выйти из аккаунта?")) { await clearToken(); localStorage.removeItem("ym_uid"); location.reload(); }
 };
 
 // ---------- вспомогательное ----------
@@ -244,7 +319,7 @@ function renderList(tracks, append = false, opts = {}) {
       tt.onclick = (e) => { e.stopPropagation(); navigate(() => showAlbum(albumId)); };
     }
     fillArtists(li.querySelector(".a"), t);
-    li.onclick = () => { wave.on = false; queue = arr; playCtx = opts.ctx || "other"; play(i); };
+    li.onclick = () => { wave.on = false; queue = arr; playCtx = opts.ctx || "other"; playAlbum = opts.album || null; play(i); };
     const hb = document.createElement("button");
     hb.className = "likebtn";
     setHeart(hb, likedIds.has(String(t.id)));
@@ -285,30 +360,31 @@ function renderArtists(items) {
   }
 }
 
-const isPinned = (id) => pins.some((p) => String(p.id) === String(id));
+const pinKey = (type, id) => type + ":" + id;
+const isPinned = (type, id) => pins.some((p) => p.type === type && String(p.id) === String(id));
 function savePins() { try { localStorage.setItem("ym_pins", JSON.stringify(pins)); } catch {} }
 function updatePinBtn() {
   const pb = $("#pinBtn");
-  pb.hidden = !pinAlbum;
-  if (!pinAlbum) return;
-  const on = isPinned(pinAlbum.id);
+  pb.hidden = !pinItem;
+  if (!pinItem) return;
+  const on = isPinned(pinItem.type, pinItem.id);
   pb.textContent = on ? "✓ Закреплён" : "Закрепить";
   pb.classList.toggle("active", on);
 }
-function unpin(id) {
-  const i = pins.findIndex((p) => String(p.id) === String(id));
+function unpin(type, id) {
+  const i = pins.findIndex((p) => p.type === type && String(p.id) === String(id));
   if (i >= 0) pins.splice(i, 1);
   savePins(); renderTabs(tabsActive); updatePinBtn();
 }
 $("#pinBtn").onclick = () => {
-  if (!pinAlbum) return;
-  if (isPinned(pinAlbum.id)) return unpin(pinAlbum.id);
-  pins.push({ id: pinAlbum.id, title: pinAlbum.title });
+  if (!pinItem) return;
+  if (isPinned(pinItem.type, pinItem.id)) return unpin(pinItem.type, pinItem.id);
+  pins.push({ type: pinItem.type, id: pinItem.id, title: pinItem.title, year: pinItem.year });
   savePins(); renderTabs(tabsActive); updatePinBtn();
 };
 
 function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null }) {
-  pinAlbum = pin; updatePinBtn();
+  pinItem = pin; updatePinBtn();
   $("#title").textContent = title;
   const im = $("#headImg"); im.hidden = !img; if (img) im.src = img;
   im.classList.toggle("sq", !round);
@@ -339,15 +415,22 @@ function resetView() {
   document.querySelector(".main").scrollTop = 0;
 }
 function setActive(id) { document.querySelectorAll(".side .nav").forEach((b) => b.classList.toggle("active", b.id === id)); }
+const roman = (n) => {
+  n = +n; if (!n || n < 1 || n > 3999) return "";
+  let r = "";
+  for (const [v, t] of [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]]) while (n >= v) { r += t; n -= v; }
+  return r;
+};
 function renderTabs(active) {
   tabsActive = active;
   const box = $("#tabs");
   box.innerHTML = "";
   box.classList.toggle("pins", pins.length > 0);
-  const mk = (label, key, fn, onClose) => {
+  const mk = (label, key, fn, onClose, sub) => {
     const d = document.createElement("div");
     d.className = "tab" + (active === key ? " active" : "");
     const t = document.createElement("span"); t.textContent = label; d.append(t);
+    const sm = document.createElement("small"); sm.textContent = sub || ""; d.append(sm);   // эпитафия видна только в королевском стиле
     if (onClose) {
       const x = document.createElement("i"); x.textContent = "✕"; x.title = "Открепить";
       x.onclick = (e) => { e.stopPropagation(); onClose(); };
@@ -355,8 +438,11 @@ function renderTabs(active) {
     }
     d.onclick = fn; box.append(d);
   };
-  mk("Лайки", "likes", () => goTop(showLikes));
-  for (const p of pins) mk(p.title, "album:" + p.id, () => goTop(() => showAlbum(p.id)), () => unpin(p.id));
+  mk("Лайки", "likes", () => goTop(showLikes), null, "♥");
+  for (const p of pins) {
+    const isArtist = p.type === "artist";
+    mk(p.title, pinKey(p.type, p.id), () => goTop(() => (isArtist ? showArtist(p.id) : showAlbum(p.id))), () => unpin(p.type, p.id), isArtist ? "♪" : roman(p.year) || "†");
+  }
 }
 function syncIcons() {
   const playing = !audio.paused;
@@ -432,7 +518,7 @@ function showWave() {
   $("#list").hidden = true; $("#wavePage").hidden = false; $("#stWrap").hidden = false; $("#waveInfo").hidden = false;
   document.querySelector(".main").classList.add("wavemode");
   if (wave.on && queue[current]) showNow(queue[current]);
-  else setHint("Нажми, чтобы включить " + (wave.name ? `волну «${wave.name}»` : "Мою волну"));
+  else setHint("Нажми, чтобы включить " + (wave.album ? `Мою волну по «${wave.album.title}»` : wave.name ? `волну «${wave.name}»` : "Мою волну"));
   updateStBtn();
   syncIcons();
   applyViz();
@@ -553,9 +639,15 @@ function renderStations() {
 }
 function updateStBtn() {
   const open = !$("#stations").hidden;
-  $("#stBtn").textContent = open ? "Закрыть список" : wave.name ? `${wave.name} · сменить` : "Жанры и настроения";
-  $("#stReset").hidden = !wave.name;
-  $("#stWrap").classList.toggle("has-reset", !!wave.name);
+  const label = wave.album ? `Моя волна по «${wave.album.title || "альбому"}»` : wave.name ? `${wave.name} · сменить` : "Жанры и настроения";
+  const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = open ? "Закрыть список" : label;   // обёртка нужна для ограничения по строкам
+  $("#stBtn").replaceChildren(lbl);
+  $("#stBtn").title = open ? "" : label;
+  $("#stBtn").classList.toggle("album", !!wave.album && !open);   // подпись «Моя волна по …» может занять две строки
+  $("#stWrap").classList.toggle("album", !!wave.album);
+  const custom = !!(wave.name || wave.album);
+  $("#stReset").hidden = !custom;
+  $("#stWrap").classList.toggle("has-reset", custom);
 }
 function setStations(open) { $("#stations").hidden = !open; updateStBtn(); if (open) fitStations(); }
 // окно не выходит за пределы экрана: высота ограничена свободным местом под кнопкой
@@ -569,7 +661,7 @@ function fitStations() {
 window.addEventListener("resize", fitStations);
 
 async function pickStation(seed, name) {
-  Object.assign(wave, { seed, name, session: null, queue: [], pos: -1, on: false });   // старая волна не продолжается
+  Object.assign(wave, { seed, name, album: null, session: null, queue: [], pos: -1, on: false });   // старая волна не продолжается
   try { localStorage.setItem("ym_wave_seed", JSON.stringify({ seed, name })); } catch {}
   setStations(false);
   setHint("Запускаю…");
@@ -581,6 +673,18 @@ document.addEventListener("click", (e) => {                 // клик мимо
   if (!$("#stations").hidden && !path.includes($("#stations")) && !path.includes($("#stBtn"))) setStations(false);
 });
 $("#stReset").onclick = () => pickStation(DEFAULT_SEED, "");
+
+// альбом доиграл — продолжаем «Моей волной» по этому альбому (как в Яндекс Музыке). Такая волна не запоминается между запусками.
+async function onQueueEnd() {
+  if (wave.on || playCtx !== "album" || !playAlbum?.id) { syncIcons(); return; }
+  const al = playAlbum; playAlbum = null;
+  const prev = { seed: wave.seed, name: wave.name, album: wave.album };
+  Object.assign(wave, { seed: "album:" + al.id, name: "", album: { id: al.id, title: al.title || "" }, session: null, queue: [], pos: -1, on: false });
+  updateStBtn();
+  try { await waveStart(); }
+  catch { Object.assign(wave, prev, { on: false }); syncIcons(); }
+  updateStBtn();
+}
 $("#stBtn").onclick = async () => {
   const open = $("#stations").hidden;
   setStations(open);
@@ -626,13 +730,14 @@ function showLastAlbum(a) {
 
 async function showArtist(id, tab = "tracks") {
   const my = ++nav;
-  setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs(false); resetView();
+  setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs(pinKey("artist", id)); resetView();
   setChips([["tracks", "Треки"], ["albums", "Альбомы"]], tab, (t) => showArtist(id, t));
 
   loadArtist(id).then(({ info, albums }) => {
     if (my !== nav) return;
     const c = info?.artist?.cover?.uri;
-    setHead({ title: info?.artist?.name || "Артист", img: c ? cover({ coverUri: c }, "200x200") : "", back: true });
+    const name = info?.artist?.name || "Артист";
+    setHead({ title: name, img: c ? cover({ coverUri: c }, "200x200") : "", back: true, pin: info?.artist?.name ? { type: "artist", id, title: name } : null });
     if (tab === "albums") {
       renderAlbums(albums);
       $("#status").textContent = albums.length ? "" : "Альбомов нет";
@@ -657,12 +762,12 @@ async function showArtist(id, tab = "tracks") {
 // ---------- альбом ----------
 async function showAlbum(id) {
   const my = ++nav;
-  setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs("album:" + id); resetView();
+  setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs(pinKey("album", id)); resetView();
   try {
     const a = await api(`/albums/${id}/with-tracks`);
     if (my !== nav) return;
     setHead({
-      title: a.title, img: cover(a, "200x200"), round: false, back: true, pin: { id: a.id, title: a.title },
+      title: a.title, img: cover(a, "200x200"), round: false, back: true, pin: { type: "album", id: a.id, title: a.title, year: a.year },
       sub: (el) => {
         fillArtists(el, a);
         const x = albumInfo(a);
@@ -671,7 +776,7 @@ async function showAlbum(id) {
     });
     const tracks = (a.volumes || []).flat();
     tracks.forEach((t) => { if (!t.coverUri) t.coverUri = a.coverUri; });
-    renderList(tracks, false, { noAlbumLink: true, ctx: "album" });
+    renderList(tracks, false, { noAlbumLink: true, ctx: "album", album: { id: a.id, title: a.title } });
     $("#status").textContent = tracks.length ? "" : "Треков нет";
     loadSimilar(a, my);
   } catch (e) { if (my === nav) $("#status").textContent = "Ошибка: " + e.message; }
@@ -1000,7 +1105,7 @@ function saveLast(pos = 0) {
     artists: (x.artists || []).map((a) => ({ id: a.id, name: a.name })),
     albums: (x.albums || []).slice(0, 1).map((a) => ({ id: a.id })),
   });
-  try { localStorage.setItem("ym_last", JSON.stringify({ q: queue.slice(current, current + 50).map(min), pos: Math.floor(pos), ctx: playCtx })); } catch {}
+  try { localStorage.setItem("ym_last", JSON.stringify({ q: queue.slice(current, current + 50).map(min), pos: Math.floor(pos), ctx: playCtx, album: playAlbum })); } catch {}
 }
 window.addEventListener("pagehide", () => saveLast(audio ? audio.currentTime : 0));
 
@@ -1013,7 +1118,7 @@ async function restorePlayer() {
   try {
     const saved = JSON.parse(localStorage.getItem("ym_last") || "null");
     if (saved?.q?.length && current === -1) {
-      queue = saved.q; current = 0; wave.on = false; playCtx = saved.ctx || "other";
+      queue = saved.q; current = 0; wave.on = false; playCtx = saved.ctx || "other"; playAlbum = saved.album || null;
       resumePos = saved.pos || 0; needLoad = true;
       showTrack(queue[0], resumePos);
       return;
@@ -1072,7 +1177,7 @@ function makeAudio(useViz) {
     if (effRepeat() === 2) { a.currentTime = 0; a.play(); return; }   // повтор трека: сразу с начала
     if (wave.on) waveFeedback("trackFinished", queue[current], { totalPlayedSeconds: Math.round(a.duration) });
     const n = nextIndex(true);
-    if (n >= 0) play(n); else syncIcons();
+    if (n >= 0) play(n); else onQueueEnd();
   };
   a.ontimeupdate = () => {
     if (a === audio && a.duration) {
@@ -1137,9 +1242,9 @@ function vizFrame(ts) {
   const br = ($("#waveBtn").offsetWidth || 112) / 2;
   const inner = Math.min(br + 14, R * 0.5), outer = Math.max(inner + 20, R * 0.76);
   const grad = g.createLinearGradient(0, 0, w, h);
-  grad.addColorStop(0, cfg.accent); grad.addColorStop(1, cfg.accent2);
+  grad.addColorStop(0, sty().accent); grad.addColorStop(1, sty().accent2);
   const glow = g.createRadialGradient(cx, cy, 0, cx, cy, R * 0.9);
-  glow.addColorStop(0, rgba(cfg.accent, 0.1 + viz.bass * 0.3)); glow.addColorStop(1, rgba(cfg.accent, 0));
+  glow.addColorStop(0, rgba(sty().accent, 0.1 + viz.bass * 0.3)); glow.addColorStop(1, rgba(sty().accent, 0));
   g.fillStyle = glow; g.fillRect(0, 0, w, h);
 
   g.globalCompositeOperation = "lighter";
@@ -1181,7 +1286,7 @@ $("#play").onclick = togglePlay;
 $("#next").onclick = () => {
   if (wave.on) waveFeedback("skip", queue[current], { totalPlayedSeconds: Math.round(audio.currentTime) });
   const n = nextIndex(false);
-  if (n >= 0) play(n);
+  if (n >= 0) play(n); else onQueueEnd();
 };
 $("#prev").onclick = () => {
   if (!needLoad && audio.currentTime > 3) { audio.currentTime = 0; return; }
@@ -1230,4 +1335,4 @@ audio = makeAudio(false);
 setVol(volume);
 updateModes(); setHeart($("#likeBtn"), false); setHeart($("#fLike"), false);
 syncIcons();
-if (token && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); } else showLogin();
+loadToken().then((t) => { token = t; if (token && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); } else showLogin(); });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Моя Музыка</title>
+  <title>Whisper Edition</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="main.js" defer></script>
 </head>
@@ -11,7 +11,13 @@
   <div id="bg"></div>
   <div id="dim"></div>
   <div id="titlebar" class="titlebar">
-    <div class="tbtitle"><span class="tbdot"></span>Моя Музыка</div>
+    <div class="tbtitle">
+      <span class="tbdot"></span>
+      <span class="tbtext">
+        <span class="tbbrand">Yandex Music</span>
+        <span class="tbsubtitle">Whisper Edition</span>
+      </span>
+    </div>
     <div class="tbctl">
       <button id="wMin" title="Свернуть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 6h8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
       <button id="wMax" title="Развернуть"></button>
@@ -77,6 +83,13 @@
       </section>
 
       <section id="settingsPage" class="settings" hidden>
+        <div class="card">
+          <h3>Стиль оформления</h3>
+          <div class="stylepick">
+            <button class="stylecard" data-style="neon"><span class="sprev sp-neon"></span><b>Неон</b><small>Свечение, стекло, прозрачные панели</small></button>
+            <button class="stylecard" data-style="royal"><span class="sprev sp-royal"></span><b>Королевский</b><small>Золото, готика, знамёна</small></button>
+          </div>
+        </div>
         <div class="card">
           <h3>Цвета</h3>
           <div class="swatches">
@@ -177,11 +190,16 @@
   <div id="login" class="login hidden">
     <div class="panel login-box">
       <h2>Вход</h2>
-      <p>1. <a href="#" id="getToken">Открыть страницу авторизации Яндекса</a><br />
-         2. После входа скопируй из адресной строки значение после <code>access_token=</code> (до символа &amp;).<br />
-         3. Вставь его сюда:</p>
-      <input id="tokenInput" type="password" placeholder="Токен" />
-      <button id="loginBtn" class="nav active">Войти</button>
+      <p>Нажми кнопку и войди в аккаунт Яндекса в открывшемся окне. Окно закроется само, копировать ничего не нужно.</p>
+      <button id="oauthBtn" class="nav active">Войти через Яндекс</button>
+      <details id="manual" class="manual">
+        <summary>Не получается? Войти вручную по токену</summary>
+        <p>1. <a href="#" id="getToken">Открыть страницу авторизации Яндекса</a><br />
+           2. После входа скопируй из адресной строки значение после <code>access_token=</code> (до символа &amp;).<br />
+           3. Вставь его сюда:</p>
+        <input id="tokenInput" type="password" placeholder="Токен" />
+        <button id="loginBtn" class="nav">Войти</button>
+      </details>
       <p id="loginErr" class="status"></p>
     </div>
   </div>
