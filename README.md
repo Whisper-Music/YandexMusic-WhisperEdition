@@ -45,6 +45,7 @@ Yandex Music Desktop — неофициальный сторонний клие�
 
 <img width="1280" height="690" alt="image" src="https://github.com/user-attachments/assets/210ebb58-aa7a-4da5-8c7f-a9b1b0b55a3e" />
 
+<img width="1920" height="1038" alt="image" src="https://github.com/user-attachments/assets/c4b56a57-f94c-4024-a182-73ca5a602d89" />
 
 
 ## Установка
