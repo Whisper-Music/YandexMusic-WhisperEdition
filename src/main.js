@@ -24,7 +24,6 @@ ICON.repeat = svgp("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2
 ICON.repeatOne = svgp("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z");
 const fmtTime = (s) => { s = Math.floor(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 
-let token = null;   // токен живёт в системном хранилище, а в памяти — только пока приложение открыто (см. «хранилище токена»)
 let uid = localStorage.getItem("ym_uid");
 let shown = [];          // треки на экране
 let queue = [];          // очередь воспроизведения
@@ -38,26 +37,52 @@ const hist = [];
 const likes = { done: false, tracks: [] };
 let likedIds = new Set();
 let playCtx = "other", shuffle = false, repeat = 0, order = [], ordPos = 0, orderFor = null;
-try { const m = JSON.parse(localStorage.getItem("ym_modes") || "{}"); shuffle = !!m.shuffle; repeat = m.repeat || 0; } catch {}
+{ const m = lsJSON("ym_modes", {}, (v) => typeof v === "object"); shuffle = !!m.shuffle; repeat = [0, 1, 2].includes(m.repeat) ? m.repeat : 0; }
 const LK = { ctx: "likes" };
-const pins = JSON.parse(localStorage.getItem("ym_pins") || "[]");      // закреплённое в верхней панели: { type: "album" | "artist", id, title, year? }
-pins.forEach((p) => { p.type ||= "album"; });                           // старые закладки — это альбомы
+// закреплённое в верхней панели: { type: "album" | "artist", id, title, year? }; всё, что не похоже на закладку, отбрасываем
+const pins = lsJSON("ym_pins", [], Array.isArray)
+  .filter((p) => p && typeof p === "object" && /^\d+$/.test(String(p.id)) && typeof p.title === "string")
+  .slice(0, 50)
+  .map((p) => ({ type: p.type === "artist" ? "artist" : "album", id: p.id, title: p.title.slice(0, 200), year: Number.isFinite(p.year) ? p.year : undefined }));
 let tabsActive = false, pinItem = null;
 const DEFAULT_SEED = "user:onyourwave";
 const wave = { on: false, session: null, batch: null, loading: false, queue: [], pos: -1, seed: DEFAULT_SEED, name: "", album: null };   // album: { id, title } — волна по альбому
 let playAlbum = null;   // альбом, который сейчас играет целиком: { id, title }
-const heard = new Set(JSON.parse(localStorage.getItem("ym_heard") || "[]"));   // что уже играло в волне
-try { const sv = JSON.parse(localStorage.getItem("ym_wave_seed") || "null"); if (sv?.seed) { wave.seed = sv.seed; wave.name = sv.name || ""; } } catch {}
+const heard = new Set(lsJSON("ym_heard", [], Array.isArray).filter((x) => typeof x === "string" || typeof x === "number").slice(-600));   // что уже играло в волне
+{ const sv = lsJSON("ym_wave_seed", null, (v) => typeof v === "object"); if (typeof sv?.seed === "string" && /^[\w-]+:[\w.-]+$/.test(sv.seed)) { wave.seed = sv.seed; wave.name = typeof sv.name === "string" ? sv.name.slice(0, 100) : ""; } }
 const savedVol = parseFloat(localStorage.getItem("ym_vol"));
 let audio = null, audioViz = false, volume = savedVol >= 0 && savedVol <= 1 ? savedVol : 0.8, playSeq = 0, curBlob = null;
 let actx = null, analyser = null, freq = null;
 let needLoad = false, resumePos = 0, lastSave = 0;
 const viz = { run: false, bass: 0, mid: 0, sm: new Float32Array(128), skip: false };
 
+// ---------- проверки адресов и данных ----------
+// доверенные домены Яндекса; граница — точка, поэтому «evilyandex.net» не проходит
+const TRUSTED_SUFFIXES = ["yandex.net", "yandex.ru", "yandex.com", "yandex.by", "yandex.kz"];
+const hostTrusted = (h) => TRUSTED_SUFFIXES.some((s) => h === s || h.endsWith("." + s));
+// возвращает нормализованный адрес, только если это https на доверенный хост, иначе ""
+function safeUrl(raw) {
+  try {
+    const u = new URL(String(raw));
+    if (u.protocol !== "https:" || u.username || u.password || u.port) return "";
+    return hostTrusted(u.hostname.toLowerCase()) ? u.href : "";
+  } catch { return ""; }
+}
+// безопасное чтение JSON из localStorage: при порче данных возвращает запасное значение, а не роняет запуск
+function lsJSON(key, fallback, ok = () => true) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return v != null && ok(v) ? v : fallback; }
+  catch { return fallback; }
+}
+function mkImg(src, cls) {            // картинки создаём через DOM, а не через строку HTML
+  const im = document.createElement("img");
+  im.alt = ""; if (cls) im.className = cls; if (src) im.src = src;
+  return im;
+}
+
 // ---------- запросы (через Rust) ----------
+// Authorization сюда не добавляется: заголовок подставляет Rust из системного хранилища, токен в JavaScript не попадает
 const HEADERS = () => ({
   "User-Agent": "Yandex-Music-API",
-  Authorization: `OAuth ${token}`,
   "X-Yandex-Music-Client": "YandexMusicAndroid/24023231",
 });
 async function http(url, { method = "GET", headers = {}, body = null } = {}) {
@@ -92,6 +117,7 @@ function loadCfg() {
   return c;
 }
 let cfg = loadCfg();
+let bgUrl = "";          // blob-адрес текущего фона; сам файл лежит в IndexedDB, а в cfg.bg — только метка "idb"
 const sty = () => cfg.s[cfg.style];
 
 function fill(el) { el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%"); }
@@ -106,14 +132,14 @@ function applyCfg() {
   r.setProperty("--panel-a", st.panel / 100);
   r.setProperty("--dim", cfg.dim / 100);
   r.setProperty("--bgblur", cfg.blur + "px");
-  const img = cfg.bg ? `url("${cfg.bg}")` : "none";
+  const img = bgUrl ? `url("${bgUrl}")` : "none";
   r.setProperty("--bg-image", img);
   $("#drop").style.setProperty("--drop-img", img);
   applyViz();
 }
 function saveCfg() {
-  try { localStorage.setItem("ym_cfg3", JSON.stringify(cfg)); $("#setNote").textContent = ""; }
-  catch { $("#setNote").textContent = "Файл слишком большой: фон сработает, но после перезапуска пропадёт."; }
+  try { localStorage.setItem("ym_cfg3", JSON.stringify(cfg)); $("#setNote").textContent = ""; return true; }
+  catch { $("#setNote").textContent = "Не удалось сохранить настройки: закончилось место в хранилище приложения."; return false; }
 }
 const SLIDERS = [["#cAccent", "accent"], ["#cAccent2", "accent2"], ["#cGlow", "glow", 1], ["#cPanel", "panel", 1], ["#cDim", "dim", 1], ["#cBlur", "blur", 1]];
 const getv = (k) => (STYLE_KEYS.includes(k) ? sty()[k] : cfg[k]);
@@ -131,19 +157,116 @@ for (const [id, key, num] of SLIDERS) {
 document.querySelectorAll("input[type=range]").forEach((el) => el.addEventListener("input", () => fill(el)));
 document.querySelectorAll(".stylecard").forEach((b) => (b.onclick = () => { cfg.style = b.dataset.style; applyCfg(); saveCfg(); syncControls(); }));
 
-function loadBg(f) {
-  if (!f || !f.type.startsWith("image/")) return;
-  const fr = new FileReader();
-  fr.onload = () => { cfg.bg = fr.result; applyCfg(); saveCfg(); };
-  fr.readAsDataURL(f);
+// ---------- фон: сам файл хранится в IndexedDB (там нет лимита в ~5 МБ, как в localStorage) ----------
+const IDB = {
+  db: null,
+  open() {
+    return (this.db ||= new Promise((res, rej) => {
+      const r = indexedDB.open("whisper-edition", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+  },
+  async tx(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const t = db.transaction("kv", mode), rq = fn(t.objectStore("kv"));
+      t.oncomplete = () => res(rq && rq.result);
+      t.onerror = t.onabort = () => rej(t.error);
+    });
+  },
+  get: (k) => IDB.tx("readonly", (s) => s.get(k)),
+  set: (k, v) => IDB.tx("readwrite", (s) => s.put(v, k)),
+  del: (k) => IDB.tx("readwrite", (s) => s.delete(k)),
+};
+const bgNote = (m) => { $("#setNote").textContent = m || ""; };
+function setBgBlob(blob) {
+  if (bgUrl) URL.revokeObjectURL(bgUrl);
+  bgUrl = blob ? URL.createObjectURL(blob) : "";
 }
-$("#bgFile").onchange = (e) => loadBg(e.target.files[0]);
+function dataUrlToBlob(u) {
+  const m = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(u);
+  if (!m) throw new Error("bad data url");
+  const bin = m[2] ? atob(m[3]) : decodeURIComponent(m[3]);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: m[1] || "application/octet-stream" });
+}
+
+const BG_MAX_BYTES = 150 * 1048576;     // больше этого фон не берём
+const BG_MAX_SIDE = 3840;     // всё, что больше 4K, уменьшаем — иначе размытие и память страдают без пользы
+// проверяет файл и возвращает { blob, info }; если файл не подходит — бросает ошибку с понятным текстом
+async function prepareBg(f) {
+  if (/^(video|audio)\//.test(f.type)) throw new Error("Видео и звук как фон не поддерживаются — выбери картинку или GIF.");
+  const ext = (f.name.split(".").pop() || "").toLowerCase();
+  // сначала createImageBitmap (справляется и с очень большими снимками), затем <img> (понимает, например, SVG)
+  let w = 0, h = 0;
+  try { const bm = await createImageBitmap(f); w = bm.width; h = bm.height; bm.close(); }
+  catch {
+    const url = URL.createObjectURL(f);
+    try { const img = new Image(); img.src = url; await img.decode(); w = img.naturalWidth; h = img.naturalHeight; }
+    catch { throw new Error(`Не получилось открыть «${f.name}»: формат ${ext ? "." + ext : f.type || "файла"} не поддерживается. Подойдут JPG, PNG, WebP, GIF, AVIF, BMP.`); }
+    finally { URL.revokeObjectURL(url); }
+  }
+  const flat = ["image/jpeg", "image/png", "image/bmp"].includes(f.type);      // gif/webp могут быть анимированными — их не трогаем
+  if (flat && Math.max(w, h) > BG_MAX_SIDE) {
+    const k = BG_MAX_SIDE / Math.max(w, h), cw = Math.round(w * k), ch = Math.round(h * k);
+    try {
+      const small = await createImageBitmap(f, { resizeWidth: cw, resizeHeight: ch, resizeQuality: "high" });
+      const c = document.createElement("canvas"); c.width = cw; c.height = ch;
+      c.getContext("2d").drawImage(small, 0, 0); small.close();
+      const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+      if (blob) return { blob, info: `Картинка ${w}×${h} очень большая — уменьшил до ${cw}×${ch}, на экране разницы не будет.` };
+    } catch {}
+  }
+  return { blob: f, info: "" };
+}
+async function loadBg(f) {
+  if (!f) { bgNote("Не получилось получить файл. Выбери его кнопкой или перетащи сам файл (не ссылку и не текст)."); return false; }
+  if (f.size > BG_MAX_BYTES) { bgNote(`Файл «${f.name}» весит ${Math.round(f.size / 1048576)} МБ — это больше лимита в ${BG_MAX_BYTES / 1048576} МБ. Выбери файл поменьше.`); return false; }
+  bgNote("Загружаю…");
+  let prep;
+  try { prep = await prepareBg(f); }
+  catch (e) { bgNote(e.message || "Не удалось прочитать файл."); return false; }
+  setBgBlob(prep.blob);
+  cfg.bg = "idb";
+  applyCfg();
+  let kept = true;
+  try { await IDB.set("bg", prep.blob); }
+  catch (e) {
+    kept = false;
+    bgNote(e?.name === "QuotaExceededError" ? "Фон применён, но на диске не хватает места, чтобы сохранить его: после перезапуска он пропадёт." : "Фон применён, но сохранить его не удалось: после перезапуска он пропадёт.");
+  }
+  if (saveCfg() && kept) bgNote(prep.info);
+  return true;
+}
+async function clearBg() {
+  setBgBlob(null); cfg.bg = "";
+  try { await IDB.del("bg"); } catch {}
+}
+// при старте: достаём файл из IndexedDB; фон из старой версии (data-URL в localStorage) переносим туда же
+async function initBg() {
+  try {
+    if (cfg.bg && cfg.bg !== "idb") {
+      const blob = dataUrlToBlob(cfg.bg);
+      await IDB.set("bg", blob); cfg.bg = "idb";
+    }
+    if (cfg.bg === "idb") {
+      const blob = await IDB.get("bg");
+      if (blob) setBgBlob(blob); else cfg.bg = "";
+    }
+  } catch { cfg.bg = ""; }
+  if (saveCfg()) localStorage.removeItem("ym_cfg2");          // прежние настройки (с тяжёлой картинкой внутри) больше не нужны
+  applyCfg();
+}
+$("#bgFile").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; await loadBg(f); };
 const drop = $("#drop");
 drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); loadBg(e.dataTransfer.files[0]); };
-$("#bgReset").onclick = () => { cfg.bg = ""; applyCfg(); saveCfg(); };
-$("#cfgReset").onclick = () => { const keep = cfg.style; cfg = freshCfg(); cfg.style = keep; applyCfg(); saveCfg(); syncControls(); };
+$("#bgReset").onclick = async () => { await clearBg(); applyCfg(); saveCfg(); };
+$("#cfgReset").onclick = async () => { const keep = cfg.style; await clearBg(); cfg = freshCfg(); cfg.style = keep; applyCfg(); saveCfg(); syncControls(); };
 $("#cViz").onchange = (e) => { cfg.viz = e.target.checked; applyViz(); saveCfg(); };
 
 // ---------- подбор цветов под фон ----------
@@ -195,72 +318,97 @@ async function paletteFrom(src) {
     accent2: second ? hsl2hex(second.h, sat(second), 0.62) : hsl2hex((first.h + 45) % 360, 0.8, 0.66),
   };
 }
-$("#paletteBtn").onclick = async () => {
+// подбирает цвета по текущему фону; возвращает { ok, mono } и пишет пояснение, если не вышло
+async function pickPalette() {
   const note = $("#setNote");
-  if (!cfg.bg) { note.textContent = "Сначала загрузи фон: цвета подбираются по нему."; return; }
+  if (!bgUrl) { note.textContent = "Сначала загрузи фон: цвета подбираются по нему."; return { ok: false }; }
   try {
-    const p = await paletteFrom(cfg.bg);
+    const p = await paletteFrom(bgUrl);
     sty().accent = p.accent; sty().accent2 = p.accent2;
     $("#cAccent").value = p.accent; $("#cAccent2").value = p.accent2;
     applyCfg(); saveCfg();
     note.textContent = p.mono ? "Фон почти без цвета, поэтому палитра получилась сдержанной серебристой." : "Цвета подобраны по фону.";
-  } catch { note.textContent = "Не удалось разобрать изображение."; }
+    return { ok: true, mono: !!p.mono };
+  } catch { note.textContent = "Не удалось разобрать изображение."; return { ok: false }; }
+}
+$("#paletteBtn").onclick = pickPalette;
+
+// ---------- обои с рабочего стола: Rust отдаёт файл текущих обоев Windows, дальше всё как с обычной картинкой ----------
+function sniffImage(b) {                       // формат определяем по первым байтам: у файла обоев может не быть расширения
+  const at = (i, s) => [...s].every((c, k) => b[i + k] === c.charCodeAt(0));
+  if (b[0] === 0xff && b[1] === 0xd8) return ["image/jpeg", "jpg"];
+  if (b[0] === 0x89 && at(1, "PNG")) return ["image/png", "png"];
+  if (at(0, "BM")) return ["image/bmp", "bmp"];
+  if (at(0, "GIF8")) return ["image/gif", "gif"];
+  if (at(0, "RIFF") && at(8, "WEBP")) return ["image/webp", "webp"];
+  if (at(4, "ftyp") && (at(8, "avif") || at(8, "avis"))) return ["image/avif", "avif"];
+  return null;
+}
+$("#deskBtn").onclick = async () => {
+  const btn = $("#deskBtn");
+  btn.disabled = true;
+  bgNote("Беру обои с рабочего стола…");
+  try {
+    let buf;
+    try { buf = await invoke("desktop_wallpaper"); }
+    catch (e) {
+      const m = String(e?.message || e);
+      throw new Error(/not found/i.test(m) ? "В этой сборке ещё нет функции обоев рабочего стола: обнови Rust-часть (desktop.rs)." : m);
+    }
+    const bytes = new Uint8Array(buf);
+    const kind = sniffImage(bytes);
+    if (!kind) throw new Error("Не удалось распознать формат обоев рабочего стола. Выбери картинку вручную.");
+    if (!(await loadBg(new File([bytes], "desktop-wallpaper." + kind[1], { type: kind[0] })))) return;      // причину уже написал loadBg
+    const r = await pickPalette();
+    if (r.ok && !r.mono) bgNote("Готово: фон с рабочего стола применён, цвета подобраны.");
+  } catch (e) { bgNote(e.message || "Не удалось взять обои рабочего стола."); }
+  finally { btn.disabled = false; }
 };
 
 applyCfg(); syncControls();
+initBg();
 
-// ---------- хранилище токена ----------
-// Токен лежит в системном хранилище секретов (на Windows — «Диспетчер учётных данных») через команды secret_* на стороне Rust,
-// а не в localStorage, откуда его мог бы прочитать любой скрипт или человек с доступом к папке профиля.
-// Пока Rust-часть не обновлена, всё работает по-старому (localStorage), чтобы ничего не сломалось.
-const TOKEN_KEY = "ym_token";
-async function loadToken() {
-  const legacy = localStorage.getItem(TOKEN_KEY);
-  let stored;
-  try { stored = (await invoke("secret_get", { key: TOKEN_KEY })) || null; }
-  catch { return legacy; }                       // хранилище недоступно — запасной путь
-  if (stored) { localStorage.removeItem(TOKEN_KEY); return stored; }
-  if (legacy) {                                  // перенос старого токена в защищённое хранилище
-    try { await invoke("secret_set", { key: TOKEN_KEY, value: legacy }); localStorage.removeItem(TOKEN_KEY); } catch {}
-    return legacy;
-  }
-  return null;
+// ---------- токен ----------
+// Токен лежит только в системном хранилище (Windows: «Диспетчер учётных данных») и никогда не попадает в JavaScript:
+// его кладёт туда Rust, а заголовок Authorization к запросам на api.music.yandex.net тоже добавляет Rust.
+// Поэтому даже вредоносный скрипт в окне не сможет прочитать токен или отправить его на чужой адрес.
+const LEGACY_TOKEN_KEY = "ym_token";
+async function tokenExists() {
+  try { return !!(await invoke("token_exists")); } catch { return null; }        // null — Rust-команд нет (не обновлена Rust-часть)
 }
-async function saveToken(t) {
-  try { await invoke("secret_set", { key: TOKEN_KEY, value: t }); localStorage.removeItem(TOKEN_KEY); }
-  catch { localStorage.setItem(TOKEN_KEY, t); }
-}
-async function clearToken() {
-  try { await invoke("secret_delete", { key: TOKEN_KEY }); } catch {}
-  localStorage.removeItem(TOKEN_KEY);
+async function migrateLegacyToken() {            // токен из старых версий лежал открытым текстом в localStorage — переносим и стираем
+  const legacy = localStorage.getItem(LEGACY_TOKEN_KEY);
+  if (!legacy) return;
+  try { await invoke("token_store", { token: legacy }); localStorage.removeItem(LEGACY_TOKEN_KEY); } catch {}
 }
 
 // ---------- вход ----------
-async function login(t) {
-  token = t.trim();
+async function finishLogin() {                    // токен уже в хранилище; проверяем его и узнаём uid
   try {
     const st = await api("/account/status");
     uid = st.account.uid;
-  } catch (e) { token = null; throw e; }
-  await saveToken(token);
+  } catch (e) {
+    if (/^HTTP 40[13]/.test(String(e?.message))) { try { await invoke("token_clear"); } catch {} }     // чужой/просроченный токен не оставляем
+    throw e;
+  }
   localStorage.setItem("ym_uid", uid);
 }
 function showLogin(msg = "") { $("#login").classList.remove("hidden"); $("#loginErr").textContent = msg; }
 function afterLogin() { $("#login").classList.add("hidden"); goTop(showLikes); restorePlayer(); loadLikedIds(); }
 
-// вход одной кнопкой: Rust открывает окно авторизации Яндекса и сам забирает токен из адреса перехода — копировать ничего не нужно
+// вход одной кнопкой: Rust открывает окно авторизации Яндекса, сам забирает токен и кладёт его в хранилище — копировать ничего не нужно
 $("#oauthBtn").onclick = async () => {
   const btn = $("#oauthBtn");
   btn.disabled = true;
   $("#loginErr").textContent = "Войди в аккаунт Яндекса в открывшемся окне — оно закроется само.";
   try {
-    const t = await invoke("yandex_login");
-    await login(t);
+    await invoke("yandex_login");
+    await finishLogin();
     $("#loginErr").textContent = "";
     afterLogin();
   } catch (e) {
     const m = String(e?.message || e);
-    if (/not found/i.test(m)) { $("#manual").open = true; showLogin("В этой сборке ещё нет автоматического входа — войди вручную по токену ниже."); }
+    if (/not found/i.test(m)) { $("#manual").open = true; showLogin("В этой сборке нет автоматического входа: обнови Rust-часть (auth.rs, net.rs) или войди вручную по токену ниже."); }
     else if (/закрыто|уже открыто/.test(m)) showLogin(m + ".");
     else showLogin("Не удалось войти: " + m);
   } finally { btn.disabled = false; }
@@ -269,15 +417,23 @@ $("#oauthBtn").onclick = async () => {
 // запасной путь: ручной ввод токена
 $("#getToken").onclick = (e) => { e.preventDefault(); window.__TAURI__.opener.openUrl(OAUTH_URL); };
 $("#loginBtn").onclick = async () => {
-  try { await login($("#tokenInput").value); $("#tokenInput").value = ""; afterLogin(); }
-  catch (e) { showLogin("Не удалось войти: " + e.message); }
+  try {
+    await invoke("token_store", { token: $("#tokenInput").value });
+    $("#tokenInput").value = "";
+    await finishLogin();
+    afterLogin();
+  } catch (e) { showLogin("Не удалось войти: " + (e?.message || e)); }
 };
 $("#profile").onclick = async () => {
-  if (confirm("Выйти из аккаунта?")) { await clearToken(); localStorage.removeItem("ym_uid"); location.reload(); }
+  if (!confirm("Выйти из аккаунта?")) return;
+  try { await invoke("token_clear"); }
+  catch (e) { alert("Не удалось удалить токен из системного хранилища: " + (e?.message || e) + "\nВыход не выполнен — попробуй ещё раз."); return; }   // не делаем вид, что вышли
+  localStorage.removeItem("ym_uid"); localStorage.removeItem(LEGACY_TOKEN_KEY);
+  location.reload();
 };
 
 // ---------- вспомогательное ----------
-const cover = (t, size = "100x100") => (t.coverUri ? "https://" + t.coverUri.replace("%%", size) : "");
+const cover = (t, size = "100x100") => (t?.coverUri ? safeUrl("https://" + String(t.coverUri).replace("%%", size)) : "");   // только https и доверенные хосты
 const plural = (n, f) => { const m = n % 100, d = n % 10; return f[m > 10 && m < 20 ? 2 : d === 1 ? 0 : d > 1 && d < 5 ? 1 : 2]; };
 function fmtDate(a) {
   const d = Date.parse(a.releaseDate);
@@ -310,7 +466,9 @@ function renderList(tracks, append = false, opts = {}) {
     const li = document.createElement("li");
     li.dataset.id = t.id;
     if (String(t.id) === String(playingId)) li.classList.add("playing");
-    li.innerHTML = `<img src="${cover(t)}" alt="" /><div><span class="t"></span><span class="a"></span></div>`;
+    const body = document.createElement("div");
+    body.innerHTML = '<span class="t"></span><span class="a"></span>';
+    li.append(mkImg(cover(t)), body);
     const tt = li.querySelector(".t");
     tt.textContent = t.title;
     const albumId = albumOf(t);
@@ -331,7 +489,9 @@ function renderList(tracks, append = false, opts = {}) {
 
 function entityItem({ img, round, title, subFn, onClick }) {
   const li = document.createElement("li");
-  li.innerHTML = `<img class="${round ? "rnd" : ""}" src="${img}" alt="" /><div><span class="t"></span><span class="a"></span></div>`;
+  const body = document.createElement("div");
+  body.innerHTML = '<span class="t"></span><span class="a"></span>';
+  li.append(mkImg(safeUrl(img), round ? "rnd" : ""), body);
   li.querySelector(".t").textContent = title;
   subFn(li.querySelector(".a"));
   li.onclick = onClick;
@@ -540,13 +700,21 @@ function markHeard(t) {
 const trackList = (r) => (r.sequence || []).map((s) => s.track).filter(Boolean);
 
 async function waveMore() {
-  if (wave.loading || !wave.on || !wave.session) return;
+  if (wave.loading || !wave.on) return;
   wave.loading = true;
   try {
     const q = wave.queue, last = q[q.length - 1];
-    const r = await api(`/rotor/session/${wave.session}/tracks`, {
-      method: "POST", headers: JSON_H, body: JSON.stringify({ queue: [String(last.id)] }),
-    });
+    let r;
+    if (wave.session) {
+      r = await api(`/rotor/session/${wave.session}/tracks`, {
+        method: "POST", headers: JSON_H, body: JSON.stringify({ queue: [String(last.id)] }),
+      });
+    } else {          // после перезапуска старой сессии нет: открываем новую по той же станции
+      r = await api("/rotor/session/new", {
+        method: "POST", headers: JSON_H, body: JSON.stringify({ seeds: [wave.seed], includeTracksInResponse: true }),
+      });
+      wave.session = r.radioSessionId;
+    }
     wave.batch = r.batchId;
     const have = new Set(q.map((t) => String(t.id)));
     const incoming = trackList(r).filter((t) => !have.has(String(t.id)));
@@ -950,7 +1118,9 @@ async function lyricsRaw(id, fmt) {
   const sign = await lyricsSign(id, ts);
   const r = await api(`/tracks/${id}/lyrics?format=${fmt}&timeStamp=${ts}&sign=${encodeURIComponent(sign)}`);
   if (!r?.downloadUrl) throw new Error("текста нет");
-  const d = await http(r.downloadUrl, { headers: HEADERS() });
+  const url = safeUrl(r.downloadUrl);
+  if (!url) throw new Error("сервер вернул неожиданный адрес текста");
+  const d = await http(url, { headers: { "User-Agent": "Yandex-Music-API" } });     // без Authorization: файлу текста токен не нужен
   if (d.status < 200 || d.status >= 300) throw new Error("HTTP " + d.status);
   return d.body;
 }
@@ -1072,11 +1242,17 @@ $("#fSeek").addEventListener("input", (e) => {
 // ---------- воспроизведение ----------
 async function directLink(id) {
   const infos = await api(`/tracks/${id}/download-info`);
-  const best = infos.filter((i) => i.codec === "mp3").sort((a, b) => b.bitrateInKbps - a.bitrateInKbps)[0];
-  const url = best.downloadInfoUrl + (best.downloadInfoUrl.includes("?") ? "&" : "?") + "format=json";
+  const best = (Array.isArray(infos) ? infos : []).filter((i) => i && i.codec === "mp3").sort((a, b) => b.bitrateInKbps - a.bitrateInKbps)[0];
+  if (!best) throw new Error("для этого трека нет MP3-версии");
+  const base = safeUrl(best.downloadInfoUrl);
+  if (!base) throw new Error("сервер вернул неожиданный адрес файла");
+  const url = base + (base.includes("?") ? "&" : "?") + "format=json";
   const info = JSON.parse((await http(url, { headers: { "User-Agent": "Yandex-Music-API" } })).body);
-  const sign = await invoke("md5_hex", { input: SALT + info.path.slice(1) + info.s });
-  return `https://${info.host}/get-mp3/${sign}/${info.ts}${info.path}`;
+  const host = String(info.host || ""), path = String(info.path || ""), ts = String(info.ts || ""), s = String(info.s || "");
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*$/i.test(host) || !hostTrusted(host.toLowerCase()) || !/^\/[\w\-./%]+$/.test(path) || !/^[\w-]+$/.test(ts) || !/^[\w-]+$/.test(s))
+    throw new Error("сервер вернул неожиданный адрес файла");
+  const sign = await invoke("md5_hex", { input: SALT + path.slice(1) + s });
+  return `https://${host}/get-mp3/${sign}/${ts}${path}`;
 }
 function markPlaying() {
   document.querySelectorAll(".list li").forEach((li) => li.classList.toggle("playing", li.dataset.id === String(playingId)));
@@ -1105,7 +1281,7 @@ function saveLast(pos = 0) {
     artists: (x.artists || []).map((a) => ({ id: a.id, name: a.name })),
     albums: (x.albums || []).slice(0, 1).map((a) => ({ id: a.id })),
   });
-  try { localStorage.setItem("ym_last", JSON.stringify({ q: queue.slice(current, current + 50).map(min), pos: Math.floor(pos), ctx: playCtx, album: playAlbum })); } catch {}
+  try { localStorage.setItem("ym_last", JSON.stringify({ q: queue.slice(current, current + 50).map(min), pos: Math.floor(pos), ctx: playCtx, album: playAlbum, wave: wave.on ? { seed: wave.seed, name: wave.name, album: wave.album } : null })); } catch {}
 }
 window.addEventListener("pagehide", () => saveLast(audio ? audio.currentTime : 0));
 
@@ -1119,6 +1295,13 @@ async function restorePlayer() {
     const saved = JSON.parse(localStorage.getItem("ym_last") || "null");
     if (saved?.q?.length && current === -1) {
       queue = saved.q; current = 0; wave.on = false; playCtx = saved.ctx || "other"; playAlbum = saved.album || null;
+      const sw = saved.wave;
+      if (saved.ctx === "wave" && sw && typeof sw.seed === "string" && /^[\w-]+:[\w.-]+$/.test(sw.seed)) {
+        // играла «Моя волна»: возвращаем её как волну (станция та же, а сессию откроем заново, когда понадобятся новые треки)
+        const al = sw.album && /^\d+$/.test(String(sw.album.id)) ? { id: sw.album.id, title: String(sw.album.title || "").slice(0, 200) } : null;
+        Object.assign(wave, { on: true, seed: sw.seed, name: typeof sw.name === "string" ? sw.name.slice(0, 100) : "", album: al, session: null, batch: null, queue, pos: 0 });
+        playCtx = "wave"; playAlbum = null;
+      }
       resumePos = saved.pos || 0; needLoad = true;
       showTrack(queue[0], resumePos);
       return;
@@ -1335,4 +1518,10 @@ audio = makeAudio(false);
 setVol(volume);
 updateModes(); setHeart($("#likeBtn"), false); setHeart($("#fLike"), false);
 syncIcons();
-loadToken().then((t) => { token = t; if (token && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); } else showLogin(); });
+(async () => {
+  await migrateLegacyToken();
+  const has = await tokenExists();
+  if (has === null) showLogin("Не найдены команды хранилища токена: обнови Rust-часть (auth.rs и net.rs).");
+  else if (has && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); }
+  else showLogin();
+})();

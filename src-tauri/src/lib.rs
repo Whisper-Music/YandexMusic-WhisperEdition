@@ -1,6 +1,6 @@
 mod auth;
-use std::{collections::HashMap, sync::OnceLock};
-use tauri_plugin_http::reqwest;
+mod desktop;
+mod net;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -10,36 +10,6 @@ use tauri::{
 #[tauri::command]
 fn md5_hex(input: String) -> String {
     format!("{:x}", md5::compute(input))
-}
-
-#[derive(serde::Serialize)]
-struct HttpResp {
-    status: u16,
-    body: String,
-}
-
-static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-
-#[tauri::command]
-async fn http_request(
-    method: String,
-    url: String,
-    headers: HashMap<String, String>,
-    body: Option<String>,
-) -> Result<HttpResp, String> {
-    let client = CLIENT.get_or_init(reqwest::Client::new);
-    let m = reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?;
-    let mut req = client.request(m, &url);
-    for (k, v) in headers {
-        req = req.header(k, v);
-    }
-    if let Some(b) = body {
-        req = req.body(b);
-    }
-    let resp = req.send().await.map_err(|e| e.to_string())?;
-    let status = resp.status().as_u16();
-    let body = resp.text().await.map_err(|e| e.to_string())?;
-    Ok(HttpResp { status, body })
 }
 
 // Управление окном для собственной верхней панели
@@ -68,23 +38,6 @@ fn win_drag(window: tauri::WebviewWindow) {
     let _ = window.start_dragging();
 }
 
-// Скачивание файла целиком (нужно визуализатору: звук должен быть «своим» для браузера)
-#[tauri::command]
-async fn fetch_bytes(url: String) -> Result<tauri::ipc::Response, String> {
-    let client = CLIENT.get_or_init(reqwest::Client::new);
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "Yandex-Music-API")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
-    }
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-    Ok(tauri::ipc::Response::new(bytes.to_vec()))
-}
-
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -97,8 +50,21 @@ fn show_main(app: &tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![md5_hex, http_request, fetch_bytes, win_minimize, win_toggle_max, win_is_max, win_close, win_drag, auth::secret_get, auth::secret_set, auth::secret_delete, auth::yandex_login])
+        .invoke_handler(tauri::generate_handler![
+            md5_hex,
+            win_minimize,
+            win_toggle_max,
+            win_is_max,
+            win_close,
+            win_drag,
+            net::http_request,
+            net::fetch_bytes,
+            desktop::desktop_wallpaper,
+            auth::token_exists,
+            auth::token_store,
+            auth::token_clear,
+            auth::yandex_login
+        ])
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_min_size(Some(tauri::LogicalSize::new(780.0, 540.0)));
@@ -132,9 +98,12 @@ pub fn run() {
         })
         // крестик прячет окно в трей, музыка продолжает играть
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            // прячем в трей только главное окно; остальные (например, окно входа в Яндекс) должны закрываться по-настоящему
+            if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .run(tauri::generate_context!())
