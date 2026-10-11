@@ -41,7 +41,11 @@ Yandex Music Desktop — неофициальный сторонний клие�
 
 ## Скриншоты
 
-*Скриншоты приложения будут добавлены позже.*
+<img width="1280" height="690" alt="image" src="https://github.com/user-attachments/assets/1d69bb96-e3c1-4510-b3a8-b3d9013e1d0a" />
+
+<img width="1280" height="690" alt="image" src="https://github.com/user-attachments/assets/210ebb58-aa7a-4da5-8c7f-a9b1b0b55a3e" />
+
+
 
 ## Установка
 
@@ -49,7 +53,7 @@ Yandex Music Desktop — неофициальный сторонний клие�
 
 Для Windows доступен установщик `.exe`.
 
-Для Linux в дальнейшем могут быть доступны соответствующие сборки, например AppImage.
+Для Linux в дальнейшем могут быть доступны соответствующие сборки.
 
 ## Статус проекта
 
