@@ -1,66 +1,89 @@
-// src-tauri/src/auth.rs — безопасное хранение токена и вход одной кнопкой.
+// src-tauri/src/auth.rs — токен и вход. Заменяет прежний auth.rs.
 //
-// ПОДКЛЮЧЕНИЕ (три шага):
-// 1) src-tauri/Cargo.toml, раздел [dependencies]:
-//      keyring = { version = "3", features = ["windows-native"] }
-//    (без указания windows-native keyring молча пишет «в никуда» — фича нужна обязательно)
-// 2) В начале src-tauri/src/lib.rs (или main.rs, где у тебя run()):
-//      mod auth;
-// 3) В .invoke_handler(tauri::generate_handler![ ... ]) к уже существующим командам добавь:
-//      auth::secret_get, auth::secret_set, auth::secret_delete, auth::yandex_login
+// Токен хранится только в системном хранилище и никогда не передаётся в JavaScript:
+//  * вход одной кнопкой: окно авторизации Яндекса -> токен забирает Rust -> сразу кладёт в хранилище;
+//  * ручной ввод: токен один раз уходит из поля ввода в token_store;
+//  * заголовок Authorization к API подставляет net::http_request.
+// Команд с произвольным ключом больше нет (нельзя прочитать/перезаписать чужой секрет).
 
+use crate::net::{host_trusted, KEYRING_ACCOUNT, KEYRING_SERVICE};
 use keyring::Entry;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const SERVICE: &str = "WhisperEdition";
 const AUTH_URL: &str =
     "https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d";
 
-fn entry(key: &str) -> Result<Entry, String> {
-    Entry::new(SERVICE, key).map_err(|e| e.to_string())
+fn entry() -> Result<Entry, String> {
+    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|e| e.to_string())
 }
 
-/// Положить секрет в системное хранилище (Windows: Диспетчер учётных данных).
-#[tauri::command]
-pub fn secret_set(key: String, value: String) -> Result<(), String> {
-    entry(&key)?.set_password(&value).map_err(|e| e.to_string())
+fn token_looks_valid(t: &str) -> bool {
+    (10..=300).contains(&t.len())
+        && t.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
-/// Прочитать секрет; если его нет — Ok(None).
+/// Есть ли сохранённый токен (сам токен наружу не отдаётся).
 #[tauri::command]
-pub fn secret_get(key: String) -> Result<Option<String>, String> {
-    match entry(&key)?.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
+pub fn token_exists() -> Result<bool, String> {
+    match entry()?.get_password() {
+        Ok(_) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
         Err(e) => Err(e.to_string()),
     }
 }
 
-/// Удалить секрет (если его и не было — не ошибка).
+/// Сохранить токен (ручной ввод).
 #[tauri::command]
-pub fn secret_delete(key: String) -> Result<(), String> {
-    match entry(&key)?.delete_credential() {
+pub fn token_store(token: String) -> Result<(), String> {
+    let t = token.trim();
+    if !token_looks_valid(t) {
+        return Err("Токен выглядит неправильно: проверь, что скопировал его целиком".into());
+    }
+    entry()?.set_password(t).map_err(|e| e.to_string())
+}
+
+/// Удалить токен (выход). Ошибка возвращается наружу, чтобы интерфейс не делал вид, что вышел.
+#[tauri::command]
+pub fn token_clear() -> Result<(), String> {
+    match entry()?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
 }
 
-/// Открывает окно авторизации Яндекса и сам забирает токен.
-/// После входа Яндекс перенаправляет на адрес вида https://music.yandex.ru/#access_token=...&...
-/// Мы перехватываем этот переход ещё до загрузки страницы, достаём токен из фрагмента адреса,
-/// отменяем переход и закрываем окно. Окно входа — внешняя страница без доступа к командам приложения.
+/// Случайная строка state (защита от подмены результата входа). Источник случайности — ключи RandomState,
+/// которые Rust берёт у операционной системы; отдельных зависимостей не нужно.
+fn random_state() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let mut s = String::new();
+    for i in 0..3u64 {
+        let mut h = RandomState::new().build_hasher();
+        h.write_u64(i);
+        s.push_str(&format!("{:016x}", h.finish()));
+    }
+    s
+}
+
+/// Вход одной кнопкой. После успеха токен уже лежит в хранилище, возвращается только Ok(()).
+/// После входа Яндекс перенаправляет на https://<домен Яндекса>/#access_token=...&state=...
+/// Мы перехватываем этот переход до загрузки страницы, проверяем https, домен и state, забираем токен
+/// и отменяем переход. Окно входа — внешняя страница без доступа к командам приложения.
 #[tauri::command]
-pub async fn yandex_login(app: AppHandle) -> Result<String, String> {
+pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("yandex-auth") {
         let _ = w.set_focus();
         return Err("Окно входа уже открыто".into());
     }
 
+    let state = random_state();
+    let expected = state.clone();
     let (tx, mut rx) = tauri::async_runtime::channel::<String>(4);
     let tx_nav = tx.clone();
     let tx_close = tx;
 
-    let url: tauri::Url = AUTH_URL
+    let url: tauri::Url = format!("{AUTH_URL}&state={state}")
         .parse()
         .map_err(|_| "Неверный адрес входа".to_string())?;
 
@@ -70,11 +93,28 @@ pub async fn yandex_login(app: AppHandle) -> Result<String, String> {
         .center()
         .on_navigation(move |u| {
             if let Some(frag) = u.fragment() {
-                for part in frag.split('&') {
-                    if let Some(t) = part.strip_prefix("access_token=") {
-                        let _ = tx_nav.try_send(t.to_string());
-                        return false; // страницу с токеном не открываем
+                if frag.contains("access_token=") {
+                    // токен принимаем только с https-страницы доверенного домена и только с нашим state
+                    let origin_ok = u.scheme() == "https"
+                        && u.host_str().map(host_trusted).unwrap_or(false);
+                    if origin_ok {
+                        if let Ok(fake) = tauri::Url::parse(&format!("https://x.invalid/?{frag}")) {
+                            let (mut token, mut got_state) = (None, None);
+                            for (k, v) in fake.query_pairs() {
+                                match k.as_ref() {
+                                    "access_token" => token = Some(v.into_owned()),
+                                    "state" => got_state = Some(v.into_owned()),
+                                    _ => {}
+                                }
+                            }
+                            if let (Some(t), Some(s)) = (token, got_state) {
+                                if s == expected {
+                                    let _ = tx_nav.try_send(t);
+                                }
+                            }
+                        }
                     }
+                    return false; // страницу с токеном в адресе никогда не открываем
                 }
             }
             true
@@ -82,7 +122,7 @@ pub async fn yandex_login(app: AppHandle) -> Result<String, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    // если окно закрыли крестиком, не дождавшись входа — сообщаем об отмене
+    // окно закрыли, не дождавшись входа — сообщаем об отмене
     win.on_window_event(move |ev| {
         if matches!(ev, WindowEvent::Destroyed) {
             let _ = tx_close.try_send(String::new());
@@ -93,7 +133,9 @@ pub async fn yandex_login(app: AppHandle) -> Result<String, String> {
     let _ = win.close();
 
     match got {
-        Some(t) if !t.is_empty() => Ok(t),
-        _ => Err("Окно входа закрыто".into()),
+        Some(t) if token_looks_valid(&t) => entry()?.set_password(&t).map_err(|e| e.to_string()),
+        Some(t) if t.is_empty() => Err("Окно входа закрыто".into()),
+        Some(_) => Err("Яндекс вернул токен в неожиданном виде".into()),
+        None => Err("Окно входа закрыто".into()),
     }
 }
