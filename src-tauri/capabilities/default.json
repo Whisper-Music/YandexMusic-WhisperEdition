@@ -1,12 +1,29 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Разрешения главного окна (запросы к сети идут только через команды Rust, плагин http не нужен)",
-  "windows": [
-    "main"
-  ],
+  "description": "Права только для главного окна с локальным интерфейсом. Окно входа Яндекса и любые внешние страницы прав не получают (remote-адресов здесь нет).",
+  "windows": ["main"],
+  "local": true,
   "permissions": [
-    "core:default",
-    "opener:default"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://oauth.yandex.ru/*" }]
+    },
+    "allow-md5-hex",
+    "allow-win-minimize",
+    "allow-win-toggle-max",
+    "allow-win-is-max",
+    "allow-win-close",
+    "allow-win-drag",
+    "allow-tray-playing",
+    "allow-http-request",
+    "allow-fetch-bytes",
+    "allow-desktop-wallpaper",
+    "allow-token-exists",
+    "allow-token-store",
+    "allow-token-clear",
+    "allow-yandex-login"
   ]
 }

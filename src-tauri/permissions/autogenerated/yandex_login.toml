@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-yandex-login"
+description = "Enables the yandex_login command without any pre-configured scope."
+commands.allow = ["yandex_login"]
+
+[[permission]]
+identifier = "deny-yandex-login"
+description = "Denies the yandex_login command without any pre-configured scope."
+commands.deny = ["yandex_login"]

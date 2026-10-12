@@ -6,9 +6,9 @@
 //  * заголовок Authorization к API подставляет net::http_request.
 // Команд с произвольным ключом больше нет (нельзя прочитать/перезаписать чужой секрет).
 
-use crate::net::{host_trusted, KEYRING_ACCOUNT, KEYRING_SERVICE};
+use crate::net::{url_ok, KEYRING_ACCOUNT, KEYRING_SERVICE};
 use keyring::Entry;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{webview::NewWindowResponse, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const AUTH_URL: &str =
     "https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d";
@@ -52,18 +52,22 @@ pub fn token_clear() -> Result<(), String> {
     }
 }
 
-/// Случайная строка state (защита от подмены результата входа). Источник случайности — ключи RandomState,
-/// которые Rust берёт у операционной системы; отдельных зависимостей не нужно.
-fn random_state() -> String {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let mut s = String::new();
-    for i in 0..3u64 {
-        let mut h = RandomState::new().build_hasher();
-        h.write_u64(i);
-        s.push_str(&format!("{:016x}", h.finish()));
-    }
-    s
+/// Случайная строка state (защита от подмены результата входа): 256 бит из криптографического
+/// генератора операционной системы (getrandom -> BCryptGenRandom в Windows).
+fn random_state() -> Result<String, String> {
+    let mut b = [0u8; 32];
+    getrandom::fill(&mut b).map_err(|e| format!("Нет источника случайных чисел: {e}"))?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+}
+
+/// Сравнение без раннего выхода (время не зависит от того, в каком символе расхождение).
+fn same(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Куда может переходить окно входа: только страницы Яндекса по единой политике адресов.
+pub fn auth_nav_allowed(u: &tauri::Url) -> bool {
+    url_ok(u)
 }
 
 /// Вход одной кнопкой. После успеха токен уже лежит в хранилище, возвращается только Ok(()).
@@ -77,7 +81,7 @@ pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
         return Err("Окно входа уже открыто".into());
     }
 
-    let state = random_state();
+    let state = random_state()?;
     let expected = state.clone();
     let (tx, mut rx) = tauri::async_runtime::channel::<String>(4);
     let tx_nav = tx.clone();
@@ -91,13 +95,13 @@ pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
         .title("Вход через Яндекс")
         .inner_size(520.0, 720.0)
         .center()
+        // окно входа не может открывать новые окна (всплывающие окна, target=_blank)
+        .on_new_window(|_, _| NewWindowResponse::Deny)
         .on_navigation(move |u| {
             if let Some(frag) = u.fragment() {
                 if frag.contains("access_token=") {
                     // токен принимаем только с https-страницы доверенного домена и только с нашим state
-                    let origin_ok = u.scheme() == "https"
-                        && u.host_str().map(host_trusted).unwrap_or(false);
-                    if origin_ok {
+                    if auth_nav_allowed(u) {
                         if let Ok(fake) = tauri::Url::parse(&format!("https://x.invalid/?{frag}")) {
                             let (mut token, mut got_state) = (None, None);
                             for (k, v) in fake.query_pairs() {
@@ -108,7 +112,7 @@ pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
                                 }
                             }
                             if let (Some(t), Some(s)) = (token, got_state) {
-                                if s == expected {
+                                if same(&s, &expected) {
                                     let _ = tx_nav.try_send(t);
                                 }
                             }
@@ -117,7 +121,8 @@ pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
                     return false; // страницу с токеном в адресе никогда не открываем
                 }
             }
-            true
+            // всё, что не страница Яндекса по https, в окне входа не открываем
+            auth_nav_allowed(u)
         })
         .build()
         .map_err(|e| e.to_string())?;

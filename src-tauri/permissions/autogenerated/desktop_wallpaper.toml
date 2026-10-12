@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-wallpaper"
+description = "Enables the desktop_wallpaper command without any pre-configured scope."
+commands.allow = ["desktop_wallpaper"]
+
+[[permission]]
+identifier = "deny-desktop-wallpaper"
+description = "Denies the desktop_wallpaper command without any pre-configured scope."
+commands.deny = ["desktop_wallpaper"]

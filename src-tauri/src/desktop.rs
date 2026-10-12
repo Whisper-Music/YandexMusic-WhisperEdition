@@ -3,7 +3,7 @@
 // Команда desktop_wallpaper отдаёт интерфейсу файл ТЕКУЩИХ обоев Windows (байты, ArrayBuffer на стороне JS).
 // Путь не принимается от интерфейса: его определяет сама система (SystemParametersInfoW), а запасной путь —
 // файл TranscodedWallpaper в профиле пользователя, куда Windows кладёт копию текущих обоев (в том числе для
-// слайд-шоу и «Windows: интересное»). Читаем только картинки и не больше 150 МБ.
+// слайд-шоу и «Windows: интересное»). Читаем только картинки и не больше 50 МБ.
 
 #[cfg(windows)]
 mod imp {
@@ -20,7 +20,7 @@ mod imp {
     }
 
     const SPI_GETDESKWALLPAPER: u32 = 0x0073;
-    const MAX_BYTES: u64 = 150 * 1024 * 1024;
+    const MAX_BYTES: u64 = 50 * 1024 * 1024; // тот же предел, что у фона в интерфейсе (imgguard.js)
 
     /// Путь к обоям, который сообщает система.
     fn system_path() -> Option<PathBuf> {
@@ -74,7 +74,7 @@ mod imp {
             }
             let meta = std::fs::metadata(&p).map_err(|e| e.to_string())?;
             if meta.len() > MAX_BYTES {
-                return Err("Файл обоев больше 150 МБ".into());
+                return Err("Файл обоев больше 50 МБ".into());
             }
             return std::fs::read(&p).map_err(|e| e.to_string());
         }

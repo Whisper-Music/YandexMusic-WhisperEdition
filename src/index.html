@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Whisper Edition</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="main.js" defer></script>
+  <script src="imgguard.js" defer></script>
+    <script src="main.js" defer></script>
 </head>
 <body>
   <div id="bg"></div>
@@ -32,6 +33,7 @@
       <input id="search" class="search" type="search" placeholder="Поиск" />
       <button class="nav" id="wave">Моя волна</button>
       <button class="nav active" id="likes">Лайки</button>
+      <button class="nav" id="statsBtn">Статистика</button>
       <button class="nav" id="settingsBtn">Настройки</button>
       <div class="spacer"></div>
       <button class="nav" id="profile">Профиль</button>
@@ -60,6 +62,7 @@
             <div id="npArtist" class="npartist"></div>
           </div>
         </div>
+        <button id="artistWaveBtn" class="nav pin" hidden>Моя волна по артисту</button>
         <button id="pinBtn" class="nav pin" hidden>Закрепить</button>
       </div>
       <div id="chips" class="chips" hidden></div>
@@ -82,12 +85,29 @@
         </div>
       </section>
 
+      <section id="statsPage" class="stats" hidden>
+        <div id="statsBody" hidden>
+          <div id="statCards" class="statcards"></div>
+          <div id="boxArtists" class="card stbox" hidden><h3>Любимые исполнители</h3><div id="stArtists" class="stpeople"></div></div>
+          <div class="statgrid">
+            <div id="boxAlbums" class="card stbox" hidden><h3>Любимые альбомы</h3><div id="stAlbums" class="stalbums"></div></div>
+            <div id="boxShare" class="card stbox" hidden>
+              <h3>Доли артистов в понравившихся</h3>
+              <div class="stdonut"><svg id="stDonut" viewBox="0 0 100 100" aria-hidden="true"></svg><div class="mid"><b id="stDonutNum"></b><small id="stDonutCap"></small></div></div>
+              <ul id="stLegend" class="stlegend"></ul>
+            </div>
+          </div>
+        </div>
+        <p id="stNote" class="status"></p>
+      </section>
       <section id="settingsPage" class="settings" hidden>
         <div class="card">
           <h3>Стиль оформления</h3>
           <div class="stylepick">
             <button class="stylecard" data-style="neon"><span class="sprev sp-neon"></span><b>Неон</b><small>Свечение, стекло, прозрачные панели</small></button>
             <button class="stylecard" data-style="royal"><span class="sprev sp-royal"></span><b>Королевский</b><small>Золото, готика, знамёна</small></button>
+            <button class="stylecard" data-style="steam"><span class="sprev sp-steam"></span><b>Стимпанк</b><small>Латунь, заклёпки, шестерёнки</small></button>
+            <button class="stylecard" data-style="lolitta"><span class="sprev sp-lolitta"></span><b>Lolitta</b><small>Пудровый розовый, банты, жемчуг, камея</small></button>
           </div>
         </div>
         <div class="card">
@@ -98,7 +118,7 @@
           </div>
         </div>
         <div class="card">
-          <h3>Стекло и свечение</h3>
+          <h3 id="glassTitle">Стекло и свечение</h3>
           <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
           <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
           <label class="slide"><span>Затемнение фона</span><input type="range" id="cDim" min="0" max="85" /></label>
@@ -119,6 +139,11 @@
             <button class="nav" id="cfgReset">Сбросить всё</button>
           </div>
           <p id="setNote" class="status"></p>
+        </div>
+        <div class="card">
+          <h3>Анимации</h3>
+          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
+          <p class="status">Выключено — во всех стилях не проигрывается ни одна анимация и ни один плавный переход: кнопки, закладки и окна меняются мгновенно. Аудиовизуализатор Моей волны включается отдельно, ниже.</p>
         </div>
         <div class="card">
           <h3>Моя волна</h3>
@@ -166,6 +191,7 @@
       <button id="fClose" class="round fclose" title="Свернуть (Esc)">✕</button>
       <header id="fHead" class="fhead">
         <img id="fCover" class="fcover" alt="" />
+        <div id="fQuick" class="fquick"><button id="qPrev"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button><button id="qPlay" class="playbtn"></button><button id="qNext"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button></div>
         <div id="fTitles" class="ftitles">
           <div id="fTitle" class="ftitle"></div>
           <div id="fArtist" class="fartist"></div>

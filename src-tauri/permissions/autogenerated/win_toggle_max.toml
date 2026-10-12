@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-win-toggle-max"
+description = "Enables the win_toggle_max command without any pre-configured scope."
+commands.allow = ["win_toggle_max"]
+
+[[permission]]
+identifier = "deny-win-toggle-max"
+description = "Denies the win_toggle_max command without any pre-configured scope."
+commands.deny = ["win_toggle_max"]
