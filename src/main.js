@@ -1,4 +1,8 @@
-const { invoke } = window.__TAURI__.core;
+// Rust-команды отклоняют промис строкой; превращаем её в Error, чтобы везде работал e.message (а не «undefined»)
+const invoke = async (cmd, args) => {
+  try { return await window.__TAURI__.core.invoke(cmd, args); }
+  catch (e) { throw e instanceof Error ? e : new Error(String(e)); }
+};
 
 const API = "https://api.music.yandex.net";
 const SALT = "XGRlBW9FXlekgbPrRHuSiA";
@@ -47,6 +51,7 @@ const pins = lsJSON("ym_pins", [], Array.isArray)
 let tabsActive = false, pinItem = null;
 const DEFAULT_SEED = "user:onyourwave";
 const wave = { on: false, session: null, batch: null, loading: false, queue: [], pos: -1, seed: DEFAULT_SEED, name: "", album: null };   // album: { id, title } — волна по альбому
+let artistWaveItem = null;
 let playAlbum = null;   // альбом, который сейчас играет целиком: { id, title }
 const heard = new Set(lsJSON("ym_heard", [], Array.isArray).filter((x) => typeof x === "string" || typeof x === "number").slice(-600));   // что уже играло в волне
 { const sv = lsJSON("ym_wave_seed", null, (v) => typeof v === "object"); if (typeof sv?.seed === "string" && /^[\w-]+:[\w.-]+$/.test(sv.seed)) { wave.seed = sv.seed; wave.name = typeof sv.name === "string" ? sv.name.slice(0, 100) : ""; } }
@@ -96,43 +101,117 @@ async function api(path, opts = {}) {
 
 // ---------- внешний вид ----------
 const STYLE_DEF = {
-  neon:  { accent: "#a66bff", accent2: "#e060ff", glow: 22, panel: 70 },
-  royal: { accent: "#c9a24b", accent2: "#8b1e2d", glow: 6, panel: 92 },
+  neon:  { accent: "#a66bff", accent2: "#e060ff", glow: 22, panel: 70, dim: 10, bg: "" },
+  royal: { accent: "#c9a24b", accent2: "#8b1e2d", glow: 6, panel: 92, dim: 10, bg: "" },
+  steam: { accent: "#c58a4b", accent2: "#8c4f24", glow: 4, panel: 90, dim: 10, bg: "" },
+  lolitta: { accent: "#e2aab4", accent2: "#8c4a5c", glow: 4, panel: 94, dim: 10, bg: "" },
 };
-const STYLE_KEYS = ["accent", "accent2", "glow", "panel"];
-const freshCfg = () => ({ style: "royal", dim: 10, blur: 6, viz: true, bg: "", s: { neon: { ...STYLE_DEF.neon }, royal: { ...STYLE_DEF.royal } } });
+const STYLE_KEYS = ["accent", "accent2", "glow", "panel", "dim"];
+const freshCfg = () => ({ style: "royal", blur: 6, viz: true, anim: true, bg: "", s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k] }])) });
 function loadCfg() {
   let saved = null, old = null;
   try { saved = JSON.parse(localStorage.getItem("ym_cfg3") || "null"); } catch {}
   try { old = JSON.parse(localStorage.getItem("ym_cfg2") || "null"); } catch {}
   const c = freshCfg();
   if (saved) {
-    for (const k of ["style", "dim", "blur", "viz", "bg"]) if (saved[k] !== undefined) c[k] = saved[k];
-    for (const st of ["neon", "royal"]) Object.assign(c.s[st], saved.s?.[st] || {});
+    for (const k of ["style", "blur", "viz", "bg", "anim"]) if (saved[k] !== undefined) c[k] = saved[k];
+    for (const st of Object.keys(STYLE_DEF)) {
+      Object.assign(c.s[st], saved.s?.[st] || {});
+      // затемнение раньше было общим: прежнее значение переносим во все стили, если у стиля своего нет
+      if (saved.s?.[st]?.dim === undefined && saved.dim !== undefined) c.s[st].dim = saved.dim;
+    }
   } else if (old) {                       // прежние настройки (до выбора стиля) относились к неону
-    for (const k of ["dim", "blur", "viz", "bg"]) if (old[k] !== undefined) c[k] = old[k];
+    for (const k of ["blur", "viz", "bg"]) if (old[k] !== undefined) c[k] = old[k];
     for (const k of STYLE_KEYS) if (old[k] !== undefined) c.s.neon[k] = old[k];
   }
   if (!c.s[c.style]) c.style = "royal";
   return c;
 }
 let cfg = loadCfg();
-let bgUrl = "";          // blob-адрес текущего фона; сам файл лежит в IndexedDB, а в cfg.bg — только метка "idb"
+// у каждого стиля свой фон: blob-адреса по стилям; сами файлы лежат в IndexedDB под ключами "bg:<стиль>",
+// а в cfg.s[стиль].bg — только метка "idb". cfg.bg остался лишь для переноса фона из старых версий.
+const bgUrls = { neon: "", royal: "", steam: "", lolitta: "" };
+const bgKey = (st) => "bg:" + st;
 const sty = () => cfg.s[cfg.style];
+const curBg = () => bgUrls[cfg.style] || "";
 
 function fill(el) { el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%"); }
 function fillAll() { document.querySelectorAll("input[type=range]").forEach(fill); }
 
+// читаемый цвет текста для кнопок с градиентом accent → accent2: тёмный или белый, смотря у чего контраст
+// с самым «неудобным» местом градиента (оба края и середина) выше; при слабом контрасте добавляем тень
+function hexRgb(h) { const m = /^#?([0-9a-f]{6})$/i.exec(h || ""); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function relLum(rgb) { return rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0); }
+function onAccent(a, b) {
+  const DARK = "#0b0618", ca = hexRgb(a), cb = hexRgb(b);
+  if (!ca || !cb) return { color: DARK, shadow: "none" };
+  const spots = [ca, cb, ca.map((v, i) => Math.round((v + cb[i]) / 2))].map(relLum);
+  const cr = (l1, l2) => (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  const dark = Math.min(...spots.map((l) => cr(l, relLum(hexRgb(DARK))))), white = Math.min(...spots.map((l) => cr(l, 1)));
+  const useDark = dark >= white, best = Math.max(dark, white);
+  const shadow = best >= 4.5 ? "none" : useDark ? "0 0 5px rgba(255,255,255,.55)" : "0 1px 4px rgba(0,0,0,.75)";
+  return { color: useDark ? DARK : "#ffffff", shadow };
+}
+// Lolitta: цвет текста и иконок на кнопках, закладках и светлых панелях подбирается по контрасту с их настоящим фоном,
+// поэтому всё читается при любых выбранных цветах (даже белом или чёрном). Фоны считаются так же, как color-mix в CSS.
+function loInk(st) {
+  const r = document.documentElement.style;
+  const NAMES = ["--lo-on-btn", "--lo-on-tab", "--lo-on-act", "--lo-on-tabact", "--lo-ink", "--lo-on-mid"];
+  const A = hexRgb(st.accent), B = hexRgb(st.accent2);
+  if (cfg.style !== "lolitta" || !A || !B) {
+    for (const n of NAMES) { r.removeProperty(n); r.removeProperty(n + "-sh"); }
+    for (const n of ["--lo-ic", "--lo-title", "--l-btn", "--l-btn2"]) r.removeProperty(n);
+    return;
+  }
+  const mix = (a, b, p) => a.map((v, i) => Math.round(v * p + b[i] * (1 - p)));
+  const hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+  const cr = (a, b) => { const x = relLum(a), y = relLum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const H = hexRgb, W = [255, 255, 255], DARK = "#2a1218", LIGHT = "#fff6f7";
+  // первый кандидат с контрастом от t (для текста 4.5) ко всем точкам фона; если такого нет — самый контрастный
+  const pick = (bgs, cands, t = 4.5) => {
+    let best = cands[0], bv = -1;
+    for (const c of cands) { const v = Math.min(...bgs.map((b) => cr(b, H(c)))); if (v >= t) return { c, v }; if (v > bv) { best = c; bv = v; } }
+    return { c: best, v: bv };
+  };
+  const set = (name, p) => {
+    r.setProperty(name, p.c);
+    r.setProperty(name + "-sh", p.v >= 4.5 ? "none" : relLum(H(p.c)) > 0.35 ? "0 1px 2px rgba(30,8,15,.9), 0 0 6px rgba(30,8,15,.6)" : "0 0 4px rgba(255,255,255,.9), 0 1px 0 rgba(255,255,255,.7)");
+  };
+  // тёмные кнопки и закладки: при светлом «Втором» цвете (белый, пастель) фон затемняется настолько,
+  // чтобы на нём читался светлый текст; при обычных цветах остаётся как задумано (60% и 42% второго цвета)
+  const darken = (base, p, maxLum) => { let c = mix(B, H(base), p); while (relLum(c) > maxLum && p > 0) { p = Math.max(0, p - 0.04); c = mix(B, H(base), p); } return c; };
+  const btn = [darken("#2a1218", 0.6, 0.06), darken("#1c0b10", 0.42, 0.035)];
+  r.setProperty("--l-btn", hex(btn[0])); r.setProperty("--l-btn2", hex(btn[1]));
+  // заголовок страницы переливается в основной цвет; если он слишком тёмный — в светлый оттенок, чтобы надпись читалась
+  if (relLum(A) < 0.18) r.setProperty("--lo-title", hex(mix(A, H("#fff8f6"), 0.4))); else r.removeProperty("--lo-title");
+  const act = [mix(A, W, 0.82), mix(A, B, 0.62)];                                  // активная кнопка
+  const light = mix(A, H("#fbf0f0"), 0.5), lights = [mix(light, W, 0.55), light, mix(A, H("#f1d8d9"), 0.72)];   // светлые панели
+  const hi = mix(A, H("#fff8f6"), 0.4), lo = mix(A, B, 0.5), ink = mix(B, H("#24100f"), 0.64);
+  set("--lo-on-btn", pick(btn, ["#f9eaec", LIGHT, DARK]));
+  set("--lo-on-tab", pick(btn, [hex(hi), "#f9eaec", LIGHT, DARK]));
+  set("--lo-on-act", pick(act, [LIGHT, DARK]));
+  set("--lo-on-tabact", pick([mix(A, W, 0.75), A], [hex(ink), DARK, LIGHT]));
+  set("--lo-ink", pick(lights, [hex(ink), DARK, LIGHT]));
+  set("--lo-on-mid", pick([A, lo], [LIGHT, DARK], 1.8));      // сердечки и значок медальона: светлые, пока заметны на розовом металле
+  // иконки разделов — розовый металл, если он заметен на кнопке; иначе — цвет текста кнопки
+  if (Math.min(...btn.map((b) => cr(b, A))) < 2.2) r.setProperty("--lo-ic", r.getPropertyValue("--lo-on-btn"));
+  else r.removeProperty("--lo-ic");
+}
 function applyCfg() {
   const r = document.documentElement.style, st = sty();
   document.documentElement.dataset.style = cfg.style;
+  document.documentElement.dataset.anim = cfg.anim === false ? "off" : "on";      // выключатель анимаций — действует во всех стилях
   r.setProperty("--accent", st.accent);
   r.setProperty("--accent2", st.accent2);
-  r.setProperty("--glow", st.glow + "px");
+  const oa = onAccent(st.accent, st.accent2);
+  r.setProperty("--on-accent", oa.color);
+  r.setProperty("--on-accent-shadow", cfg.style === "neon" ? oa.shadow : "none");      // королевский стиль красит текст сам
+  r.setProperty("--glow", (cfg.style === "neon" ? st.glow : STYLE_DEF[cfg.style].glow) + "px");      // свечение настраивается только в неоне
   r.setProperty("--panel-a", st.panel / 100);
-  r.setProperty("--dim", cfg.dim / 100);
+  r.setProperty("--dim", st.dim / 100);
   r.setProperty("--bgblur", cfg.blur + "px");
-  const img = bgUrl ? `url("${bgUrl}")` : "none";
+  loInk(st);
+  const img = curBg() ? `url("${curBg()}")` : "none";
   r.setProperty("--bg-image", img);
   $("#drop").style.setProperty("--drop-img", img);
   applyViz();
@@ -147,6 +226,10 @@ const setv = (k, v) => { if (STYLE_KEYS.includes(k)) sty()[k] = v; else cfg[k] =
 function syncControls() {                    // подставляет значения текущего стиля в настройки
   for (const [id, k] of SLIDERS) $(id).value = getv(k);
   $("#cViz").checked = cfg.viz;
+  $("#cAnim").checked = cfg.anim !== false;
+  const neon = cfg.style === "neon";
+  $("#cGlow").closest("label").style.display = neon ? "" : "none";
+  $("#glassTitle").textContent = neon ? "Стекло и свечение" : "Панели";
   document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
   fillAll();
 }
@@ -181,9 +264,9 @@ const IDB = {
   del: (k) => IDB.tx("readwrite", (s) => s.delete(k)),
 };
 const bgNote = (m) => { $("#setNote").textContent = m || ""; };
-function setBgBlob(blob) {
-  if (bgUrl) URL.revokeObjectURL(bgUrl);
-  bgUrl = blob ? URL.createObjectURL(blob) : "";
+function setBgBlob(blob, st = cfg.style) {
+  if (bgUrls[st]) URL.revokeObjectURL(bgUrls[st]);
+  bgUrls[st] = blob ? URL.createObjectURL(blob) : "";
 }
 function dataUrlToBlob(u) {
   const m = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(u);
@@ -194,22 +277,22 @@ function dataUrlToBlob(u) {
   return new Blob([arr], { type: m[1] || "application/octet-stream" });
 }
 
-const BG_MAX_BYTES = 150 * 1048576;     // больше этого фон не берём
+const BG_MAX_BYTES = IMG_LIMITS.maxBytes;     // больше этого фон не берём
 const BG_MAX_SIDE = 3840;     // всё, что больше 4K, уменьшаем — иначе размытие и память страдают без пользы
 // проверяет файл и возвращает { blob, info }; если файл не подходит — бросает ошибку с понятным текстом
 async function prepareBg(f) {
   if (/^(video|audio)\//.test(f.type)) throw new Error("Видео и звук как фон не поддерживаются — выбери картинку или GIF.");
-  const ext = (f.name.split(".").pop() || "").toLowerCase();
-  // сначала createImageBitmap (справляется и с очень большими снимками), затем <img> (понимает, например, SVG)
-  let w = 0, h = 0;
+  // 1) формат, размеры и кадры — из заголовков, ещё до декодирования (imgguard.js)
+  let g;
+  try { g = imageGuard(new Uint8Array(await f.arrayBuffer())); }
+  catch (e) { throw new Error(`«${f.name}»: ${e.message}`); }
+  // тип берём из содержимого файла, а не из расширения
+  if (f.type !== g.type) f = new File([f], f.name, { type: g.type });
+  // 2) пробное декодирование: битый файл с правильным заголовком отсеется здесь
+  let w = g.w, h = g.h;
   try { const bm = await createImageBitmap(f); w = bm.width; h = bm.height; bm.close(); }
-  catch {
-    const url = URL.createObjectURL(f);
-    try { const img = new Image(); img.src = url; await img.decode(); w = img.naturalWidth; h = img.naturalHeight; }
-    catch { throw new Error(`Не получилось открыть «${f.name}»: формат ${ext ? "." + ext : f.type || "файла"} не поддерживается. Подойдут JPG, PNG, WebP, GIF, AVIF, BMP.`); }
-    finally { URL.revokeObjectURL(url); }
-  }
-  const flat = ["image/jpeg", "image/png", "image/bmp"].includes(f.type);      // gif/webp могут быть анимированными — их не трогаем
+  catch { throw new Error(`Не получилось открыть «${f.name}»: файл повреждён.`); }
+  const flat = g.frames === 1 && ["image/jpeg", "image/png", "image/bmp"].includes(g.type);      // анимации не трогаем
   if (flat && Math.max(w, h) > BG_MAX_SIDE) {
     const k = BG_MAX_SIDE / Math.max(w, h), cw = Math.round(w * k), ch = Math.round(h * k);
     try {
@@ -225,15 +308,16 @@ async function prepareBg(f) {
 async function loadBg(f) {
   if (!f) { bgNote("Не получилось получить файл. Выбери его кнопкой или перетащи сам файл (не ссылку и не текст)."); return false; }
   if (f.size > BG_MAX_BYTES) { bgNote(`Файл «${f.name}» весит ${Math.round(f.size / 1048576)} МБ — это больше лимита в ${BG_MAX_BYTES / 1048576} МБ. Выбери файл поменьше.`); return false; }
+  const st = cfg.style;              // фон достаётся тому стилю, который был открыт в момент выбора файла
   bgNote("Загружаю…");
   let prep;
   try { prep = await prepareBg(f); }
   catch (e) { bgNote(e.message || "Не удалось прочитать файл."); return false; }
-  setBgBlob(prep.blob);
-  cfg.bg = "idb";
+  setBgBlob(prep.blob, st);
+  cfg.s[st].bg = "idb";
   applyCfg();
   let kept = true;
-  try { await IDB.set("bg", prep.blob); }
+  try { await IDB.set(bgKey(st), prep.blob); }
   catch (e) {
     kept = false;
     bgNote(e?.name === "QuotaExceededError" ? "Фон применён, но на диске не хватает места, чтобы сохранить его: после перезапуска он пропадёт." : "Фон применён, но сохранить его не удалось: после перезапуска он пропадёт.");
@@ -241,22 +325,30 @@ async function loadBg(f) {
   if (saveCfg() && kept) bgNote(prep.info);
   return true;
 }
-async function clearBg() {
-  setBgBlob(null); cfg.bg = "";
-  try { await IDB.del("bg"); } catch {}
+async function clearBg(st = cfg.style) {
+  setBgBlob(null, st); cfg.s[st].bg = "";
+  try { await IDB.del(bgKey(st)); } catch {}
 }
 // при старте: достаём файл из IndexedDB; фон из старой версии (data-URL в localStorage) переносим туда же
+// общий фон из прежних версий достаётся стилю, который был выбран
 async function initBg() {
   try {
-    if (cfg.bg && cfg.bg !== "idb") {
-      const blob = dataUrlToBlob(cfg.bg);
-      await IDB.set("bg", blob); cfg.bg = "idb";
+    if (cfg.bg) {
+      const blob = cfg.bg === "idb" ? await IDB.get("bg") : dataUrlToBlob(cfg.bg);
+      if (blob) { await IDB.set(bgKey(cfg.style), blob); cfg.s[cfg.style].bg = "idb"; }
+      await IDB.del("bg");
     }
-    if (cfg.bg === "idb") {
-      const blob = await IDB.get("bg");
-      if (blob) setBgBlob(blob); else cfg.bg = "";
-    }
-  } catch { cfg.bg = ""; }
+  } catch {}
+  cfg.bg = "";
+  for (const st of Object.keys(bgUrls)) {
+    if (cfg.s[st].bg !== "idb") continue;
+    let blob = null;
+    try { blob = await IDB.get(bgKey(st)); } catch {}
+    if (!blob) { cfg.s[st].bg = ""; continue; }
+    // фоны, сохранённые старыми версиями без проверки, проверяем перед показом; негодные удаляем
+    try { imageGuard(new Uint8Array(await blob.arrayBuffer())); setBgBlob(blob, st); }
+    catch (e) { console.warn(`Фон стиля ${st} отклонён:`, e?.message); cfg.s[st].bg = ""; try { await IDB.del(bgKey(st)); } catch {} }
+  }
   if (saveCfg()) localStorage.removeItem("ym_cfg2");          // прежние настройки (с тяжёлой картинкой внутри) больше не нужны
   applyCfg();
 }
@@ -266,8 +358,9 @@ drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); loadBg(e.dataTransfer.files[0]); };
 $("#bgReset").onclick = async () => { await clearBg(); applyCfg(); saveCfg(); };
-$("#cfgReset").onclick = async () => { const keep = cfg.style; await clearBg(); cfg = freshCfg(); cfg.style = keep; applyCfg(); saveCfg(); syncControls(); };
+$("#cfgReset").onclick = async () => { const keep = cfg.style; for (const st of Object.keys(bgUrls)) await clearBg(st); cfg = freshCfg(); cfg.style = keep; applyCfg(); saveCfg(); syncControls(); };
 $("#cViz").onchange = (e) => { cfg.viz = e.target.checked; applyViz(); saveCfg(); };
+$("#cAnim").onchange = (e) => { cfg.anim = e.target.checked; applyCfg(); saveCfg(); };
 
 // ---------- подбор цветов под фон ----------
 function rgb2hsl(r, g, b) {
@@ -321,9 +414,9 @@ async function paletteFrom(src) {
 // подбирает цвета по текущему фону; возвращает { ok, mono } и пишет пояснение, если не вышло
 async function pickPalette() {
   const note = $("#setNote");
-  if (!bgUrl) { note.textContent = "Сначала загрузи фон: цвета подбираются по нему."; return { ok: false }; }
+  if (!curBg()) { note.textContent = "Сначала загрузи фон: цвета подбираются по нему."; return { ok: false }; }
   try {
-    const p = await paletteFrom(bgUrl);
+    const p = await paletteFrom(curBg());
     sty().accent = p.accent; sty().accent2 = p.accent2;
     $("#cAccent").value = p.accent; $("#cAccent2").value = p.accent2;
     applyCfg(); saveCfg();
@@ -378,8 +471,21 @@ async function tokenExists() {
 }
 async function migrateLegacyToken() {            // токен из старых версий лежал открытым текстом в localStorage — переносим и стираем
   const legacy = localStorage.getItem(LEGACY_TOKEN_KEY);
-  if (!legacy) return;
-  try { await invoke("token_store", { token: legacy }); localStorage.removeItem(LEGACY_TOKEN_KEY); } catch {}
+  if (!legacy) return "";
+  try {
+    await invoke("token_store", { token: legacy });
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    return "";
+  } catch (e) {
+    const m = String(e?.message || e);
+    console.error("Перенос старого токена не удался:", m);
+    // испорченный токен держать открытым текстом незачем — стираем; при сбое хранилища тоже стираем,
+    // чтобы секрет не оставался в localStorage: пользователь просто войдёт заново
+    try { localStorage.removeItem(LEGACY_TOKEN_KEY); } catch {}
+    return /неправильно/i.test(m)
+      ? "Сохранённый токен из старой версии повреждён и удалён — войди заново."
+      : "Не удалось перенести токен из старой версии в системное хранилище (" + m + "). Из соображений безопасности он удалён — войди заново.";
+  }
 }
 
 // ---------- вход ----------
@@ -543,7 +649,8 @@ $("#pinBtn").onclick = () => {
   savePins(); renderTabs(tabsActive); updatePinBtn();
 };
 
-function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null }) {
+function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null, artistWave = null }) {
+  artistWaveItem = artistWave; $("#artistWaveBtn").hidden = !artistWave;
   pinItem = pin; updatePinBtn();
   $("#title").textContent = title;
   const im = $("#headImg"); im.hidden = !img; if (img) im.src = img;
@@ -571,10 +678,13 @@ function resetView() {
   shown = []; $("#list").innerHTML = ""; $("#list").hidden = false;
   $("#more").hidden = true; $("#status").textContent = "";
   $("#chips").hidden = true; $("#lastAlbum").hidden = true; $("#similar").hidden = true;
-  $("#wavePage").hidden = true; $("#settingsPage").hidden = true;
+  $("#wavePage").hidden = true; $("#settingsPage").hidden = true; $("#statsPage").hidden = true;
   document.querySelector(".main").scrollTop = 0;
 }
-function setActive(id) { document.querySelectorAll(".side .nav").forEach((b) => b.classList.toggle("active", b.id === id)); }
+function setActive(id) {
+  document.querySelectorAll(".side .nav").forEach((b) => b.classList.toggle("active", b.id === id));
+  document.querySelector(".main").dataset.page = id || "";      // для иконки-медальона у заголовка в стимпанке
+}
 const roman = (n) => {
   n = +n; if (!n || n < 1 || n > 3999) return "";
   let r = "";
@@ -596,6 +706,7 @@ function renderTabs(active) {
       x.onclick = (e) => { e.stopPropagation(); onClose(); };
       d.append(x);
     }
+    d.insertAdjacentHTML("beforeend", `<span class="lodeco lo-tabbow" aria-hidden="true">${LO.bow2}</span>`);   // бантик под активной закладкой (виден только в Lolitta), второго цвета
     d.onclick = fn; box.append(d);
   };
   mk("Лайки", "likes", () => goTop(showLikes), null, "♥");
@@ -606,11 +717,20 @@ function renderTabs(active) {
 }
 function syncIcons() {
   const playing = !audio.paused;
+  document.body.classList.toggle("is-playing", playing);      // для CSS-анимаций «играет»
   $("#play").innerHTML = playing ? ICON.pause : ICON.play;
   $("#fPlay").innerHTML = playing ? ICON.pause : ICON.play;
+  $("#qPlay").innerHTML = playing ? ICON.pause : ICON.play;
   $("#waveBtn").innerHTML = wave.on && playing ? ICON.pause : ICON.play;
   $("#waveBtn").classList.toggle("playing", wave.on && playing);
+  Promise.resolve(invoke("tray_playing", { playing })).catch(() => {});     // подпись пункта в меню трея
 }
+// кнопки из меню значка в трее
+window.__TAURI__.event?.listen("tray-ctl", (e) => {
+  if (e.payload === "prev") $("#prev").click();
+  else if (e.payload === "next") $("#next").click();
+  else if (e.payload === "toggle") togglePlay();
+});
 
 // ---------- навигация ----------
 function navigate(fn) { if (view) hist.push(view); view = fn; fn(); }   // переход «вглубь»
@@ -618,6 +738,7 @@ function goTop(fn) { hist.length = 0; view = fn; fn(); }                   // р
 $("#likes").onclick = () => goTop(showLikes);
 $("#wave").onclick = () => goTop(showWave);
 $("#settingsBtn").onclick = () => goTop(showSettings);
+$("#statsBtn").onclick = () => goTop(showStats);
 $("#back").onclick = () => { const p = hist.pop(); if (p) { view = p; p(); } else goTop(showLikes); };
 
 // ---------- лайки ----------
@@ -648,6 +769,220 @@ async function showLikes() {
     }
     likes.tracks = acc; likes.done = true;
   } catch (e) { if (my === nav) $("#status").textContent = "Ошибка: " + e.message; }
+}
+
+
+// ---------- статистика ----------
+// Считается по твоим ЛАЙКАМ. У API Яндекс Музыки нет методов, которые отдают общее время прослушивания,
+// число прослушиваний трека/артиста и рейтинги «по прослушиваниям» — поэтому таких показателей здесь нет.
+async function loadAllLikes(onProgress, stale) {
+  if (likes.done) return likes.tracks;
+  const lib = await api(`/users/${uid}/likes/tracks`);
+  likedIds = new Set(lib.library.tracks.map((t) => String(t.id)));
+  const ids = lib.library.tracks.map((t) => `${t.id}:${t.albumId}`);
+  const acc = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const tracks = await api("/tracks", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "track-ids=" + encodeURIComponent(ids.slice(i, i + 100).join(",")),
+    });
+    if (stale()) return null;
+    acc.push(...tracks);
+    onProgress(acc.length, ids.length);
+  }
+  likes.tracks = acc; likes.done = true;
+  return acc;
+}
+const artistImg = (a) => (a?.cover?.uri ? cover({ coverUri: a.cover.uri }, "200x200") : "");
+function computeStats(tracks) {
+  const artists = new Map(), albums = new Map(), genres = new Map(), primary = new Map();
+  let ms = 0, withDur = 0;
+  for (const t of tracks) {
+    if (!t) continue;
+    const dur = Number.isFinite(t.durationMs) ? t.durationMs : 0;
+    if (dur) { ms += dur; withDur++; }
+    const arts = (t.artists || []).filter((a) => a && a.id != null && a.name);
+    for (const a of arts) {
+      const k = String(a.id), e = artists.get(k) || { id: a.id, name: a.name, count: 0, ms: 0, img: "" };
+      e.count++; e.ms += dur;
+      if (!e.img) e.img = artistImg(a) || cover(t, "200x200");        // фото артиста, а если его нет — обложка его трека
+      artists.set(k, e);
+    }
+    if (arts[0]) { const k = String(arts[0].id), p = primary.get(k) || { id: arts[0].id, name: arts[0].name, count: 0, img: "" }; p.count++; primary.set(k, p); }
+    const al = t.albums?.[0];
+    if (al && al.id != null && al.title) {
+      const k = String(al.id), e = albums.get(k) || { id: al.id, title: al.title, artist: al.artists?.[0]?.name || arts[0]?.name || "", artistId: al.artists?.[0]?.id ?? arts[0]?.id ?? null, count: 0, img: cover(al.coverUri ? al : t, "200x200") };
+      e.count++; albums.set(k, e);
+      if (typeof al.genre === "string" && al.genre) genres.set(al.genre, (genres.get(al.genre) || 0) + 1);
+    }
+  }
+  const byCount = (a, b) => b.count - a.count || (b.ms || 0) - (a.ms || 0);
+  for (const [k, p] of primary) p.img = artists.get(k)?.img || "";
+  const primaryList = [...primary.values()].sort(byCount);
+  return {
+    total: tracks.length, ms, withDur,
+    artists: [...artists.values()].filter((e) => e.count >= 2).sort(byCount).slice(0, 5),        // «любимыми» считаем тех, у кого от 2 понравившихся
+    albums: [...albums.values()].filter((e) => e.count >= 2).sort(byCount).slice(0, 4),
+    topGenre: [...genres.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null,
+    primary: primaryList, primaryTotal: primaryList.reduce((s, p) => s + p.count, 0),
+  };
+}
+async function genreTitle(slug) {
+  try {
+    await loadStations();
+    const hit = [...(stations.groups.genre || []), ...(stations.groups.subgenre || [])].find((x) => x.seed === "genre:" + slug);
+    if (hit) return hit.name;
+  } catch {}
+  return slug.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase());
+}
+const fmtHM = (ms) => { const m = Math.round(ms / 60000), h = Math.floor(m / 60); return h ? `${h} ч ${m % 60} мин` : `${m} мин`; };
+const fmtInt = (n) => n.toLocaleString("ru-RU");
+const plRu = (n, one, few, many) => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many; };
+function fmtHours(ms) {          // «6,5 часа», «3 часа», «45 мин»
+  const h = ms / 3600000;
+  if (h < 1) return `${Math.max(1, Math.round(ms / 60000))} мин`;
+  const r = Math.round(h * 10) / 10;
+  return Number.isInteger(r) ? `${r} ${plRu(r, "час", "часа", "часов")}` : `${String(r).replace(".", ",")} часа`;
+}
+const ICONS = {
+  heart: '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  star: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 3.2l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.5l6-.8z"/></svg>',
+  crown: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 11H5z"/></svg>',
+};
+function statCard(icon, label, value) {
+  const d = document.createElement("div"); d.className = "card statcard";
+  d.innerHTML = icon + '<div><small></small><b></b></div>';
+  d.querySelector("small").textContent = label; d.querySelector("b").textContent = value;
+  return d;
+}
+function donutColors() {        // цвета долей — из цветов темы
+  return [
+    "var(--accent)", "var(--accent2)",
+    "color-mix(in srgb, var(--accent) 50%, var(--accent2))",
+    "color-mix(in srgb, var(--accent) 55%, #fff)",
+    "color-mix(in srgb, var(--accent2) 55%, #000)",
+  ];
+}
+async function playAlbumById(al) {
+  try {
+    const a = await api(`/albums/${al.id}/with-tracks`);
+    const tracks = (a.volumes || []).flat();
+    tracks.forEach((t) => { if (!t.coverUri) t.coverUri = a.coverUri; });
+    if (!tracks.length) return;
+    wave.on = false; queue = tracks; playCtx = "album"; playAlbum = { id: a.id, title: a.title }; play(0);
+  } catch (e) { $("#stNote").textContent = "Не удалось включить альбом: " + e.message; }
+}
+async function showStats() {
+  const my = ++nav;
+  setHead({ title: "Статистика" }); setActive("statsBtn"); renderTabs(false); resetView();
+  $("#list").hidden = true; $("#statsPage").hidden = false; $("#statsBody").hidden = true;
+  const note = $("#stNote");
+  note.textContent = "Загружаю понравившиеся треки…";
+  let tracks;
+  try { tracks = await loadAllLikes((n, total) => { note.textContent = `Загружаю понравившиеся: ${n} из ${total}…`; }, () => my !== nav); }
+  catch (e) { if (my === nav) note.textContent = "Ошибка: " + e.message; return; }
+  if (!tracks || my !== nav) return;
+  if (!tracks.length) { note.textContent = "Пока нет понравившихся треков — статистика считается по ним."; return; }
+
+  const s = computeStats(tracks);
+  const genre = s.topGenre ? await genreTitle(s.topGenre) : null;
+  if (my !== nav) return;
+
+  const cards = $("#statCards"); cards.innerHTML = "";
+  cards.append(statCard(ICONS.heart, "Понравившихся треков", fmtInt(s.total)));
+  if (s.withDur) cards.append(statCard(ICONS.clock, "Длительность понравившихся", fmtHM(s.ms)));
+  if (genre) cards.append(statCard(ICONS.star, "Любимый жанр", genre));
+
+  const people = $("#stArtists"); people.innerHTML = "";
+  s.artists.forEach((a, i) => {
+    const d = document.createElement("div"); d.className = "stperson";
+    d.append(mkImg(a.img));
+    d.insertAdjacentHTML("beforeend", '<div class="rank"><span></span></div><b class="nm"></b><span class="hrs"></span><span class="cnt"></span>');
+    d.querySelector(".rank span").textContent = String(i + 1);
+    if (i === 0) d.querySelector(".rank").insertAdjacentHTML("beforeend", ICONS.crown);        // корона у первого места
+    d.querySelector(".nm").textContent = a.name; d.querySelector(".nm").title = a.name;
+    d.querySelector(".hrs").textContent = fmtHours(a.ms);
+    d.querySelector(".cnt").textContent = `${fmtInt(a.count)} ${plRu(a.count, "понравившийся трек", "понравившихся трека", "понравившихся треков")}`;
+    d.onclick = () => navigate(() => showArtist(a.id));
+    people.append(d);
+  });
+  $("#boxArtists").hidden = !s.artists.length;
+
+  const grid = $("#stAlbums"); grid.innerHTML = "";
+  for (const al of s.albums) {
+    const d = document.createElement("div"); d.className = "stalbum";
+    const pic = document.createElement("button"); pic.className = "stpic"; pic.title = "Играть альбом"; pic.setAttribute("aria-label", "Играть альбом");
+    pic.append(mkImg(al.img));
+    pic.insertAdjacentHTML("beforeend", '<span class="stplay"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></span>');
+    pic.onclick = () => playAlbumById(al);
+    const ttl = document.createElement("button"); ttl.className = "stlink ttl"; ttl.textContent = al.title; ttl.title = al.title;
+    ttl.onclick = () => navigate(() => showAlbum(al.id));
+    const sub = document.createElement("div"); sub.className = "stsub";
+    if (al.artist) {
+      const ab = document.createElement("button"); ab.className = "stlink art"; ab.textContent = al.artist; ab.title = al.artist;
+      if (al.artistId != null) ab.onclick = () => navigate(() => showArtist(al.artistId)); else ab.disabled = true;
+      sub.append(ab);
+    }
+    const cn = document.createElement("span"); cn.className = "cn"; cn.textContent = `${fmtInt(al.count)} понравившихся`; sub.append(cn);
+    d.append(pic, ttl, sub);
+    grid.append(d);
+  }
+  $("#boxAlbums").hidden = !s.albums.length;
+
+  // доли: 4 самых частых артиста (по первому исполнителю трека) и «Другие»
+  const svg = $("#stDonut"), legend = $("#stLegend"); svg.innerHTML = ""; legend.innerHTML = "";
+  if (s.primary.length >= 2) {
+    const top = s.primary.slice(0, 4), rest = s.primaryTotal - top.reduce((x, p) => x + p.count, 0), colors = donutColors();
+    const parts = top.map((p, i) => ({ id: p.id, name: p.name, count: p.count, img: p.img, color: colors[i] }));
+    if (rest > 0) parts.push({ name: "Другие", count: rest, color: "rgba(255,255,255,.28)", other: true });
+    const R = 40, C = 2 * Math.PI * R;
+    const box = $("#boxShare"); box.querySelector(".stcardhover")?.remove();
+    const tip = document.createElement("div"); tip.className = "stcardhover"; tip.hidden = true; box.append(tip);
+    const rings = [], rows = [];
+    const focus = (i) => {
+      rings.forEach((r, k) => { r.classList.toggle("hot", k === i); r.classList.toggle("dim", k !== i); });
+      rows.forEach((r, k) => r.classList.toggle("hot", k === i));
+      const p = parts[i];
+      if (p.other) { tip.hidden = true; return; }
+      tip.replaceChildren();
+      if (p.img) tip.append(mkImg(p.img));
+      const b = document.createElement("b"); b.textContent = p.name;
+      const sm = document.createElement("small"); sm.textContent = `${fmtInt(p.count)} ${plRu(p.count, "понравившийся трек", "понравившихся трека", "понравившихся треков")}`;
+      tip.append(b, sm); tip.hidden = false;
+    };
+    const blur = () => { rings.forEach((r) => r.classList.remove("hot", "dim")); rows.forEach((r) => r.classList.remove("hot")); tip.hidden = true; };
+    const move = (e) => {
+      if (tip.hidden) return;
+      const br = box.getBoundingClientRect();
+      let x = e.clientX - br.left + 16, y = e.clientY - br.top + 16;
+      x = Math.max(8, Math.min(x, br.width - tip.offsetWidth - 8)); y = Math.max(8, Math.min(y, br.height - tip.offsetHeight - 8));
+      tip.style.left = x + "px"; tip.style.top = y + "px";
+    };
+    let start = 0, pctLeft = 100;
+    parts.forEach((p, i) => {
+      const frac = p.count / s.primaryTotal, len = Math.max(0, frac * C - 1.2);
+      const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      ring.setAttribute("cx", 50); ring.setAttribute("cy", 50); ring.setAttribute("r", R);
+      ring.setAttribute("stroke-dasharray", `${len} ${C - len}`); ring.setAttribute("stroke-dashoffset", -start * C);
+      ring.style.stroke = p.color;
+      svg.append(ring); rings.push(ring); start += frac;
+      const pct = i === parts.length - 1 ? pctLeft : Math.round(frac * 100); pctLeft -= pct;
+      const li = document.createElement("li");
+      li.innerHTML = '<i class="dot"></i><span class="nm"></span><span class="pct"></span>';
+      li.querySelector(".dot").style.background = p.color;
+      li.querySelector(".nm").textContent = p.name; li.querySelector(".pct").textContent = pct + "%";
+      legend.append(li); rows.push(li);
+      for (const el of [ring, li]) { el.addEventListener("mouseenter", () => focus(i)); el.addEventListener("mouseleave", blur); el.addEventListener("mousemove", move); }
+      if (!p.other && p.id != null) { ring.style.cursor = li.style.cursor = "pointer"; const go = () => navigate(() => showArtist(p.id)); ring.addEventListener("click", go); li.addEventListener("click", go); }
+    });
+    $("#stDonutNum").textContent = fmtInt(s.primaryTotal); $("#stDonutCap").textContent = "треков";
+  }
+  $("#boxShare").hidden = s.primary.length < 2;
+
+  note.textContent = "";
+  $("#statsBody").hidden = false;
 }
 
 // ---------- Моя волна ----------
@@ -767,21 +1102,50 @@ $("#waveBtn").onclick = async () => {
 };
 
 // ---------- жанры и настроения ----------
-const GROUPS = [["genre", "Жанры"], ["mood", "Настроения"], ["epoch", "Эпохи"], ["activity", "Занятия"]];
+// Яндекс перестал отдавать список станций (/rotor/stations/list возвращает пустой массив), поэтому:
+// жанры берём из /genres, а настроение, характер и язык — из настроек Моей волны (/rotor/wave/settings),
+// как в официальном приложении. Сиды вида genre:rock и settingMoodEnergy:fun Моя волна принимает.
+const GROUPS = [["genre", "Жанры"], ["subgenre", "Поджанры"], ["mood", "Настроение"], ["character", "Характер"], ["language", "Язык"]];
 const stations = { loaded: false, groups: {}, tab: "genre" };
+// разделы /genres, которые не музыка (книги, подкасты, сказки) или для которых Моя волна не подбирает треки
+const GENRE_SKIP = new Set(["all", "other", "holiday", "fairytales", "poemsforchildren", "podcasts", "audiobooks", "fiction",
+  "nonfictionliterature", "booksnotinrussian", "arabicpoetry", "islamicgenre"]);
+const WAVE_SETTINGS = [["moodEnergy", "mood"], ["diversity", "character"], ["language", "language"]];
 
-async function loadStations() {
-  if (stations.loaded) return;
-  const r = await api("/rotor/stations/list?language=ru");
-  for (const it of r) {
-    const st = it.station; if (!st || !st.name) continue;
-    const type = st.id?.type ?? String(st.id).split(":")[0];
-    const tag = st.id?.tag ?? String(st.id).split(":")[1];
-    if (!type || !tag) continue;
-    (stations.groups[type] ||= []).push({ seed: `${type}:${tag}`, name: st.name });
+async function loadStations(force = false) {
+  if (stations.loaded && !force) return;
+  const [gr, ws] = await Promise.allSettled([api("/genres"), api("/rotor/wave/settings?language=ru")]);
+  const groups = {}; let seen = 0;
+  const add = (type, seed, name) => { if (!name) return; (groups[type] ||= []).push({ seed, name: String(name) }); seen++; };
+  const title = (g) => g?.titles?.ru?.title || g?.title;
+  for (const g of gr.status === "fulfilled" && Array.isArray(gr.value) ? gr.value : []) {
+    if (!g?.id || GENRE_SKIP.has(g.id) || g.showInMenu === false) continue;
+    add("genre", `genre:${g.id}`, title(g));
+    for (const s of Array.isArray(g.subGenres) ? g.subGenres : []) {
+      if (s?.id && !GENRE_SKIP.has(s.id) && s.showInMenu !== false) add("subgenre", `genre:${s.id}`, title(s));
+    }
   }
-  stations.loaded = true;
-  if (!stations.groups[stations.tab]) stations.tab = GROUPS.map((g) => g[0]).find((t) => stations.groups[t]) || stations.tab;
+  const rest = ws.status === "fulfilled" ? ws.value?.settingRestrictions || {} : {};
+  for (const [key, type] of WAVE_SETTINGS) {
+    for (const v of rest[key]?.possibleValues || []) {
+      if (!v?.unspecified && v?.serializedSeed) add(type, String(v.serializedSeed), v.name);
+    }
+  }
+  if (!seen) throw (gr.reason || ws.reason || new Error("сервер вернул пустой список"));
+  stations.groups = groups; stations.loaded = true;
+  if (!groups[stations.tab]) stations.tab = GROUPS.map((g) => g[0]).find((t) => groups[t]) || Object.keys(groups)[0];
+}
+function stationsMessage(text, retry) {
+  $("#stChips").innerHTML = "";
+  const g = $("#stGrid"); g.innerHTML = "";
+  const p = document.createElement("p"); p.className = "stmsg"; p.textContent = text; g.append(p);
+  if (retry) { const b = document.createElement("button"); b.className = "pill"; b.textContent = "Повторить"; b.onclick = retry; g.append(b); }
+}
+async function openStationsList() {
+  stationsMessage("Загружаю список…");
+  try { await loadStations(true); renderStations(); }
+  catch (e) { stationsMessage("Не удалось загрузить список: " + e.message, openStationsList); }
+  fitStations();
 }
 function renderStations() {
   const chips = $("#stChips"); chips.innerHTML = "";
@@ -789,7 +1153,9 @@ function renderStations() {
     const b = document.createElement("button");
     b.className = "chip" + (active ? " active" : ""); b.textContent = label; b.onclick = fn; return b;
   };
-  for (const [type, label] of GROUPS) {
+  const known = new Set(GROUPS.map((g) => g[0]));
+  const all = [...GROUPS, ...Object.keys(stations.groups).filter((t) => !known.has(t)).map((t) => [t, t])];
+  for (const [type, label] of all) {
     if (stations.groups[type]) chips.append(mk(label, stations.tab === type, () => { stations.tab = type; renderStations(); }));
   }
   const grid = $("#stGrid"); grid.innerHTML = "";
@@ -824,7 +1190,7 @@ function fitStations() {
   if (box.hidden) return;
   const bottom = document.querySelector(".main").getBoundingClientRect().bottom;
   const room = bottom - box.getBoundingClientRect().top - 8;
-  box.style.maxHeight = Math.max(150, Math.min(room, window.innerHeight * 0.5)) + "px";
+  box.style.maxHeight = Math.max(240, Math.min(room, window.innerHeight * 0.5)) + "px";
 }
 window.addEventListener("resize", fitStations);
 
@@ -840,6 +1206,11 @@ document.addEventListener("click", (e) => {                 // клик мимо
   const path = e.composedPath();
   if (!$("#stations").hidden && !path.includes($("#stations")) && !path.includes($("#stBtn"))) setStations(false);
 });
+$("#artistWaveBtn").onclick = () => {
+  const it = artistWaveItem; if (!it) return;
+  showWave();
+  pickStation("artist:" + it.id, it.name);
+};
 $("#stReset").onclick = () => pickStation(DEFAULT_SEED, "");
 
 // альбом доиграл — продолжаем «Моей волной» по этому альбому (как в Яндекс Музыке). Такая волна не запоминается между запусками.
@@ -857,8 +1228,7 @@ $("#stBtn").onclick = async () => {
   const open = $("#stations").hidden;
   setStations(open);
   if (!open) return;
-  try { await loadStations(); renderStations(); }
-  catch (e) { $("#stGrid").textContent = "Не удалось загрузить список: " + e.message; }
+  if (stations.loaded) { renderStations(); fitStations(); } else await openStationsList();
 };
 
 // ---------- настройки ----------
@@ -905,7 +1275,13 @@ async function showArtist(id, tab = "tracks") {
     if (my !== nav) return;
     const c = info?.artist?.cover?.uri;
     const name = info?.artist?.name || "Артист";
-    setHead({ title: name, img: c ? cover({ coverUri: c }, "200x200") : "", back: true, pin: info?.artist?.name ? { type: "artist", id, title: name } : null });
+    const listeners = Number(info?.stats?.lastMonthListeners);
+    setHead({
+      title: name, img: c ? cover({ coverUri: c }, "200x200") : "", back: true,
+      pin: info?.artist?.name ? { type: "artist", id, title: name } : null,
+      artistWave: info?.artist?.name ? { id, name } : null,
+      sub: Number.isFinite(listeners) && listeners > 0 ? (el) => { el.textContent = `${fmtInt(listeners)} ${plRu(listeners, "слушатель", "слушателя", "слушателей")} за месяц`; } : null,
+    });
     if (tab === "albums") {
       renderAlbums(albums);
       $("#status").textContent = albums.length ? "" : "Альбомов нет";
@@ -1143,11 +1519,12 @@ function setFullMode(m) {
 function fitFull() {
   const f = $("#full"), cv = $("#fCover");
   if (f.hidden) return;
-  if (f.dataset.mode !== "cover") { cv.style.width = cv.style.height = ""; return; }
+  if (f.dataset.mode !== "cover") { cv.style.width = cv.style.height = ""; requestAnimationFrame(placeQuick); return; }
   const box = $("#fHead");
   const avail = box.clientHeight - $("#fTitles").offsetHeight - 22;
   const size = Math.max(120, Math.min(box.clientWidth, avail, 760));
   cv.style.width = cv.style.height = size + "px";
+  requestAnimationFrame(placeQuick);
 }
 window.addEventListener("resize", fitFull);
 
@@ -1198,7 +1575,7 @@ function openFull() {
   fillFull(t);
   if (!fullRun) { fullRun = true; requestAnimationFrame(fullFrame); }
 }
-function closeFull() { $("#full").hidden = true; fullRun = false; fullSeq++; }
+function closeFull() { $("#full").hidden = true; $("#full").classList.remove("qc"); fullRun = false; fullSeq++; }
 
 function fullFrame() {
   if (!fullRun) return;
@@ -1219,7 +1596,7 @@ function fullFrame() {
   if (idx >= 0) {
     const el = fLines[idx].el, box = $("#fLyrics");
     el.classList.add("on");
-    box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2, behavior: "smooth" });
+    box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2, behavior: cfg.anim === false ? "auto" : "smooth" });
   }
 }
 
@@ -1227,6 +1604,18 @@ $("#cover").onclick = openFull;
 $("#cover").title = "Развернуть на весь экран";
 $("#fClose").onclick = closeFull;
 $("#fPlay").onclick = togglePlay;
+// клик по обложке в оверлее: плавающие кнопки пауза / следующий / предыдущий
+function placeQuick() {
+  const r = $("#fCover").getBoundingClientRect(), h = $("#fHead").getBoundingClientRect(), q = $("#fQuick");
+  q.style.left = (r.left - h.left + r.width / 2) + "px";
+  q.style.top = (r.top - h.top + r.height / 2) + "px";
+}
+$("#fHead").style.position = "relative";
+$("#fCover").onclick = () => { $("#full").classList.toggle("qc"); placeQuick(); };
+$("#qPlay").onclick = togglePlay;
+$("#qNext").onclick = () => $("#next").click();
+$("#qPrev").onclick = () => $("#prev").click();
+window.addEventListener("resize", placeQuick);
 $("#fNext").onclick = () => $("#next").click();
 $("#fPrev").onclick = () => $("#prev").click();
 $("#fLike").onclick = () => toggleLike(queue[current]);
@@ -1423,7 +1812,8 @@ function vizFrame(ts) {
 
   const t = ts / 1000, cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2, N = 120, RINGS = 5;
   const br = ($("#waveBtn").offsetWidth || 112) / 2;
-  const inner = Math.min(br + 14, R * 0.5), outer = Math.max(inner + 20, R * 0.76);
+  // в стимпанке вокруг кнопки шкала с рисками, в Lolitta — жемчужное кольцо: круги начинаем за ними
+  const inner = Math.min(br + (cfg.style === "steam" || cfg.style === "lolitta" ? 28 : 14), R * 0.5), outer = Math.max(inner + 20, R * 0.76);
   const grad = g.createLinearGradient(0, 0, w, h);
   grad.addColorStop(0, sty().accent); grad.addColorStop(1, sty().accent2);
   const glow = g.createRadialGradient(cx, cy, 0, cx, cy, R * 0.9);
@@ -1513,15 +1903,84 @@ let resizeTimer;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(syncMax, 120); });
 syncMax();
 
+// ---------- стиль Lolitta: декор (банты, розы, жемчуг, камея, медальон) ----------
+// Рисуется один раз; цвета берутся из переменных темы, поэтому декор перекрашивается вместе с «Основным» и «Вторым» цветом.
+// В остальных стилях блоки .lodeco скрыты.
+const LO = (() => {
+  const P = (cx, cy, r) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r}" fill="url(#loP)"/>`;
+  const bow = `<svg viewBox="0 0 100 86"><g fill="url(#loG)" stroke="var(--l-lo)" stroke-width="1" stroke-linejoin="round">
+    <path d="M47 43C44 56 36 68 24 82L33.5 79L38 86C45 71 50 57 52.5 44Z"/><path d="M53 43C56 56 64 68 76 82L66.5 79L62 86C55 71 50 57 47.5 44Z"/>
+    <path d="M50 37C42 22 22 6 8 12C-2 18 3 38 18 45C29 49 41 45 50 41Z"/><path d="M50 37C58 22 78 6 92 12C102 18 97 38 82 45C71 49 59 45 50 41Z"/></g>
+    <g fill="var(--l-lo)" opacity=".5"><path d="M50 39C38 30 22 23 13 26C20 34 35 41 50 41Z"/><path d="M50 39C62 30 78 23 87 26C80 34 65 41 50 41Z"/><path d="M48 46C46 58 40 68 32 78L36 77C42 68 47 58 49.5 47Z"/><path d="M52 46C54 58 60 68 68 78L64 77C58 68 53 58 50.5 47Z"/></g>
+    <g fill="none" stroke="var(--l-hi)" stroke-width="1.7" stroke-linecap="round" opacity=".95"><path d="M43 29C34 19 20 11 11 16"/><path d="M57 29C66 19 80 11 89 16"/></g>
+    <rect x="42.5" y="31" width="15" height="15.5" rx="5" fill="url(#loG)" stroke="var(--l-lo)"/>
+    <path d="M46 35Q50 33 54 35" fill="none" stroke="var(--l-hi)" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  const rose = `<svg viewBox="0 0 60 60"><g fill="var(--l-lo)" stroke="var(--l-deep)" stroke-width=".5" stroke-opacity=".5"><path d="M30 31C40 33 51 40 58 53C45 52 35 45 30 31Z"/><path d="M30 31C20 35 10 43 3 56C16 53 26 45 30 31Z"/></g>
+    <g fill="none" stroke="var(--l-hi)" stroke-width=".8" opacity=".7"><path d="M34 35C42 40 49 45 54 51"/><path d="M26 36C18 41 12 47 7 53"/></g>
+    <circle cx="30" cy="29" r="18" fill="url(#loR)" stroke="var(--l-lo)" stroke-width=".9"/>
+    <g fill="none" stroke="var(--l-lo)" stroke-width="1.3" stroke-linecap="round"><path d="M13 31C12 19 23 11 33 12C25 15 19 21 19 29"/><path d="M47 27C48 39 38 47 27 46C35 43 41 37 41 29"/><path d="M24 44C17 42 13 36 13 31"/><path d="M36 13C42 15 47 20 47 27"/><path d="M23 29a7 7 0 1 1 7 7a5 5 0 1 1 -5 -5a3 3 0 1 1 3 3"/></g>
+    <g fill="none" stroke="var(--l-hi)" stroke-width="1.1" stroke-linecap="round" opacity=".85"><path d="M16 26C18 18 25 14 31 14"/><path d="M44 32C42 40 36 44 29 44"/></g></svg>`;
+  const corner = `<svg viewBox="0 0 64 64"><g fill="none" stroke="url(#loG)" stroke-width="1.9" stroke-linecap="round">
+    <path d="M5 60C5 28 28 5 60 5"/><path d="M5 45C5 29 12 17 22 12C29 9 34 14 31 18.5C29 21.5 24.5 20.5 24.5 17"/><path d="M45 5C29 5 17 12 12 22C9 29 14 34 18.5 31C21.5 29 20.5 24.5 17 24.5"/></g>
+    <path d="M23 23C30 20 37 25 35 33C28 35 22 30 23 23Z" fill="url(#loG)" stroke="var(--l-lo)" stroke-width=".7"/>
+    <path d="M25 25L32 31" stroke="var(--l-hi)" stroke-width=".8"/>${P(6, 6, 4.2)}${P(60, 5, 2.6)}${P(5, 60, 2.6)}${P(14, 14, 2)}</svg>`;
+  const gem = `<svg viewBox="0 0 22 14"><path d="M1 7L11 1L21 7L11 13Z" fill="url(#loG)" stroke="var(--l-lo)" stroke-width=".8"/><path d="M11 1L11 13M1 7H21" stroke="var(--l-hi)" stroke-width=".5" opacity=".8"/>${P(11, 7, 2.3)}</svg>`;
+  // камея: жемчужная оправа, розовая рамка, профиль дамы, бантик сверху и жемчужная капля снизу
+  let ring = "";
+  for (let i = 0; i < 32; i++) { const a = (i / 32) * Math.PI * 2; ring += P(45 + 40 * Math.cos(a), 56 + 44 * Math.sin(a), 3.4); }
+  const cameo = `<svg viewBox="0 0 90 106">${ring}
+    <ellipse cx="45" cy="56" rx="35.5" ry="39.5" fill="none" stroke="url(#loG)" stroke-width="4.5"/>
+    <ellipse cx="45" cy="56" rx="32" ry="36" fill="var(--l-lo)" stroke="var(--l-deep)" stroke-width="1" stroke-opacity=".4"/>
+    <ellipse cx="45" cy="56" rx="32" ry="36" fill="url(#loV)"/>
+    <clipPath id="loCamClip"><ellipse cx="45" cy="56" rx="32" ry="36"/></clipPath>
+    <g clip-path="url(#loCamClip)"><path transform="translate(23 21) scale(.82)" fill="var(--l-pearl)" opacity=".95" d="M14 76C16 68 18 62 18 56C12 54 8 48 9 40C4 36 2 28 6 22C9 14 18 10 26 12C32 6 42 8 44 16C48 20 49 26 47 30C47 33 48 35 51 38L48 40C49 42 48 43 47 44C48 45 48 47 46 48C46 51 44 53 41 53C38 54 36 54 35 55C35 60 37 66 41 70C44 73 45 76 46 78Z"/>
+    <path transform="translate(23 21) scale(.82)" d="M10 76C18 72 34 72 48 78" fill="none" stroke="var(--l-pearl)" stroke-width="2.4" stroke-dasharray="1 2.6" stroke-linecap="round"/></g>
+    <svg x="33" y="0" width="24" height="21" viewBox="0 0 100 86">${bow.replace(/^<svg[^>]*>|<\/svg>$/g, "")}</svg>
+    ${P(45, 102.5, 3.4)}</svg>`;
+  // медальон у заголовка страницы: зубчатая розовая оправа, тёмный бархат внутри, искра
+  let star = "";
+  for (let i = 0; i < 36; i++) { const a = (i / 36) * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 34 : 38.5; star += `${i ? "L" : "M"}${(40 + r * Math.cos(a)).toFixed(1)} ${(40 + r * Math.sin(a)).toFixed(1)}`; }
+  const medal = `<svg viewBox="0 0 80 80"><path d="${star}Z" fill="url(#loG)" stroke="var(--l-lo)" stroke-width=".8"/>
+    <circle cx="40" cy="40" r="30" fill="var(--l-deep)" stroke="var(--l-hi)" stroke-width="1.6"/>
+    <circle cx="40" cy="40" r="26.5" fill="url(#loM)"/><circle cx="40" cy="40" r="26.5" fill="none" stroke="var(--l-pearl)" stroke-width=".8" stroke-dasharray="1 2.2" opacity=".8"/>${P(40, 3.5, 2.6)}${P(40, 76.5, 2.6)}${P(3.5, 40, 2.6)}${P(76.5, 40, 2.6)}
+    <path d="M67 2L69 10L77 12L69 14L67 22L65 14L57 12L65 10Z" fill="#fff" opacity=".95"/><circle cx="67" cy="12" r="4" fill="#fff" opacity=".35"/></svg>`;
+  const defs = `<svg width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true"><defs>
+    <linearGradient id="loG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--l-hi)"/><stop offset=".55" style="stop-color:var(--l-mid)"/><stop offset="1" style="stop-color:var(--l-lo)"/></linearGradient>
+    <linearGradient id="loG2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--l2-hi)"/><stop offset=".55" style="stop-color:var(--l2-mid)"/><stop offset="1" style="stop-color:var(--l2-lo)"/></linearGradient>
+    <radialGradient id="loR" cx=".42" cy=".38" r=".7"><stop offset="0" style="stop-color:var(--l-hi)"/><stop offset=".55" style="stop-color:var(--l-mid)"/><stop offset="1" style="stop-color:var(--l-lo)"/></radialGradient>
+    <radialGradient id="loP" cx=".36" cy=".3" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".45" style="stop-color:var(--l-pearl)"/><stop offset="1" style="stop-color:var(--l-lo)"/></radialGradient>
+    <radialGradient id="loV" cx=".45" cy=".35" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="loM" cx=".5" cy=".3" r=".8"><stop offset="0" style="stop-color:var(--l-mid)"/><stop offset=".6" style="stop-color:var(--l-lo)"/><stop offset="1" style="stop-color:var(--l-btn)"/></radialGradient>
+  </defs></svg>`;
+  const bow2 = bow.replaceAll("url(#loG)", "url(#loG2)");      // бантик второго цвета — под активной закладкой
+  return { bow, bow2, rose, corner, gem, cameo, medal, defs };
+})();
+function loDecor() {
+  document.body.insertAdjacentHTML("afterbegin", LO.defs);
+  const box = (cls, html) => { const d = document.createElement("div"); d.className = "lodeco " + cls; d.setAttribute("aria-hidden", "true"); d.innerHTML = html; return d; };
+  const i = (cls, svg = "") => `<i class="${cls}">${svg}</i>`;
+  const corners = (list) => list.map((c) => i("lo-c " + c, LO.corner)).join("");
+  document.querySelector(".side").append(box("lo-side",
+    corners(["tl", "tr"]) + i("lo-pearls") + i("lo-rose rl", LO.rose) + i("lo-rose rr", LO.rose) + i("lo-bowb", LO.bow)));
+  document.querySelector(".side .spacer").append(box("lo-cameo", i("lo-cam", LO.cameo) + i("lo-bowl", LO.bow) + i("lo-bowr", LO.bow)));
+  document.querySelector(".player").append(box("lo-player",
+    corners(["tl", "tr", "bl", "br"]) + i("lo-pearls") + i("lo-rose rl", LO.rose) + i("lo-rose rr", LO.rose) + i("lo-rose rt", LO.rose) + i("lo-bowt", LO.bow)));
+  document.querySelector(".cols").append(box("lo-frame",
+    corners(["tl", "tr", "bl", "br"]) + ["t", "b", "l", "r"].map((s) => i("lo-gem " + s, LO.gem)).join("") + i("lo-bowtr", LO.bow)));
+  document.querySelector(".head").prepend(box("lo-medal", LO.medal + '<span class="lo-mi"></span>'));
+  $("#waveBtn").after(box("lo-hearts", "<i></i>".repeat(8)));      // сердечки, всплывающие над кнопкой, пока играет Моя волна
+}
+loDecor();
+
 // ---------- старт ----------
 audio = makeAudio(false);
 setVol(volume);
 updateModes(); setHeart($("#likeBtn"), false); setHeart($("#fLike"), false);
 syncIcons();
 (async () => {
-  await migrateLegacyToken();
+  const migMsg = await migrateLegacyToken();
   const has = await tokenExists();
   if (has === null) showLogin("Не найдены команды хранилища токена: обнови Rust-часть (auth.rs и net.rs).");
   else if (has && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); }
-  else showLogin();
+  else showLogin(migMsg);
 })();

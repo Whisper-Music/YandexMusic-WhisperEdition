@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-bytes"
+description = "Enables the fetch_bytes command without any pre-configured scope."
+commands.allow = ["fetch_bytes"]
+
+[[permission]]
+identifier = "deny-fetch-bytes"
+description = "Denies the fetch_bytes command without any pre-configured scope."
+commands.deny = ["fetch_bytes"]

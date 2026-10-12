@@ -65,7 +65,7 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 .search:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); }
 .nav { padding: 10px 14px; border-radius: 999px; text-align: left; background: rgba(255,255,255,.06); transition: background .15s; }
 .nav:hover:not(:disabled):not(.active) { background: rgba(255,255,255,.13); }
-.nav.active { color: #0b0618; font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 55%, transparent); }
+.nav.active { color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 55%, transparent); }
 .more { margin: 12px auto; display: block; }
 
 .list { list-style: none; margin: 0; padding: 0; }
@@ -102,7 +102,7 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 .volbox input { position: absolute; left: 50%; top: 50%; width: 110px; transform: translate(-50%, -50%) rotate(-90deg); }
 .player button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
 .player button:hover { background: rgba(255,255,255,.1); }
-.player .playbtn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0b0618; box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); }
+.player .playbtn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); }
 .player .playbtn:hover { background: linear-gradient(135deg, var(--accent), var(--accent2)); filter: brightness(1.12); }
 svg { display: block; }
 #seek { flex: 1; min-width: 0; }
@@ -125,7 +125,7 @@ input[type=range]::-webkit-slider-thumb {
 .wavepage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding-top: 0; min-height: 0; }
 .waveinfo { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; max-width: 100%; }
 .wavebtn {
-  position: relative; z-index: 1; width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; color: #0b0618;
+  position: relative; z-index: 1; width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none);
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   box-shadow: 0 0 calc(var(--glow) * 2) color-mix(in srgb, var(--accent) 65%, transparent);
   transition: transform .15s;
@@ -177,7 +177,7 @@ a { color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
 .chip { padding: 7px 18px; border-radius: 999px; background: rgba(255,255,255,.07); color: var(--muted); transition: background .15s; }
 .chip:hover { background: rgba(255,255,255,.13); }
-.chip.active { color: #0b0618; font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent); }
+.chip.active { color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent); }
 .cols { display: flex; gap: 28px; align-items: flex-start; }
 .cols .list { flex: 1; min-width: 0; }
 .lastAlbum { width: 220px; flex: none; position: sticky; top: 0; padding: 14px; border-radius: 18px; cursor: pointer; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); transition: box-shadow .15s; }
@@ -212,7 +212,7 @@ a { color: var(--accent); }
 .stgrid { flex: 1; min-height: 0; overflow-y: auto; align-content: flex-start; display: flex; flex-wrap: wrap; gap: 5px; scrollbar-width: thin; }
 .pill { padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,.07); font-size: 13px; transition: background .15s; }
 .pill:hover { background: rgba(255,255,255,.14); }
-.pill.active { color: #0b0618; font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.pill.active { color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 
 /* компактные окна */
 @media (max-width: 960px) {
@@ -320,7 +320,7 @@ a { color: var(--accent); }
 .fbtns button:hover { background: rgba(255,255,255,.1); }
 .fbtns .likebtn { margin: 0; opacity: 1; color: rgba(255,255,255,.7); }
 .fbtns .likebtn.on { color: var(--accent2); }
-.fbtns .playbtn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0b0618; box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); }
+.fbtns .playbtn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); }
 .fbtns .playbtn:hover { filter: brightness(1.12); }
 @media (max-width: 880px) { .fwrap { padding: 22px 22px 16px; } }
 
@@ -385,7 +385,7 @@ a { color: var(--accent); }
 .fwrap { padding-top: 52px; }
 
 /* ---------- выбор стиля в настройках ---------- */
-.stylepick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stylepick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .stylecard { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
 .stylecard:hover { background: rgba(255,255,255,.08); }
 .stylecard.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -458,8 +458,8 @@ a { color: var(--accent); }
 :root[data-style="royal"] .player { --fs: 68px; }
 :root[data-style="royal"] .panel::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent) 55%, color-mix(in srgb, var(--accent) 55%, #000));
-  opacity: .62;
+  background: var(--accent);      /* ровно основной цвет — как и у линий рамки */
+  opacity: .85;
   -webkit-mask-image: var(--f-tl), var(--f-tr), var(--f-bl), var(--f-br);
   mask-image: var(--f-tl), var(--f-tr), var(--f-bl), var(--f-br);
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
@@ -470,8 +470,8 @@ a { color: var(--accent); }
 /* верхняя панель: ровные знамёна на карнизе; основной цвет (--accent) задаёт ткань, второй (--accent2) — контур знамён */
 :root[data-style="royal"] { --notch: 24px; }
 :root[data-style="royal"] .tabs {
-  align-items: flex-start; gap: 12px; padding: 10px 24px 12px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent2) 55%, #000), color-mix(in srgb, var(--accent2) 70%, #fff) 45%, color-mix(in srgb, var(--accent2) 50%, #000)) top / 100% 5px no-repeat;
+  align-items: flex-start; gap: 12px; padding: 10px 0 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent) 45%, color-mix(in srgb, var(--accent) 60%, transparent)) top / 100% 5px no-repeat;   /* только основной цвет: чёрный даёт чёрную полосу, а не серую */
 }
 :root[data-style="royal"] .tab {
   position: relative; isolation: isolate; transform-origin: 50% 0; transition: transform .35s ease;
@@ -484,7 +484,7 @@ a { color: var(--accent); }
   content: ""; position: absolute; z-index: -1;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - var(--notch)), 0 100%);
 }
-:root[data-style="royal"] .tab::before { inset: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--accent2) 75%, #fff), var(--accent2) 45%, color-mix(in srgb, var(--accent2) 60%, #000)); }
+:root[data-style="royal"] .tab::before { inset: 0; background: var(--accent2); }
 :root[data-style="royal"] .tab::after { inset: 3px 3px 4px; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 50%, #1a0c0c), color-mix(in srgb, var(--accent) 22%, #0d0606)); }
 :root[data-style="royal"] .tab span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; margin-top: 2px; overflow: hidden; white-space: normal; word-break: break-word; line-height: 1.25; }
 :root[data-style="royal"] .tab small { display: none; }
@@ -492,3 +492,1012 @@ a { color: var(--accent); }
 :root[data-style="royal"] .tab:hover { transform: rotate(1.2deg); }
 :root[data-style="royal"] .tab.active { color: #fff; background: none; box-shadow: none; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 65%, transparent)) drop-shadow(0 5px 5px rgba(0,0,0,.5)); }
 :root[data-style="royal"] .tab.active::after { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 68%, #1a0c0c), color-mix(in srgb, var(--accent) 36%, #0d0606)); }
+
+/* ---------- неон: анимации и верхняя панель ---------- */
+/* верхняя панель: фон — тёмный оттенок основного цвета (всегда темнее него), обводка и надписи — дополнительный цвет */
+:root[data-style="neon"] { --tab-bg: color-mix(in srgb, var(--accent) 24%, #07040f); }
+:root[data-style="neon"] .tabs { padding: 14px 18px 16px 14px; margin: -12px -14px -10px; gap: 10px; }      /* запас под свечение и подъём вкладок */
+:root[data-style="neon"] .tab {
+  padding: 6px 15px; background: var(--tab-bg); color: var(--accent2); border: 1px solid var(--accent2);
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .25s, background .25s;
+}
+:root[data-style="neon"] .tab:hover {
+  transform: translateY(-2px); background: color-mix(in srgb, var(--accent) 34%, #07040f);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent2) 38%, transparent);
+}
+:root[data-style="neon"] .tab:active { transform: translateY(0) scale(.97); }
+:root[data-style="neon"] .tab.active {
+  color: var(--accent2); background: color-mix(in srgb, var(--accent) 38%, #07040f);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent2) 60%, transparent);
+  animation: neonBreath 3.2s ease-in-out infinite;
+}
+@keyframes neonBreath {
+  0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--accent2) 38%, transparent), inset 0 0 8px color-mix(in srgb, var(--accent2) 14%, transparent); }
+  50%      { box-shadow: 0 0 16px color-mix(in srgb, var(--accent2) 62%, transparent), inset 0 0 12px color-mix(in srgb, var(--accent2) 26%, transparent); }
+}
+
+/* кнопки: сдвиг и свечение при наведении, «нажатие», переливающаяся активная кнопка */
+:root[data-style="neon"] .nav { transition: background .15s, transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .2s; }
+:root[data-style="neon"] .nav:hover:not(:disabled):not(.active) { transform: translateX(3px); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+:root[data-style="neon"] .nav:active:not(:disabled) { transform: scale(.98); }
+:root[data-style="neon"] .nav.active { background-size: 220% 100%; animation: neonSheen 7s ease-in-out infinite alternate; }
+@keyframes neonSheen { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+
+/* список треков: плавное появление первых строк, сдвиг и подсветка при наведении */
+:root[data-style="neon"] .list li {
+  transition: background .15s, transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .2s;
+  animation: neonRise .38s cubic-bezier(.2, .8, .2, 1) backwards;      /* backwards: после показа анимация не мешает hover */
+}
+:root[data-style="neon"] .list li:nth-child(n+16) { animation: none; }
+:root[data-style="neon"] .list li:nth-child(2) { animation-delay: 28ms; }
+:root[data-style="neon"] .list li:nth-child(3) { animation-delay: 56ms; }
+:root[data-style="neon"] .list li:nth-child(4) { animation-delay: 84ms; }
+:root[data-style="neon"] .list li:nth-child(5) { animation-delay: 112ms; }
+:root[data-style="neon"] .list li:nth-child(6) { animation-delay: 140ms; }
+:root[data-style="neon"] .list li:nth-child(7) { animation-delay: 168ms; }
+:root[data-style="neon"] .list li:nth-child(8) { animation-delay: 196ms; }
+:root[data-style="neon"] .list li:nth-child(9) { animation-delay: 224ms; }
+:root[data-style="neon"] .list li:nth-child(10) { animation-delay: 252ms; }
+:root[data-style="neon"] .list li:nth-child(11) { animation-delay: 280ms; }
+:root[data-style="neon"] .list li:nth-child(12) { animation-delay: 308ms; }
+:root[data-style="neon"] .list li:nth-child(13) { animation-delay: 336ms; }
+:root[data-style="neon"] .list li:nth-child(14) { animation-delay: 364ms; }
+:root[data-style="neon"] .list li:nth-child(15) { animation-delay: 392ms; }
+:root[data-style="neon"] .list li:hover { transform: translateX(4px); box-shadow: inset 3px 0 0 var(--accent2), 0 0 18px color-mix(in srgb, var(--accent) 18%, transparent); }
+:root[data-style="neon"] .list li.playing { box-shadow: inset 3px 0 0 var(--accent); }
+:root[data-style="neon"] .list img { transition: transform .2s, box-shadow .2s; }
+:root[data-style="neon"] .list li:hover img { transform: scale(1.06); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); }
+@keyframes neonRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* заголовок «дышит» мягким свечением; пока играет музыка, обложка и кнопка пуска пульсируют */
+:root[data-style="neon"] .head h2 { animation: neonTitle 5s ease-in-out infinite; }
+@keyframes neonTitle {
+  0%, 100% { text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 50%, transparent); }
+  50%      { text-shadow: 0 0 34px color-mix(in srgb, var(--accent) 78%, transparent); }
+}
+:root[data-style="neon"] body.is-playing .player .cover { animation: neonCover 2.6s ease-in-out infinite; }
+@keyframes neonCover {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 18px 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+}
+:root[data-style="neon"] body.is-playing .player .playbtn { animation: neonPlay 2.2s ease-out infinite; }
+@keyframes neonPlay {
+  0%   { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); }
+  70%  { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 12px transparent; }
+  100% { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 0 transparent; }
+}
+
+/* тем, кто отключил анимации в системе, всё это не показываем */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style="neon"] *, :root[data-style="neon"] *::before, :root[data-style="neon"] *::after { animation: none !important; transition-duration: .01ms !important; }
+}
+
+/* ---------- страница «Статистика» ---------- */
+.stats { display: flex; flex-direction: column; gap: 16px; padding-bottom: 20px; }
+.stats > div { display: flex; flex-direction: column; gap: 16px; }
+.statcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }      /* карточки одного размера */
+.statcard { flex-direction: row; align-items: center; gap: 16px; padding: 16px 20px; }
+.statcard svg { width: 34px; height: 34px; flex: none; color: var(--accent); }
+.statcard small { display: block; font-size: 13px; color: var(--muted); }
+.statcard b { display: block; margin-top: 2px; font-size: 22px; font-weight: 600; }
+.statgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }      /* два блока одного размера */
+.statgrid .stbox { height: 100%; min-height: 480px; }
+.stbox { gap: 12px; }
+.stbox h3 { font-size: 18px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.stlist, .stlegend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.stlist { gap: 8px; }
+.stlist li { display: flex; align-items: center; gap: 14px; padding: 4px; border-radius: 10px; cursor: pointer; transition: background .15s; }
+.stlist li:hover { background: rgba(255,255,255,.07); }
+.stlist img { width: 52px; height: 52px; flex: none; border-radius: 8px; object-fit: cover; background: rgba(255,255,255,.08); }
+.stlist .t, .stalbum b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stlist .s, .stalbum span { display: block; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stlist div { min-width: 0; }
+.stalbums { display: grid; grid-template-columns: repeat(2, minmax(0, 150px)); justify-content: space-around; gap: 14px; }
+.stalbum { cursor: pointer; min-width: 0; }
+.stalbum img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: rgba(255,255,255,.08); transition: transform .2s; }
+.stalbum:hover img { transform: scale(1.03); }
+.stalbum b { margin-top: 8px; font-size: 14px; }
+.stdonut { position: relative; width: 190px; height: 190px; margin: 4px auto 6px; }
+.stdonut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.stdonut circle { fill: none; stroke-width: 16; }
+.stdonut .mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.stdonut .mid b { font-size: 22px; font-weight: 600; }
+.stdonut .mid small { font-size: 12px; color: var(--muted); }
+.stlegend li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.07); min-width: 0; }
+.stlegend li:first-child { border-top: 0; }
+.stlegend .dot { width: 12px; height: 12px; flex: none; border-radius: 50%; }
+.stlegend .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stlegend .pct { margin-left: auto; color: var(--muted); }
+
+/* королевский стиль: линии везде красятся одинаково — чистым цветом темы, без подмешивания белого и чёрного */
+:root[data-style="royal"] .player input[type=range]::-webkit-slider-runnable-track,
+:root[data-style="royal"] .fseek input[type=range]::-webkit-slider-runnable-track {      /* полоса проигрывателя — второй цвет */
+  background: linear-gradient(90deg, var(--accent2) var(--p, 0%), rgba(255,255,255,.16) var(--p, 0%));
+}
+:root[data-style="royal"] .player input[type=range]::-webkit-slider-thumb,
+:root[data-style="royal"] .fseek input[type=range]::-webkit-slider-thumb { box-shadow: 0 0 10px var(--accent2); }
+:root[data-style="royal"] .stbox h3 { border-bottom-color: color-mix(in srgb, var(--accent) 28%, transparent); }          /* разделители в статистике */
+:root[data-style="royal"] .stlegend li { border-top-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* любимые исполнители: круглые портреты в ряд, как в Яндекс Музыке */
+.stpeople { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px; padding-top: 4px; }
+.stperson { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; cursor: pointer; }
+.stperson img { display: block; width: 100%; max-width: 190px; aspect-ratio: 1; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.08); box-shadow: 0 0 0 1px rgba(255,255,255,.1); transition: transform .2s; }
+.stperson:hover img { transform: scale(1.04); }
+.stperson .rank { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; font-weight: 600; }
+.stperson .rank svg { width: 16px; height: 16px; color: var(--accent); }
+.stperson .nm { max-width: 100%; margin-top: 2px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stperson .hrs, .stperson .cnt { max-width: 100%; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stperson .hrs { margin-top: 4px; }
+:root[data-style="royal"] .stperson img { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
+@media (max-width: 1100px) {
+  .statcards, .statgrid { grid-template-columns: minmax(0, 1fr); }
+  .stpeople { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.stgrid { min-height: 96px; }
+.stmsg { flex: 1 0 100%; margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+
+#artistWaveBtn:not([hidden]) + .pin { margin-left: 8px; }
+.stalbum { cursor: default; }
+.stpic { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; border-radius: 8px; cursor: pointer; overflow: hidden; }
+.stalbum:hover img { transform: none; }
+.stpic:hover img { transform: scale(1.04); }
+.stalbum .stplay { position: absolute; right: 8px; bottom: 8px; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent, #0b0618); opacity: 0; transform: translateY(6px); transition: opacity .15s, transform .15s; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
+.stalbum .stpic:hover .stplay, .stalbum .stpic:focus-visible .stplay { opacity: 1; transform: none; }
+.stlink { display: block; max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stlink.ttl { margin-top: 8px; font-size: 14px; font-weight: 600; }
+.stlink:hover:not(:disabled) { text-decoration: underline; }
+.stlink:disabled { cursor: default; }
+.stsub { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 13px; color: var(--muted); }
+.stalbum .stsub .stlink.art { color: var(--muted); }
+.stalbum .stsub .stlink.art:hover { color: var(--text); }
+#boxShare { position: relative; }
+.stdonut svg { overflow: visible; }
+.stdonut circle { transition: stroke-width .18s ease, opacity .18s ease; }
+.stdonut circle.hot { stroke-width: 22; }
+.stdonut circle.dim { opacity: .45; }
+.stlegend li { transition: background .15s; border-radius: 8px; }
+.stlegend li.hot { background: rgba(255,255,255,.07); }
+.stcardhover { position: absolute; z-index: 5; display: flex; align-items: center; gap: 12px; max-width: 260px; padding: 10px 14px 10px 10px; border-radius: 14px; pointer-events: none; background: rgba(15,10,32,.94); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); box-shadow: 0 8px 24px rgba(0,0,0,.55); }
+.stcardhover[hidden] { display: none; }
+.stcardhover img { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex: none; }
+.stcardhover b { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stcardhover small { display: block; font-size: 12px; color: var(--muted); }
+:root[data-style="royal"] .stcardhover { border-radius: 4px; background: rgba(16,12,10,.97); }
+
+
+/* ---------- королевский стиль: основное окно ---------- */
+:root[data-style="royal"] .main::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, #1a1410); border-radius: 0; }
+:root[data-style="royal"] .main::-webkit-scrollbar-track { background: rgba(0,0,0,.25); }
+
+/* заголовок страницы: золотая линия с ромбом посередине */
+:root[data-style="royal"] .main:not(.wavemode) .head {
+  position: relative; margin: 4px 0 22px; padding-bottom: 18px;
+  background:
+    linear-gradient(90deg, transparent, var(--accent)) left bottom / calc(50% - 16px) 1px no-repeat,
+    linear-gradient(90deg, var(--accent), transparent) right bottom / calc(50% - 16px) 1px no-repeat;
+}
+:root[data-style="royal"] .main:not(.wavemode) .head::after {
+  content: "◆"; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+  font-size: 11px; line-height: 1; color: var(--accent); text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+:root[data-style="royal"] .sub { font-style: italic; letter-spacing: .03em; }
+:root[data-style="royal"] .status { font-style: italic; }
+
+/* список треков: строки рукописной книги с номерами и тонкими линиями */
+/* список треков: тонкие линии между строками (без номеров) */
+:root[data-style="royal"] .list li {
+  position: relative; gap: 14px; padding: 8px 14px 8px 22px; border-radius: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  transition: background .2s;
+}
+:root[data-style="royal"] .list li .t { font-family: var(--font-display); font-size: 14.5px; letter-spacing: .03em; color: #efe3c0; }
+:root[data-style="royal"] .list li .a { font-style: italic; }
+:root[data-style="royal"] .list li:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 80%); }
+:root[data-style="royal"] .list img { outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 2px; }
+
+/* выделенный (играющий) трек: золотая плашка-знамя, ромб вместо номера, линии сверху и снизу */
+:root[data-style="royal"] .list li.playing {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent) 6%, transparent) 75%, transparent);
+  box-shadow: inset 4px 0 0 var(--accent);
+  border-top: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  margin-top: -1px;
+}
+:root[data-style="royal"] .list li.playing::before { content: "◆"; position: absolute; left: 7px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--accent); text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent); }
+:root[data-style="royal"] .list li.playing .t { color: #fff3cf; text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent); }
+:root[data-style="royal"] .list li.playing img { outline-color: var(--accent); }
+:root[data-style="royal"] body.is-playing .list li.playing::before { animation: royalPulse 2.4s ease-in-out infinite; }
+@keyframes royalPulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { :root[data-style="royal"] body.is-playing .list li.playing::before { animation: none; } }
+
+/* заголовки разделов с орнаментальной линией */
+:root[data-style="royal"] .similar h3 { display: flex; align-items: center; gap: 14px; font-family: var(--font-display); letter-spacing: .06em; color: #efe3c0; }
+:root[data-style="royal"] .similar h3::before, :root[data-style="royal"] .similar h3::after { content: ""; height: 1px; flex: 1; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 55%, transparent)); }
+:root[data-style="royal"] .similar h3::after { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), transparent); }
+:root[data-style="royal"] .similar h3 { text-align: center; }
+:root[data-style="royal"] .similar h3::before { max-width: 60px; }
+:root[data-style="royal"] .stbox h3, :root[data-style="royal"] .card h3 { font-family: var(--font-display); letter-spacing: .06em; color: #efe3c0; }
+
+/* карточки: двойная рамка */
+:root[data-style="royal"] .card, :root[data-style="royal"] .lastAlbum, :root[data-style="royal"] .simcard {
+  outline: 1px solid color-mix(in srgb, var(--accent) 18%, transparent); outline-offset: -5px;
+}
+:root[data-style="royal"] .simcard { border-radius: 3px; padding: 10px; border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); }
+:root[data-style="royal"] .simcard:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+:root[data-style="royal"] .simcard b, :root[data-style="royal"] .lastAlbum b, :root[data-style="royal"] .stalbum .ttl { font-family: var(--font-display); letter-spacing: .03em; }
+:root[data-style="royal"] .lastAlbum:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 30%, transparent); }
+:root[data-style="royal"] .stpic, :root[data-style="royal"] .stpic img { border-radius: 3px; }
+:root[data-style="royal"] .stpic { outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; }
+:root[data-style="royal"] .stplay { border-radius: 50%; }
+
+/* =================== СТИМПАНК =================== */
+/* тёмная бронза: тонкие двойные рамки, уголки с одной заклёпкой, неподвижные шестерни в углах.
+   Основной цвет — бронза рамок, иконок и заклёпок; второй — заполнение полосы проигрывателя. Без шума и почти без анимаций. */
+.sp-steam { border-radius: 2px; background: linear-gradient(180deg, #241b13, #120d09); box-shadow: inset 0 0 0 1px #9a7444, inset 0 0 0 5px #120d09, inset 0 0 0 6px rgba(154,116,68,.45); }
+:root[data-style="steam"] {
+  --text: #e6d5b5; --muted: #9c876a;
+  --font-display: "Constantia", "Cambria", "Palatino Linotype", Georgia, serif;
+  --gear: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cpath fill-rule='evenodd' d='M188.45 90.13 L198.93 96.41 L198.93 103.59 L188.45 109.87 L188.24 111.58 L196.92 120.19 L195.20 127.16 L183.52 130.75 L182.91 132.36 L189.27 142.80 L185.94 149.15 L173.73 149.85 L172.75 151.26 L176.43 162.92 L171.67 168.29 L159.66 166.04 L158.37 167.18 L159.15 179.38 L153.25 183.46 L142.12 178.40 L140.60 179.20 L138.44 191.23 L131.73 193.78 L122.13 186.20 L120.46 186.62 L115.49 197.78 L108.36 198.65 L100.86 189.00 L99.14 189.00 L91.64 198.65 L84.51 197.78 L79.54 186.62 L77.87 186.20 L68.27 193.78 L61.56 191.23 L59.40 179.20 L57.88 178.40 L46.75 183.46 L40.85 179.38 L41.63 167.18 L40.34 166.04 L28.33 168.29 L23.57 162.92 L27.25 151.26 L26.27 149.85 L14.06 149.15 L10.73 142.80 L17.09 132.36 L16.48 130.75 L4.80 127.16 L3.08 120.19 L11.76 111.58 L11.55 109.87 L1.07 103.59 L1.07 96.41 L11.55 90.13 L11.76 88.42 L3.08 79.81 L4.80 72.84 L16.48 69.25 L17.09 67.64 L10.73 57.20 L14.06 50.85 L26.27 50.15 L27.25 48.74 L23.57 37.08 L28.33 31.71 L40.34 33.96 L41.63 32.82 L40.85 20.62 L46.75 16.54 L57.88 21.60 L59.40 20.80 L61.56 8.77 L68.27 6.22 L77.87 13.80 L79.54 13.38 L84.51 2.22 L91.64 1.35 L99.14 11.00 L100.86 11.00 L108.36 1.35 L115.49 2.22 L120.46 13.38 L122.13 13.80 L131.73 6.22 L138.44 8.77 L140.60 20.80 L142.12 21.60 L153.25 16.54 L159.15 20.62 L158.37 32.82 L159.66 33.96 L171.67 31.71 L176.43 37.08 L172.75 48.74 L173.73 50.15 L185.94 50.85 L189.27 57.20 L182.91 67.64 L183.52 69.25 L195.20 72.84 L196.92 79.81 L188.24 88.42Z M28.00 100.00 a72 72 0 1 0 144 0 a72 72 0 1 0 -144 0Z'/%3E%3Cpath d='M122.00 108.00 L176.00 110.00 L176.00 90.00 L122.00 92.00Z M104.07 123.05 L129.34 170.82 L146.66 160.82 L117.93 115.05Z M82.07 115.05 L53.34 160.82 L70.66 170.82 L95.93 123.05Z M78.00 92.00 L24.00 90.00 L24.00 110.00 L78.00 108.00Z M95.93 76.95 L70.66 29.18 L53.34 39.18 L82.07 84.95Z M117.93 84.95 L146.66 39.18 L129.34 29.18 L104.07 76.95Z '/%3E%3Cpath fill-rule='evenodd' d='M70.00 100.00 a30 30 0 1 0 60 0 a30 30 0 1 0 -60 0Z M89.00 100.00 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0Z M114.12 110.00 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0Z M96.80 120.00 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0Z M79.48 110.00 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0Z M79.48 90.00 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0Z M96.80 80.00 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0Z M114.12 90.00 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0Z'/%3E%3C/svg%3E");
+  --i-wave: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 10h2v4H3zM7 6h2v12H7zM11 3h2v18h-2zM15 7h2v10h-2zM19 10h2v4h-2z'/%3E%3C/svg%3E"); --i-heart: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21l-1.4-1.3C5.4 15 2 12 2 8.5 2 5.6 4.3 3.5 7 3.5c1.7 0 3.4.8 5 2.500 1.600-1.700 3.300-2.500 5-2.500 2.700 0 5 2.100 5 5 0 3.500-3.400 6.500-8.600 11.200z'/%3E%3C/svg%3E"); --i-stats: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 12h4v8H4zM10 4h4v16h-4zM16 9h4v11h-4z'/%3E%3C/svg%3E"); --i-user: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21c0-4.400 3.600-7 8-7s8 2.600 8 7z'/%3E%3C/svg%3E");
+  --m: color-mix(in srgb, var(--accent) 80%, #2a1c10);
+  --m-hi: color-mix(in srgb, var(--accent) 60%, #fff3dc);
+  --m-lo: color-mix(in srgb, var(--accent) 40%, #0a0604);
+  --ln: color-mix(in srgb, var(--accent) 60%, transparent);          /* внешняя линия рамки */
+  --ls: color-mix(in srgb, var(--accent) 26%, transparent);          /* внутренняя, тонкая */
+  --plate-a: rgba(30, 23, 16, var(--panel-a)); --plate-b: rgba(14, 10, 7, var(--panel-a));
+  --rivet: radial-gradient(circle at 50% 50%, var(--m-hi) 0 1.1px, var(--m) 2.6px, var(--m-lo) 4.2px, #050302 4.8px, transparent 5.4px);
+  --search-ic: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10.5' cy='10.5' r='6' fill='none' stroke='%23a98458' stroke-width='2'/%3E%3Cpath d='M15 15l5 5' stroke='%23a98458' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+:root[data-style="steam"] body {
+  font-family: Georgia, "Cambria", serif;
+  background:
+    radial-gradient(1100px 700px at 70% 10%, rgba(120, 80, 40, .14), transparent 65%),
+    radial-gradient(900px 600px at 50% 115%, rgba(0, 0, 0, .55), transparent 60%),
+    linear-gradient(180deg, #120d09, #19120c 55%, #0d0906);
+}
+
+/* ---------- рама: внешняя линия, внутренняя линия, уголки и по одной заклёпке в каждом углу ---------- */
+:root[data-style="steam"] .panel,
+:root[data-style="steam"] .list {
+  position: relative; isolation: isolate; border-radius: 3px; backdrop-filter: blur(6px);
+  border: 1px solid var(--ln);
+  background:
+    var(--rivet) left 4px top 4px / 12px 12px no-repeat,
+    var(--rivet) right 4px top 4px / 12px 12px no-repeat,
+    var(--rivet) left 4px bottom 4px / 12px 12px no-repeat,
+    var(--rivet) right 4px bottom 4px / 12px 12px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 2px top 2px / 26px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 2px top 2px / 2px 26px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 2px top 2px / 26px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 2px top 2px / 2px 26px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 2px bottom 2px / 26px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 2px bottom 2px / 2px 26px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 2px bottom 2px / 26px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 2px bottom 2px / 2px 26px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) left 7px top 7px / calc(100% - 14px) 1px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) left 7px bottom 7px / calc(100% - 14px) 1px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) left 7px top 7px / 1px calc(100% - 14px) no-repeat,
+    linear-gradient(var(--ls), var(--ls)) right 7px top 7px / 1px calc(100% - 14px) no-repeat,
+    linear-gradient(180deg, var(--plate-a), var(--plate-b));
+  box-shadow: 0 0 0 1px rgba(0,0,0,.65), 0 12px 30px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,220,160,.05);
+}
+:root[data-style="steam"] .side { padding: 26px 22px; }
+:root[data-style="steam"] .player { padding: 22px 70px 18px; }
+
+/* шестерни: неподвижные, видна четверть, лежат под содержимым */
+:root[data-style="steam"] .list::after {
+  content: ""; position: absolute; z-index: -1; pointer-events: none; width: var(--q); height: var(--q); opacity: .8;
+  background: radial-gradient(circle at 30% 25%, var(--m-hi), var(--m) 40%, var(--m-lo));
+  -webkit-mask: var(--gear) var(--gx) var(--gy) / calc(var(--q) * 2) calc(var(--q) * 2) no-repeat;
+  mask: var(--gear) var(--gx) var(--gy) / calc(var(--q) * 2) calc(var(--q) * 2) no-repeat;
+}
+:root[data-style="steam"] .list::after { --q: 40px; --gx: 0px; --gy: 0px; right: 0; bottom: 0; opacity: .55; }
+
+
+/* боковая и нижняя панели со срезанными углами: рама рисуется на подложке (::before),
+   чтобы срез не обрезал всплывающее окно громкости */
+:root[data-style="steam"] .side, :root[data-style="steam"] .player { background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+:root[data-style="steam"] .side::before, :root[data-style="steam"] .player::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  border: 1px solid var(--ln); backdrop-filter: blur(6px);
+  clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
+  background:
+    linear-gradient(135deg, transparent 50%, var(--m) 50%, var(--m) calc(50% + 2.5px), transparent calc(50% + 2.5px)) left 0 top 0 / 16px 16px no-repeat,
+    linear-gradient(135deg, transparent 50%, var(--ls) 50%, var(--ls) calc(50% + 1px), transparent calc(50% + 1px)) left 0 top 0 / 34px 34px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 16px top 0 / 20px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 0 top 16px / 2px 20px no-repeat,
+    var(--rivet) left 7px top 7px / 12px 12px no-repeat,
+    linear-gradient(225deg, transparent 50%, var(--m) 50%, var(--m) calc(50% + 2.5px), transparent calc(50% + 2.5px)) right 0 top 0 / 16px 16px no-repeat,
+    linear-gradient(225deg, transparent 50%, var(--ls) 50%, var(--ls) calc(50% + 1px), transparent calc(50% + 1px)) right 0 top 0 / 34px 34px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 16px top 0 / 20px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 0 top 16px / 2px 20px no-repeat,
+    var(--rivet) right 7px top 7px / 12px 12px no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--m) 50%, var(--m) calc(50% + 2.5px), transparent calc(50% + 2.5px)) left 0 bottom 0 / 16px 16px no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--ls) 50%, var(--ls) calc(50% + 1px), transparent calc(50% + 1px)) left 0 bottom 0 / 34px 34px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 16px bottom 0 / 20px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) left 0 bottom 16px / 2px 20px no-repeat,
+    var(--rivet) left 7px bottom 7px / 12px 12px no-repeat,
+    linear-gradient(315deg, transparent 50%, var(--m) 50%, var(--m) calc(50% + 2.5px), transparent calc(50% + 2.5px)) right 0 bottom 0 / 16px 16px no-repeat,
+    linear-gradient(315deg, transparent 50%, var(--ls) 50%, var(--ls) calc(50% + 1px), transparent calc(50% + 1px)) right 0 bottom 0 / 34px 34px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 16px bottom 0 / 20px 2px no-repeat,
+    linear-gradient(var(--m), var(--m)) right 0 bottom 16px / 2px 20px no-repeat,
+    var(--rivet) right 7px bottom 7px / 12px 12px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) left 27px top 7px / calc(100% - 54px) 1px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) left 27px bottom 7px / calc(100% - 54px) 1px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) left 7px top 27px / 1px calc(100% - 54px) no-repeat,
+    linear-gradient(var(--ls), var(--ls)) right 7px top 27px / 1px calc(100% - 54px) no-repeat,
+    linear-gradient(180deg, var(--plate-a), var(--plate-b));
+  background-origin: border-box;
+}
+
+
+:root[data-style="steam"] .player { padding: 22px 40px 18px; }
+
+/* ---------- заголовок окна ---------- */
+:root[data-style="steam"] .titlebar { background: linear-gradient(rgba(8, 5, 2, .7), rgba(8, 5, 2, 0)); }
+:root[data-style="steam"] .tbtitle { font-family: var(--font-display); letter-spacing: .16em; text-transform: uppercase; color: var(--m-hi); }
+:root[data-style="steam"] .tbbrand { color: var(--m-hi); }
+:root[data-style="steam"] .tbsubtitle { color: var(--muted); }
+:root[data-style="steam"] .tbdot { border-radius: 0; transform: rotate(45deg); background: linear-gradient(135deg, var(--m-hi), var(--m-lo)); box-shadow: 0 0 0 1px #050302; }
+
+/* ---------- закладки: тонкий рельс сверху и бронзовые таблички (отступы между ними прежние) ---------- */
+:root[data-style="steam"] .tabs {
+  align-items: center; gap: 16px; padding: 16px 0 14px;
+  background:
+    linear-gradient(var(--ln), var(--ln)) 0 3px / 100% 1px no-repeat,
+    linear-gradient(var(--ls), var(--ls)) 0 7px / 100% 1px no-repeat;
+}
+:root[data-style="steam"] .tab {
+  position: relative; isolation: isolate; padding: 11px 30px; flex: none; min-width: 100px; justify-content: center;
+  border: 0; border-radius: 0; outline: 0; background: none; box-shadow: none;
+  color: #dcc7a2; text-transform: uppercase; letter-spacing: .08em;
+  font-family: var(--font-display); font-size: 12.5px; font-weight: 600; text-shadow: 0 1px 1px #000;
+  transition: color .15s;
+}
+/* форма билетика: в углах вогнутые полукруглые вырезы; окантовка и внутренняя линия повторяют вырез.
+   Цвет окантовки — от «Второго» цвета. */
+:root[data-style="steam"] {
+  --a2: color-mix(in srgb, var(--accent2) 80%, #2a1c10);
+  --a2-hi: color-mix(in srgb, var(--accent2) 60%, #fff3dc);
+  --a2-ln: color-mix(in srgb, var(--accent2) 70%, transparent);
+  --a2-ls: color-mix(in srgb, var(--accent2) 34%, transparent);
+}
+:root[data-style="steam"] .tab {
+  -webkit-mask: radial-gradient(circle at 0px 0px, transparent 8px, #000 8.5px), radial-gradient(circle at 100% 0px, transparent 8px, #000 8.5px), radial-gradient(circle at 0px 100%, transparent 8px, #000 8.5px), radial-gradient(circle at 100% 100%, transparent 8px, #000 8.5px); -webkit-mask-composite: source-in;
+  mask: radial-gradient(circle at 0px 0px, transparent 8px, #000 8.5px), radial-gradient(circle at 100% 0px, transparent 8px, #000 8.5px), radial-gradient(circle at 0px 100%, transparent 8px, #000 8.5px), radial-gradient(circle at 100% 100%, transparent 8px, #000 8.5px); mask-composite: intersect;
+}
+:root[data-style="steam"] .tab::before, :root[data-style="steam"] .tab::after { content: ""; position: absolute; z-index: -1; pointer-events: none; }
+:root[data-style="steam"] .tab::before { inset: 0; background: var(--a2-ln); transition: background .15s; }
+:root[data-style="steam"] .tab::after {
+  inset: 1px; --sx: 100%; transition: --sx 0s;
+  -webkit-mask: radial-gradient(circle at -1px -1px, transparent 9px, #000 9.5px), radial-gradient(circle at calc(100% - -1px) -1px, transparent 9px, #000 9.5px), radial-gradient(circle at -1px calc(100% - -1px), transparent 9px, #000 9.5px), radial-gradient(circle at calc(100% - -1px) calc(100% - -1px), transparent 9px, #000 9.5px); -webkit-mask-composite: source-in;
+  mask: radial-gradient(circle at -1px -1px, transparent 9px, #000 9.5px), radial-gradient(circle at calc(100% - -1px) -1px, transparent 9px, #000 9.5px), radial-gradient(circle at -1px calc(100% - -1px), transparent 9px, #000 9.5px), radial-gradient(circle at calc(100% - -1px) calc(100% - -1px), transparent 9px, #000 9.5px); mask-composite: intersect;
+  background:
+    linear-gradient(105deg, transparent 38%, rgba(255,232,190,.20) 47%, rgba(255,246,225,.32) 50%, rgba(255,232,190,.20) 53%, transparent 62%) var(--sx) 0 / 260% 100% no-repeat,
+    radial-gradient(circle at -1px -1px, transparent 12.5px, var(--a2-ls) 12.5px 13.5px, transparent 14px) left top / 14px 14px no-repeat,
+    radial-gradient(circle at calc(100% + 1px) -1px, transparent 12.5px, var(--a2-ls) 12.5px 13.5px, transparent 14px) right top / 14px 14px no-repeat,
+    radial-gradient(circle at -1px calc(100% + 1px), transparent 12.5px, var(--a2-ls) 12.5px 13.5px, transparent 14px) left bottom / 14px 14px no-repeat,
+    radial-gradient(circle at calc(100% + 1px) calc(100% + 1px), transparent 12.5px, var(--a2-ls) 12.5px 13.5px, transparent 14px) right bottom / 14px 14px no-repeat,
+    linear-gradient(var(--a2-ls), var(--a2-ls)) left 11px top 4px / calc(100% - 22px) 1px no-repeat,
+    linear-gradient(var(--a2-ls), var(--a2-ls)) left 11px bottom 4px / calc(100% - 22px) 1px no-repeat,
+    linear-gradient(var(--a2-ls), var(--a2-ls)) left 4px top 11px / 1px calc(100% - 22px) no-repeat,
+    linear-gradient(var(--a2-ls), var(--a2-ls)) right 4px top 11px / 1px calc(100% - 22px) no-repeat,
+    linear-gradient(180deg, #221a12, #120d09);
+}
+:root[data-style="steam"] .tab:hover { color: #f2e2c2; }
+:root[data-style="steam"] .tab:hover::before { background: var(--a2); }
+:root[data-style="steam"] .tab.active { color: #fbecd0; }
+:root[data-style="steam"] .tab.active::before { background: var(--a2-hi); }
+:root[data-style="steam"] .tab.active::after {
+  background:
+    linear-gradient(105deg, transparent 38%, rgba(255,232,190,.20) 47%, rgba(255,246,225,.32) 50%, rgba(255,232,190,.20) 53%, transparent 62%) var(--sx) 0 / 260% 100% no-repeat,
+    radial-gradient(circle, transparent 0 2.5px, var(--a2-hi) 3px 4.5px, transparent 5px) left 10px center / 14px 14px no-repeat,
+    radial-gradient(circle at -1px -1px, transparent 12.5px, var(--a2-ln) 12.5px 13.5px, transparent 14px) left top / 14px 14px no-repeat,
+    radial-gradient(circle at calc(100% + 1px) -1px, transparent 12.5px, var(--a2-ln) 12.5px 13.5px, transparent 14px) right top / 14px 14px no-repeat,
+    radial-gradient(circle at -1px calc(100% + 1px), transparent 12.5px, var(--a2-ln) 12.5px 13.5px, transparent 14px) left bottom / 14px 14px no-repeat,
+    radial-gradient(circle at calc(100% + 1px) calc(100% + 1px), transparent 12.5px, var(--a2-ln) 12.5px 13.5px, transparent 14px) right bottom / 14px 14px no-repeat,
+    linear-gradient(var(--a2-ln), var(--a2-ln)) left 11px top 4px / calc(100% - 22px) 1px no-repeat,
+    linear-gradient(var(--a2-ln), var(--a2-ln)) left 11px bottom 4px / calc(100% - 22px) 1px no-repeat,
+    linear-gradient(var(--a2-ln), var(--a2-ln)) left 4px top 11px / 1px calc(100% - 22px) no-repeat,
+    linear-gradient(var(--a2-ln), var(--a2-ln)) right 4px top 11px / 1px calc(100% - 22px) no-repeat,
+    linear-gradient(180deg, color-mix(in srgb, var(--accent2) 30%, #1c140d), color-mix(in srgb, var(--accent2) 12%, #0e0a06));
+}
+:root[data-style="steam"] .tab i { margin-left: 6px; font-size: 10px; opacity: .55; }
+
+/* ---------- кнопки ---------- */
+:root[data-style="steam"] .nav, :root[data-style="steam"] .chip, :root[data-style="steam"] .pill {
+  border-radius: 3px; letter-spacing: .02em; color: var(--text);
+  border: 1px solid var(--ls); background: linear-gradient(180deg, #1f1811, #120d09);
+  box-shadow: inset 0 1px 0 rgba(255,220,160,.05);
+  transition: border-color .15s, background .15s;
+}
+:root[data-style="steam"] .chip, :root[data-style="steam"] .pill { color: var(--muted); }
+:root[data-style="steam"] .nav:hover:not(:disabled):not(.active), :root[data-style="steam"] .chip:hover, :root[data-style="steam"] .pill:hover { border-color: var(--ln); color: var(--text); background: linear-gradient(180deg, #2a2017, #161009); }
+:root[data-style="steam"] .nav.active, :root[data-style="steam"] .chip.active, :root[data-style="steam"] .pill.active, :root[data-style="steam"] .stations .pill.active {
+  color: #fbecd0; font-weight: 600; text-shadow: 0 1px 1px #000; border-color: var(--m);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 48%, #1a120b), color-mix(in srgb, var(--accent) 24%, #0d0905));
+  box-shadow: inset 0 1px 0 rgba(255,230,180,.14);
+}
+:root[data-style="steam"] .side .nav { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+:root[data-style="steam"] .side .nav::before {
+  content: ""; width: 20px; height: 20px; flex: none; background: var(--m);
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+}
+:root[data-style="steam"] .side .nav.active::before { background: #fbecd0; }
+:root[data-style="steam"] #wave { --ic: var(--i-wave); }
+:root[data-style="steam"] #likes { --ic: var(--i-heart); }
+:root[data-style="steam"] #statsBtn { --ic: var(--i-stats); }
+:root[data-style="steam"] #settingsBtn { --ic: var(--gear); }
+:root[data-style="steam"] #profile { --ic: var(--i-user); }
+:root[data-style="steam"] .search, :root[data-style="steam"] input[type=password] {
+  border-radius: 3px; border: 1px solid var(--ln); font-family: inherit;
+  background: var(--search-ic) 12px center / 16px 16px no-repeat, rgba(0,0,0,.45);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.6);
+}
+:root[data-style="steam"] .search { padding-left: 38px; }
+:root[data-style="steam"] input[type=password] { background: rgba(0,0,0,.45); }
+:root[data-style="steam"] .search:focus { border-color: var(--m-hi); box-shadow: inset 0 2px 5px rgba(0,0,0,.6); }
+
+:root[data-style="steam"] .side .nav.active {
+  border-color: var(--a2-hi);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent2) 50%, #1a120b), color-mix(in srgb, var(--accent2) 24%, #0d0905));
+  box-shadow: inset 0 1px 0 rgba(255,230,180,.14), inset 0 0 0 3px rgba(0,0,0,.25), inset 0 0 0 4px var(--a2-ls);
+}
+
+/* кнопка пуска: тёмный диск в бронзовом кольце */
+:root[data-style="steam"] .player .playbtn, :root[data-style="steam"] .wavebtn, :root[data-style="steam"] .fbtns .playbtn {
+  color: #f3e3c3; text-shadow: none;
+  background: radial-gradient(circle at 50% 35%, #2c2218, #0e0a07 75%);
+  box-shadow: 0 0 0 1px #050302, 0 0 0 3px var(--m), 0 0 0 4px #050302, 0 0 0 7px var(--ls), 0 6px 16px rgba(0,0,0,.7), inset 0 2px 6px rgba(0,0,0,.7);
+}
+:root[data-style="steam"] .player .playbtn { width: 50px; height: 50px; }
+:root[data-style="steam"] .player .playbtn:hover, :root[data-style="steam"] .fbtns .playbtn:hover { background: radial-gradient(circle at 50% 35%, #382b1e, #120d09 75%); filter: none; }
+:root[data-style="steam"] .player button:not(.playbtn):not(.likebtn) { color: var(--m); }
+:root[data-style="steam"] .player button:not(.playbtn):hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--m-hi); }
+:root[data-style="steam"] .modebtn.on { color: var(--m-hi); filter: none; }
+:root[data-style="steam"] .player .cover { border-radius: 2px; border: 1px solid var(--ln); box-shadow: 0 0 0 1px #050302; }
+
+/* шкалы: тонкая линия, бронзовая шайба; полоса проигрывателя — второй цвет */
+:root[data-style="steam"] input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.5); background: linear-gradient(90deg, var(--accent) var(--p, 0%), rgba(255,255,255,.12) var(--p, 0%)); }
+:root[data-style="steam"] .player input[type=range]::-webkit-slider-runnable-track,
+:root[data-style="steam"] .fseek input[type=range]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--accent2) var(--p, 0%), rgba(255,255,255,.12) var(--p, 0%)); }
+:root[data-style="steam"] input[type=range]::-webkit-slider-thumb { width: 13px; height: 13px; margin-top: -5px; background: radial-gradient(circle at 40% 35%, var(--m-hi), var(--m) 55%, var(--m-lo)); box-shadow: 0 0 0 1px #050302, 0 1px 3px rgba(0,0,0,.8); }
+
+/* ---------- заголовок страницы с медальоном ---------- */
+:root[data-style="steam"] .head h2 { font-family: var(--font-display); font-weight: 700; letter-spacing: .02em; color: color-mix(in srgb, var(--accent) 35%, #f4e3c0); text-shadow: 0 2px 3px rgba(0,0,0,.8); }
+:root[data-style="steam"] .main:not(.wavemode) .head { margin-bottom: 16px; }
+:root[data-style="steam"] .main[data-page="likes"] { --ic: var(--i-heart); }
+:root[data-style="steam"] .main[data-page="statsBtn"] { --ic: var(--i-stats); }
+:root[data-style="steam"] .main[data-page="settingsBtn"] { --ic: var(--gear); }
+:root[data-style="steam"] .main:not(.wavemode):is([data-page="likes"], [data-page="statsBtn"], [data-page="settingsBtn"]) .head h2 { position: relative; display: flex; align-items: center; gap: 16px; }
+:root[data-style="steam"] .main:not(.wavemode):is([data-page="likes"], [data-page="statsBtn"], [data-page="settingsBtn"]) .head h2::before {
+  content: ""; width: 42px; height: 42px; flex: none; border-radius: 50%;
+  background: transparent; box-shadow: 0 0 0 2px var(--m);
+}
+:root[data-style="steam"] .main:not(.wavemode):is([data-page="likes"], [data-page="statsBtn"], [data-page="settingsBtn"]) .head h2::after {
+  content: ""; position: absolute; left: 10px; top: 50%; width: 22px; height: 22px; margin-top: -11px; background: var(--m-hi);
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+}
+:root[data-style="steam"] .headimg { box-shadow: 0 0 0 1px #050302, 0 0 0 3px var(--m), 0 0 0 4px #050302, 0 4px 10px rgba(0,0,0,.7); }
+:root[data-style="steam"] .sub, :root[data-style="steam"] .status { color: var(--muted); }
+:root[data-style="steam"] .main::-webkit-scrollbar-thumb { background: var(--m-lo); border-radius: 0; border: 1px solid var(--ls); }
+:root[data-style="steam"] .main::-webkit-scrollbar-track { background: rgba(0,0,0,.3); }
+
+/* ---------- список треков: рамка, номера, тонкие разделители ---------- */
+:root[data-style="steam"] .list { padding: 16px 20px; counter-reset: trk; --plate-a: transparent; --plate-b: transparent; backdrop-filter: none; box-shadow: none; }
+:root[data-style="steam"] .list::before {          /* ромбик по центру верхней линии */
+  content: ""; position: absolute; top: -5px; left: 50%; width: 8px; height: 8px; margin-left: -4px; transform: rotate(45deg);
+  background: var(--m); box-shadow: 0 0 0 1px #050302;
+}
+:root[data-style="steam"] .list:empty { display: none; }
+:root[data-style="steam"] .list li {
+  counter-increment: trk; border-radius: 0; padding: 7px 12px 7px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+}
+:root[data-style="steam"] .list li::before {
+  content: none; display: none;
+  font-size: 13px; color: color-mix(in srgb, var(--accent) 65%, #8a7a66); font-variant-numeric: tabular-nums;
+}
+:root[data-style="steam"] .list li:last-child { border-bottom: 0; }
+:root[data-style="steam"] .list li .t { font-family: var(--font-display); font-size: 14.5px; letter-spacing: .02em; color: #e8d6b4; }
+:root[data-style="steam"] .list li:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+:root[data-style="steam"] .list img, :root[data-style="steam"] .simcard img, :root[data-style="steam"] .lastAlbum img { border-radius: 2px; border: 1px solid var(--ls); }
+:root[data-style="steam"] .list li.playing { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 20%, transparent), transparent 80%); box-shadow: inset 2px 0 0 var(--m); }
+:root[data-style="steam"] .list li.playing::before { color: var(--m-hi); }
+:root[data-style="steam"] .list li.playing .t { color: #fff0d4; text-shadow: none; }
+:root[data-style="steam"] .likebtn { color: var(--muted); }
+:root[data-style="steam"] .likebtn.on { color: var(--m); filter: none; }
+
+/* ---------- карточки и всплывающие окна: двойная тонкая рамка, без заклёпок ---------- */
+:root[data-style="steam"] .card, :root[data-style="steam"] .lastAlbum, :root[data-style="steam"] .simcard, :root[data-style="steam"] .stylecard {
+  border-radius: 3px; border: 1px solid var(--ln); outline: 1px solid var(--ls); outline-offset: -5px;
+  background: rgba(255,255,255,.03);
+  box-shadow: none;
+}
+:root[data-style="steam"] .card, :root[data-style="steam"] .lastAlbum { padding-left: 22px; padding-right: 22px; }
+:root[data-style="steam"] .stations, :root[data-style="steam"] .volpop, :root[data-style="steam"] .stcardhover {
+  border-radius: 3px; border: 1px solid var(--ln); background: rgba(18, 13, 9, .97); box-shadow: 0 10px 28px rgba(0,0,0,.65);
+}
+:root[data-style="steam"] .lastAlbum:hover, :root[data-style="steam"] .simcard:hover { border-color: var(--m-hi); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+:root[data-style="steam"] .stylecard.on { border-color: var(--m-hi); outline-color: var(--ln); }
+:root[data-style="steam"] .drop { border-radius: 3px; }
+:root[data-style="steam"] .card h3, :root[data-style="steam"] .stbox h3, :root[data-style="steam"] .similar h3, :root[data-style="steam"] .simcard b, :root[data-style="steam"] .lastAlbum b, :root[data-style="steam"] .stalbum .ttl, :root[data-style="steam"] .nptitle, :root[data-style="steam"] .ftitle { font-family: var(--font-display); letter-spacing: .02em; color: #e8d6b4; }
+:root[data-style="steam"] .stbox h3 { border-bottom: 1px solid var(--ls); }
+:root[data-style="steam"] .stlegend li { border-top-color: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* ---------- анимации стимпанка: короткие и механические ---------- */
+@property --sx { syntax: "<percentage>"; inherits: false; initial-value: 100%; }
+@property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+/* закладки: при наведении табличка чуть приподнимается, по латуни проходит один блик */
+:root[data-style="steam"] .tab { transition: color .15s, transform .18s ease; }
+:root[data-style="steam"] .tab:hover { transform: translateY(-2px); }
+:root[data-style="steam"] .tab:hover::after { --sx: 0%; transition: --sx .7s ease-out; }
+:root[data-style="steam"] .tab:active { transform: translateY(0); transition-duration: .05s; }
+
+/* Моя волна: вокруг кнопки шкала-циферблат из рисок. Пока волна играет, по рискам бежит огонёк,
+   как стрелка хронометра, а бронзовое кольцо кнопки мерно «дышит». Сами риски не вращаются. */
+:root[data-style="steam"] .wavebtn { box-shadow: 0 0 0 2px #050302, 0 0 0 6px var(--m), 0 0 0 7px #050302, 0 10px 26px rgba(0,0,0,.7), inset 0 3px 8px rgba(0,0,0,.7); }
+:root[data-style="steam"] .wavebtn::before, :root[data-style="steam"] .wavebtn::after {
+  content: ""; position: absolute; border-radius: 50%; pointer-events: none; z-index: -1;
+}
+:root[data-style="steam"] .wavebtn::before {
+  inset: -16px;
+  background: conic-gradient(from var(--ang), var(--ln) 0 100%);
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px)), repeating-conic-gradient(#000 0 1.6deg, transparent 1.6deg 10deg);
+  -webkit-mask-composite: source-in;
+  mask: radial-gradient(closest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px)), repeating-conic-gradient(from -0.8deg, #000 0 1.6deg, transparent 1.6deg 10deg);
+  mask-composite: intersect;
+}
+:root[data-style="steam"] .wavebtn::after { inset: -20px; border: 1px solid var(--ls); }
+:root[data-style="steam"] .wavebtn.playing { animation: steamBreath 2.6s ease-in-out infinite; }
+:root[data-style="steam"] .wavebtn.playing::before {
+  background: conic-gradient(from var(--ang), var(--m-lo) 0deg, var(--ls) 200deg, var(--m) 300deg, var(--m-hi) 352deg, #fff3dc 358deg, var(--m-lo) 360deg);
+  animation: steamSweep 4s steps(36) infinite;
+}
+@keyframes steamSweep { to { --ang: 360deg; } }
+@keyframes steamBreath {
+  0%, 100% { box-shadow: 0 0 0 2px #050302, 0 0 0 6px var(--m), 0 0 0 7px #050302, 0 10px 26px rgba(0,0,0,.7), inset 0 3px 8px rgba(0,0,0,.7); }
+  50% { box-shadow: 0 0 0 2px #050302, 0 0 0 6px var(--m-hi), 0 0 0 7px #050302, 0 0 22px color-mix(in srgb, var(--accent) 35%, transparent), inset 0 3px 8px rgba(0,0,0,.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style="steam"] .wavebtn.playing, :root[data-style="steam"] .wavebtn.playing::before { animation: none; }
+  :root[data-style="steam"] .tab, :root[data-style="steam"] .tab:hover::after { transition: none; }
+}
+
+/* =================== LOLITTA =================== */
+/* пудрово-розовый: стёганая боковая панель с бантами, жемчугом и камеей, филигранная рамка вокруг прозрачного списка,
+   светлая панель плеера с розами и бантом над кнопкой паузы. Основной цвет — розовый металл декора и светлых панелей,
+   второй — тёмные кнопки и текст на светлом. Декор (банты, розы, камея) рисует main.js — блоки .lodeco. */
+.stylepick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root:not([data-style="lolitta"]) .lodeco { display: none !important; }
+.sp-lolitta {
+  border-radius: 7px;
+  background: repeating-linear-gradient(45deg, transparent 0 9px, rgba(255,255,255,.55) 9px 10px), repeating-linear-gradient(-45deg, transparent 0 9px, rgba(255,255,255,.55) 9px 10px), linear-gradient(180deg, #efcfd3, #dcaab3);
+  box-shadow: inset 0 0 0 1px #b8707f, inset 0 0 0 4px #efcfd3, inset 0 0 0 5px rgba(140,74,92,.55);
+}
+:root[data-style="lolitta"] {
+  --text: #f9eaec; --muted: #d4b0b7;
+  --font-display: "Palatino Linotype", "Book Antiqua", Palatino, "Cambria", Georgia, serif;
+  --l-hi: color-mix(in srgb, var(--accent) 40%, #fff8f6);
+  --l-mid: var(--accent);
+  --l-lo: color-mix(in srgb, var(--accent) 50%, var(--accent2));
+  --l-deep: color-mix(in srgb, var(--accent2) 70%, #1c0a10);
+  --l-pearl: color-mix(in srgb, var(--accent) 20%, #fffafa);
+  --l-light: color-mix(in srgb, var(--accent) 50%, #fbf0f0);
+  --l-light2: color-mix(in srgb, var(--accent) 72%, #f1d8d9);
+  --l-btn: color-mix(in srgb, var(--accent2) 60%, #2a1218);
+  --l-btn2: color-mix(in srgb, var(--accent2) 42%, #1c0b10);
+  --l-ink: var(--lo-ink, color-mix(in srgb, var(--accent2) 64%, #24100f));      /* --lo-* подбирает main.js по контрасту */
+  --l-ink2: color-mix(in srgb, var(--l-ink) 74%, var(--l-light));
+  --l2-hi: color-mix(in srgb, var(--accent2) 50%, #fff3f4);                    /* второй цвет — для бантика под активной закладкой */
+  --l2-mid: var(--accent2);
+  --l2-lo: color-mix(in srgb, var(--accent2) 62%, #12060a);
+  --l-line: color-mix(in srgb, var(--accent) 72%, transparent);
+  --l-line2: color-mix(in srgb, var(--accent) 34%, transparent);
+  --l-panel: color-mix(in srgb, var(--l-light) calc(var(--panel-a) * 100%), transparent);
+  --l-panel2: color-mix(in srgb, var(--l-light2) calc(var(--panel-a) * 100%), transparent);
+  --pearl: radial-gradient(circle at 38% 34%, #fff 0 1px, var(--l-pearl) 2.2px, var(--l-mid) 3.9px, var(--l-lo) 4.6px, transparent 5.1px);
+  --quilt: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cdefs%3E%3CradialGradient id='q' cx='.5' cy='.5' r='.5'%3E%3Cstop offset='0' stop-color='%23fff' stop-opacity='.22'/%3E%3Cstop offset='1' stop-color='%23fff' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M18 1L35 18L18 35L1 18Z' fill='url(%23q)'/%3E%3Cpath d='M0 18L18 0L36 18L18 36Z' fill='none' stroke='%237a2c42' stroke-opacity='.16' stroke-width='1.4' transform='translate(0 1)'/%3E%3Cpath d='M0 18L18 0L36 18L18 36Z' fill='none' stroke='%23fff' stroke-opacity='.6' stroke-width='.9' stroke-dasharray='2.2 1.6'/%3E%3Cg fill='%23fff' fill-opacity='.85'%3E%3Ccircle cx='18' cy='0' r='1.4'/%3E%3Ccircle cx='18' cy='36' r='1.4'/%3E%3Ccircle cx='0' cy='18' r='1.4'/%3E%3Ccircle cx='36' cy='18' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
+  --i-wave: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2.5 10h2v4h-2zM6.5 7h2v10h-2zM10.5 3.5h2v17h-2zM14.5 6h2v12h-2zM18.5 9h2v6h-2z'/%3E%3C/svg%3E"); --i-heart: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21.3l-1.5-1.3C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1C13.1 3.8 14.8 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.5 11.5z'/%3E%3C/svg%3E"); --i-stats: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 20h18v1.5H3z'/%3E%3Cpath d='M4.5 12h3.5v7H4.5zM10.2 5h3.6v14h-3.6zM16 9h3.5v10H16z'/%3E%3C/svg%3E");
+  --i-gear: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.47.47 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z'/%3E%3C/svg%3E"); --i-user: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='7.5' r='4.5'/%3E%3Cpath d='M3.5 21c0-4.7 3.8-7.5 8.5-7.5s8.5 2.8 8.5 7.5z'/%3E%3C/svg%3E"); --i-crown: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 22'%3E%3Cpath d='M2 17L1 5l6.5 5L13 2l5.5 8L25 5l-1 12z'/%3E%3Cpath d='M2.5 18.5h21V21h-21z'/%3E%3Ccircle cx='1' cy='4' r='1.8'/%3E%3Ccircle cx='13' cy='1.8' r='1.8'/%3E%3Ccircle cx='25' cy='4' r='1.8'/%3E%3C/svg%3E");
+  --l-search: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10.5' cy='10.5' r='6.3' fill='none' stroke='%237a4452' stroke-width='2'/%3E%3Cpath d='M15.3 15.3l5.2 5.2' stroke='%237a4452' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+:root[data-style="lolitta"] body {
+  font-family: var(--font-display);
+  background:
+    radial-gradient(900px 640px at 78% 8%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 62%),
+    radial-gradient(800px 600px at 8% 92%, color-mix(in srgb, var(--accent2) 30%, transparent), transparent 60%),
+    linear-gradient(170deg, #2c161a, #3b2026 50%, #1f0e12);
+}
+:root[data-style="lolitta"] .lodeco { display: block; position: absolute; pointer-events: none; }
+:root[data-style="lolitta"] .lodeco i { position: absolute; display: block; }
+:root[data-style="lolitta"] .lodeco svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* ---------- заголовок окна: корона и надпись с разрядкой ---------- */
+:root[data-style="lolitta"] .titlebar { background: linear-gradient(rgba(30, 12, 17, .6), rgba(30, 12, 17, 0)); }
+:root[data-style="lolitta"] .tbtitle { gap: 10px; padding-left: 14px; font-family: var(--font-display); }
+:root[data-style="lolitta"] .tbdot { width: 22px; height: 18px; border-radius: 0; box-shadow: none; background: linear-gradient(180deg, var(--l-hi), var(--l-mid) 55%, var(--l-lo)); -webkit-mask: var(--i-crown) center / contain no-repeat; mask: var(--i-crown) center / contain no-repeat; }
+:root[data-style="lolitta"] .tbbrand { font-size: 13px; font-weight: 400; letter-spacing: .16em; text-transform: uppercase; color: var(--l-hi); }
+:root[data-style="lolitta"] .tbsubtitle { font-size: 7.5px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
+:root[data-style="lolitta"] .tbctl button { color: var(--l-hi); }
+
+/* ---------- закладки: тёмные таблички в розовой рамке, активная — светлая с бантиком снизу ---------- */
+:root[data-style="lolitta"] .tabs { align-items: flex-start; gap: 14px; padding: 6px 6px 22px; margin-bottom: -14px; }
+:root[data-style="lolitta"] .tab {
+  position: relative; flex: none; min-width: 124px; max-width: 230px; height: 46px; padding: 0 24px; justify-content: center;
+  border-radius: 7px; border: 1px solid var(--l-line); color: var(--lo-on-tab, var(--l-hi)); text-shadow: var(--lo-on-tab-sh, none);
+  font-family: var(--font-display); font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+  background: linear-gradient(180deg, var(--l-btn), var(--l-btn2));
+  box-shadow: 0 0 0 2px rgba(20, 6, 10, .55), 0 0 0 3px var(--l-line2), inset 0 0 0 3px rgba(0,0,0,.18), inset 0 0 0 4px var(--l-line2), inset 0 1px 0 rgba(255,255,255,.12), 0 5px 12px rgba(0,0,0,.45);
+  transition: color .15s, border-color .15s, transform .18s;
+}
+:root[data-style="lolitta"] .tab::after { content: "✦"; position: absolute; top: -7px; right: -5px; font-size: 11px; line-height: 1; color: var(--l-hi); text-shadow: 0 0 6px var(--l-mid); }
+:root[data-style="lolitta"] .tab:hover { border-color: var(--l-mid); filter: brightness(1.12); transform: translateY(-1px); }
+:root[data-style="lolitta"] .tab.active {
+  color: var(--lo-on-tabact, var(--l-ink)); font-weight: 600; text-shadow: var(--lo-on-tabact-sh, 0 1px 0 rgba(255,255,255,.55)); border-color: var(--l-mid);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 75%, #fff), var(--accent));      /* фон — основной цвет, бантик — второй */
+  box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 3px var(--l-mid), inset 0 0 0 3px rgba(255,255,255,.3), inset 0 0 0 4px var(--l-line), 0 0 16px color-mix(in srgb, var(--accent) 40%, transparent), 0 5px 14px rgba(0,0,0,.45);
+}
+:root[data-style="lolitta"] .tab i { margin-left: 8px; font-size: 10px; opacity: .6; }
+:root[data-style="lolitta"] .tab .lo-tabbow { display: none; left: 50%; bottom: -19px; width: 44px; height: 36px; transform: translateX(-50%); --l-hi: var(--l2-hi); --l-lo: var(--l2-lo); filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+:root[data-style="lolitta"] .tab.active .lo-tabbow { display: block; }
+
+/* ---------- панели: общий вид (вход, всплывающие окна) ---------- */
+:root[data-style="lolitta"] .panel { border-radius: 14px; border: 1px solid var(--l-mid); background: rgba(44, 20, 27, .94); box-shadow: 0 0 0 3px rgba(20,6,10,.5), 0 0 0 4px var(--l-line2), 0 14px 34px rgba(0,0,0,.55); }
+
+/* ---------- боковая панель: стёганая розовая подушка с кружевом ---------- */
+:root[data-style="lolitta"] .side {
+  position: relative; padding: 28px 22px 44px; gap: 12px; border-radius: 16px; backdrop-filter: none;
+  border: 2px solid var(--l-mid);
+  background:
+    radial-gradient(circle at 50% 0, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px top 9px / 9px 5px repeat-x,
+    radial-gradient(circle at 50% 100%, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px bottom 9px / 9px 5px repeat-x,
+    radial-gradient(circle at 0 50%, var(--l-pearl) 0 2.4px, transparent 2.9px) left 9px top 10px / 5px 9px repeat-y,
+    radial-gradient(circle at 100% 50%, var(--l-pearl) 0 2.4px, transparent 2.9px) right 9px top 10px / 5px 9px repeat-y,
+    var(--quilt) center top / 36px 36px,
+    radial-gradient(120% 80% at 50% 0, rgba(255,255,255,.28), transparent 60%),
+    linear-gradient(175deg, var(--l-panel), var(--l-panel2));
+  box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 4px var(--l-line), 0 0 0 5px rgba(20,6,10,.5),
+    inset 0 0 0 5px color-mix(in srgb, var(--l-light) 80%, #fff), inset 0 0 0 6px var(--l-lo), inset 0 0 26px rgba(120, 45, 65, .28),
+    0 16px 36px rgba(0,0,0,.55);
+}
+:root[data-style="lolitta"] .side .search {
+  padding: 12px 16px 12px 44px; border-radius: 999px; color: var(--l-ink); font-family: var(--font-display); font-size: 15px;
+  border: 1px solid var(--l-lo);
+  background: var(--l-search) 16px center / 18px 18px no-repeat, linear-gradient(180deg, color-mix(in srgb, var(--l-light) 55%, #fff), var(--l-light));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--l-light) 50%, #fff), 0 0 0 3px var(--l-line2), inset 0 2px 5px rgba(110, 40, 60, .25);
+}
+:root[data-style="lolitta"] .side .search::placeholder { color: var(--l-ink2); }
+:root[data-style="lolitta"] .side .search:focus { border-color: var(--l-ink2); box-shadow: 0 0 0 2px color-mix(in srgb, var(--l-light) 50%, #fff), 0 0 0 3px var(--l-mid), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 2px 5px rgba(110, 40, 60, .25); }
+:root[data-style="lolitta"] .side .search + .nav { margin-top: 6px; }
+
+/* кнопки разделов: тёмный бархат в розовой окантовке, иконки — розовый металл */
+:root[data-style="lolitta"] .nav, :root[data-style="lolitta"] .chip, :root[data-style="lolitta"] .pill {
+  border-radius: 9px; color: var(--lo-on-btn, var(--text)); font-family: var(--font-display); letter-spacing: .02em;
+  border: 1px solid color-mix(in srgb, var(--l-mid) 75%, #fff);
+  background: linear-gradient(180deg, var(--l-btn), var(--l-btn2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 0 0 3px rgba(0,0,0,.14), inset 0 0 0 4px var(--l-line2), 0 3px 8px rgba(70, 20, 35, .45);
+  text-shadow: var(--lo-on-btn-sh, 0 1px 2px rgba(0,0,0,.45));
+  transition: transform .15s, box-shadow .2s, filter .15s;
+}
+:root[data-style="lolitta"] .chip, :root[data-style="lolitta"] .pill { border-radius: 999px; color: color-mix(in srgb, var(--lo-on-btn, var(--text)) 80%, transparent); }
+:root[data-style="lolitta"] .nav:hover:not(:disabled):not(.active), :root[data-style="lolitta"] .chip:hover, :root[data-style="lolitta"] .pill:hover { filter: brightness(1.15); color: var(--lo-on-btn, var(--text)); background: linear-gradient(180deg, var(--l-btn), var(--l-btn2)); }
+:root[data-style="lolitta"] .nav.active, :root[data-style="lolitta"] .chip.active, :root[data-style="lolitta"] .pill.active, :root[data-style="lolitta"] .stations .pill.active {
+  color: var(--lo-on-act, #fff); font-weight: 600; text-shadow: var(--lo-on-act-sh, 0 1px 2px color-mix(in srgb, var(--accent2) 80%, #000));
+  border-color: color-mix(in srgb, var(--l-hi) 70%, #fff);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--l-mid) 82%, #fff), color-mix(in srgb, var(--l-mid) 62%, var(--accent2)));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 0 0 3px rgba(255,255,255,.12), inset 0 0 0 4px color-mix(in srgb, var(--l-hi) 60%, transparent), 0 0 0 1px var(--l-lo), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:root[data-style="lolitta"] .side .nav { display: flex; align-items: center; gap: 14px; min-height: 50px; padding: 10px 16px; font-size: 16.5px; }
+:root[data-style="lolitta"] .side .nav:hover:not(.active) { transform: translateX(2px); }
+:root[data-style="lolitta"] .side .nav::before {
+  content: ""; width: 26px; height: 26px; flex: none;
+  background: var(--lo-ic, linear-gradient(180deg, var(--l-hi), var(--l-mid) 55%, var(--l-lo)));
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.4));
+}
+:root[data-style="lolitta"] .side .nav.active::before { background: var(--lo-on-act, #fff); }
+:root[data-style="lolitta"] #wave { --ic: var(--i-wave); }
+:root[data-style="lolitta"] #likes { --ic: var(--i-heart); }
+:root[data-style="lolitta"] #statsBtn { --ic: var(--i-stats); }
+:root[data-style="lolitta"] #settingsBtn { --ic: var(--i-gear); }
+:root[data-style="lolitta"] #profile { --ic: var(--i-user); }
+:root[data-style="lolitta"] #profile::before { width: 22px; height: 22px; }
+
+/* декор боковой панели: уголки, банты по бокам, камея, жемчужная нить с бантом снизу, розы в нижних углах */
+:root[data-style="lolitta"] .lo-side { inset: 0; z-index: 1; }
+:root[data-style="lolitta"] .lo-c { width: 46px; height: 46px; }
+:root[data-style="lolitta"] .lo-c.tl { left: -6px; top: -6px; }
+:root[data-style="lolitta"] .lo-c.tr { right: -6px; top: -6px; transform: scaleX(-1); }
+:root[data-style="lolitta"] .lo-c.bl { left: -6px; bottom: -6px; transform: scaleY(-1); }
+:root[data-style="lolitta"] .lo-c.br { right: -6px; bottom: -6px; transform: scale(-1); }
+:root[data-style="lolitta"] .lo-cameo .lo-bowl, :root[data-style="lolitta"] .lo-cameo .lo-bowr { top: 50%; width: 56px; height: 48px; margin-top: -34px; }
+:root[data-style="lolitta"] .lo-cameo .lo-bowl { left: -52px; transform: rotate(-16deg); }
+:root[data-style="lolitta"] .lo-cameo .lo-bowr { right: -52px; transform: rotate(16deg); }
+:root[data-style="lolitta"] .lo-side .lo-pearls { left: 26px; right: 26px; bottom: 15px; height: 11px; background: var(--pearl) left center / 10px 10px repeat-x; }
+:root[data-style="lolitta"] .lo-side .lo-bowb { left: 50%; bottom: -30px; width: 74px; height: 62px; transform: translateX(-50%); }
+:root[data-style="lolitta"] .lo-rose { width: 44px; height: 44px; }
+:root[data-style="lolitta"] .lo-side .lo-rose.rl { width: 58px; height: 58px; left: -18px; bottom: -14px; }
+:root[data-style="lolitta"] .lo-side .lo-rose.rr { width: 58px; height: 58px; right: -18px; bottom: -14px; transform: scaleX(-1); }
+:root[data-style="lolitta"] .side .spacer { position: relative; container-type: size; min-height: 0; }
+:root[data-style="lolitta"] .lo-cameo { inset: 0; }
+:root[data-style="lolitta"] .lo-cameo .lo-cam { left: 50%; top: 50%; width: 96px; height: 113px; transform: translate(-50%, -50%); filter: drop-shadow(0 4px 6px rgba(100, 35, 55, .35)); }
+@container (max-height: 130px) { :root[data-style="lolitta"] .lo-cameo { display: none; } }
+
+/* ---------- нижняя панель: светлый атлас, розы в углах, бант над паузой ---------- */
+:root[data-style="lolitta"] .player {
+  position: relative; padding: 24px 64px 16px; border-radius: 16px; backdrop-filter: none; color: var(--l-ink);
+  border: 2px solid var(--l-mid);
+  background:
+    radial-gradient(circle at 50% 0, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px top 9px / 9px 5px repeat-x,
+    radial-gradient(circle at 50% 100%, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px bottom 9px / 9px 5px repeat-x,
+    linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,0) 45%, rgba(130,50,70,.08)),
+    linear-gradient(90deg, var(--l-panel2), var(--l-panel) 30%, var(--l-panel) 70%, var(--l-panel2));
+  box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 4px var(--l-line), 0 0 0 5px rgba(20,6,10,.5),
+    inset 0 0 0 5px color-mix(in srgb, var(--l-light) 80%, #fff), inset 0 0 0 6px var(--l-lo), inset 0 0 22px rgba(120, 45, 65, .22),
+    0 -6px 30px rgba(0,0,0,.35);
+}
+:root[data-style="lolitta"] .player .meta b { color: var(--l-ink); font-size: 18px; font-weight: 500; letter-spacing: .01em; }
+:root[data-style="lolitta"] .player .meta span, :root[data-style="lolitta"] .player .meta .art { color: var(--l-ink2); font-size: 13px; letter-spacing: .04em; }
+:root[data-style="lolitta"] .player .meta .art:hover { color: var(--l-ink); }
+:root[data-style="lolitta"] .player .time { color: var(--l-ink2); font-size: 13px; }
+:root[data-style="lolitta"] .player .cover { width: 64px; height: 64px; border-radius: 4px; box-shadow: 0 0 0 2px var(--l-pearl), 0 0 0 3px var(--l-lo), 0 4px 10px rgba(90, 30, 45, .45); }
+:root[data-style="lolitta"] .player .pcenter { gap: 4px; }
+:root[data-style="lolitta"] .player .ctrls { gap: 22px; }
+:root[data-style="lolitta"] .player button:not(.playbtn) { color: var(--l-ink); }
+:root[data-style="lolitta"] .player button:not(.playbtn):hover { background: rgba(255,255,255,.4); }
+:root[data-style="lolitta"] .modebtn { color: var(--l-ink2); }
+:root[data-style="lolitta"] .modebtn.on { color: var(--accent2); background: rgba(255,255,255,.45); filter: none; box-shadow: 0 0 0 1px var(--l-line); }
+:root[data-style="lolitta"] .player .playbtn, :root[data-style="lolitta"] .fbtns .playbtn, :root[data-style="lolitta"] .wavebtn {
+  color: var(--l-ink); text-shadow: none;
+  background: radial-gradient(circle at 50% 28%, #fff 0, var(--l-light) 42%, var(--l-light2) 72%, var(--l-mid));
+  box-shadow: 0 0 0 2px var(--l-lo), 0 0 0 5px var(--l-pearl), 0 0 0 6px var(--l-lo), 0 0 0 9px var(--l-light2), 0 0 0 10px var(--l-line),
+    0 6px 16px rgba(90, 30, 45, .5), inset 0 -5px 10px rgba(140, 60, 80, .25), inset 0 3px 6px rgba(255,255,255,.75);
+}
+:root[data-style="lolitta"] .player .playbtn { width: 66px; height: 66px; margin: -4px 8px 0; }
+:root[data-style="lolitta"] .player .playbtn svg { width: 30px; height: 30px; }
+:root[data-style="lolitta"] .player .playbtn:hover, :root[data-style="lolitta"] .fbtns .playbtn:hover { filter: brightness(1.05); background: radial-gradient(circle at 50% 28%, #fff 0, var(--l-light) 48%, var(--l-light2) 76%, var(--l-mid)); }
+:root[data-style="lolitta"] .player .likebtn { color: var(--l-lo); }
+:root[data-style="lolitta"] .player .likebtn.on { color: color-mix(in srgb, var(--accent2) 70%, var(--accent)); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+/* дорожки в светлой панели — тёмно-розовые, бегунок — жемчужина */
+:root[data-style="lolitta"] .player input[type=range]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 4px; box-shadow: inset 0 1px 1px rgba(80, 20, 35, .25), 0 1px 0 rgba(255,255,255,.6);
+  background: linear-gradient(90deg, var(--l-lo) var(--p, 0%), color-mix(in srgb, var(--accent2) 22%, transparent) var(--p, 0%));
+}
+:root[data-style="lolitta"] input[type=range]::-webkit-slider-thumb {
+  width: 16px; height: 16px; margin-top: -6px;
+  background: radial-gradient(circle at 38% 32%, #fff 0 15%, var(--l-pearl) 45%, var(--l-mid) 100%);
+  box-shadow: 0 0 0 1px var(--l-lo), 0 0 0 3px color-mix(in srgb, var(--l-pearl) 55%, transparent), 0 1px 4px rgba(60, 15, 30, .5);
+}
+:root[data-style="lolitta"] input[type=range]::-webkit-slider-runnable-track { height: 4px; background: linear-gradient(90deg, var(--l-mid) var(--p, 0%), rgba(255,255,255,.18) var(--p, 0%)); }
+/* громкость: вертикальная, во всплывающей розовой карточке */
+:root[data-style="lolitta"] .volpop {
+  border-radius: 12px; border: 1px solid var(--l-mid); backdrop-filter: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--l-light) 70%, #fff), var(--l-light2));
+  box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 3px var(--l-line), inset 0 0 0 3px rgba(255,255,255,.35), 0 8px 22px rgba(0,0,0,.45);
+}
+:root[data-style="lolitta"] .volval { color: var(--l-ink); font-size: 13px; }
+:root[data-style="lolitta"] .lo-player { inset: 0; z-index: 1; }
+:root[data-style="lolitta"] .lo-player .lo-c { width: 42px; height: 42px; }
+:root[data-style="lolitta"] .lo-player .lo-rose.rl { width: 74px; height: 74px; left: -20px; bottom: -13px; }
+:root[data-style="lolitta"] .lo-player .lo-rose.rr { width: 74px; height: 74px; right: -20px; bottom: -13px; transform: scaleX(-1); }
+:root[data-style="lolitta"] .nav:focus-visible, :root[data-style="lolitta"] .tab:focus-visible { outline: 2px solid var(--l-hi); outline-offset: 2px; }
+:root[data-style="lolitta"] .nav:focus:not(:focus-visible) { outline: none; }
+:root[data-style="lolitta"] .lo-player .lo-rose.rt { width: 38px; height: 38px; right: -12px; top: -14px; transform: rotate(-30deg); }
+:root[data-style="lolitta"] .lo-player .lo-bowt { left: 50%; top: -38px; width: 86px; height: 72px; transform: translateX(-50%); z-index: 2; }
+:root[data-style="lolitta"] .lo-player .lo-pearls { left: calc(50% - 150px); width: 300px; top: 3px; height: 10px; background: var(--pearl) left center / 10px 10px repeat-x; }
+
+/* ---------- основное окно: прозрачное, заголовок с медальоном ---------- */
+:root[data-style="lolitta"] .main { padding-right: 22px; }
+:root[data-style="lolitta"] .main::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 8px; }
+:root[data-style="lolitta"] .head h2 {
+  font-family: var(--font-display); font-size: 46px; font-weight: 600; letter-spacing: .01em;
+  color: var(--l-hi); background: linear-gradient(180deg, #fff5f5 10%, var(--l-hi) 45%, var(--lo-title, var(--l-mid)) 95%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(50, 15, 25, .65)) drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 40%, transparent));
+  text-shadow: none; animation: none;
+}
+:root[data-style="lolitta"] .lo-medal { display: none; position: relative; flex: none; width: 78px; height: 78px; margin: -4px 0 -4px -4px; filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+:root[data-style="lolitta"] .main:not(.wavemode):is([data-page="likes"], [data-page="statsBtn"], [data-page="settingsBtn"]) .lo-medal { display: block; }
+:root[data-style="lolitta"] .main[data-page="likes"] .lo-medal { --ic: var(--i-heart); }
+:root[data-style="lolitta"] .main[data-page="statsBtn"] .lo-medal { --ic: var(--i-stats); }
+:root[data-style="lolitta"] .main[data-page="settingsBtn"] .lo-medal { --ic: var(--i-gear); }
+:root[data-style="lolitta"] .lo-medal .lo-mi { position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; transform: translate(-50%, -48%); background: linear-gradient(180deg, var(--lo-on-mid, #fff), color-mix(in srgb, var(--lo-on-mid, #fff) 82%, var(--l-mid))); -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat; }
+:root[data-style="lolitta"] .head { gap: 14px; margin: 2px 0 16px; }
+:root[data-style="lolitta"] .headimg { box-shadow: 0 0 0 2px var(--l-pearl), 0 0 0 4px var(--l-lo), 0 0 0 5px var(--l-line), 0 6px 16px rgba(0,0,0,.5); }
+:root[data-style="lolitta"] .sub, :root[data-style="lolitta"] .status { color: var(--muted); font-style: italic; }
+:root[data-style="lolitta"] .round { background: linear-gradient(180deg, var(--l-btn), var(--l-btn2)); border: 1px solid var(--l-line); color: var(--lo-on-tab, var(--l-hi)); }
+
+/* список: прозрачный, в двойной филигранной рамке; тонкие разделители, сердечки-медальоны */
+:root[data-style="lolitta"] .cols { position: relative; }
+:root[data-style="lolitta"] .list {
+  padding: 12px 20px 12px 16px; border-radius: 6px;
+  border: 1px solid var(--l-line); outline: 1px solid var(--l-line2); outline-offset: 4px;
+  background: transparent;
+}
+:root[data-style="lolitta"] .list:empty { border: 0; outline: 0; padding: 0; }
+:root[data-style="lolitta"] .list li {
+  gap: 18px; padding: 3px 10px 3px 10px; border-radius: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  transition: background .2s;
+}
+:root[data-style="lolitta"] .list li:last-child { border-bottom: 0; }
+:root[data-style="lolitta"] .list img { width: 41px; height: 41px; border-radius: 3px; box-shadow: 0 0 0 1px var(--l-line2), 0 2px 6px rgba(0,0,0,.4); }
+:root[data-style="lolitta"] .list li .t { font-size: 16px; color: #fbf0f1; letter-spacing: .01em; }
+:root[data-style="lolitta"] .list li .a { font-size: 13px; color: var(--muted); }
+:root[data-style="lolitta"] .list li:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 85%); }
+:root[data-style="lolitta"] .list li.playing { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 28%, transparent), color-mix(in srgb, var(--accent) 6%, transparent) 80%, transparent); box-shadow: inset 3px 0 0 var(--l-mid); }
+:root[data-style="lolitta"] .list li.playing .t { color: #fff; text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 80%, transparent); }
+:root[data-style="lolitta"] .list .likebtn {
+  width: 32px; height: 32px; opacity: 1; color: var(--lo-on-tab, var(--l-hi));
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--l-btn) 70%, var(--l-mid)), var(--l-btn2));
+  box-shadow: 0 0 0 1px var(--l-line), 0 2px 5px rgba(0,0,0,.4);
+  transition: transform .15s, box-shadow .15s;
+}
+:root[data-style="lolitta"] .list .likebtn svg { width: 17px; height: 17px; }
+:root[data-style="lolitta"] .list .likebtn.on {
+  color: var(--lo-on-mid, #fff7f7); filter: none;
+  background: radial-gradient(circle at 50% 30%, var(--l-hi), var(--l-mid) 58%, var(--l-lo));
+  box-shadow: 0 0 0 1px var(--l-lo), 0 0 0 3px color-mix(in srgb, var(--l-pearl) 45%, transparent), 0 2px 6px rgba(0,0,0,.45), inset 0 1px 2px rgba(255,255,255,.6);
+}
+:root[data-style="lolitta"] .list .likebtn.on svg { filter: drop-shadow(0 1px 1px rgba(110, 40, 60, .55)); }
+:root[data-style="lolitta"] .list .likebtn:hover { transform: scale(1.08); }
+:root[data-style="lolitta"] .lo-frame { inset: -5px -5px -5px -5px; z-index: 1; }
+:root[data-style="lolitta"] .cols:has(> .list:is([hidden], :empty)) .lo-frame,
+:root[data-style="lolitta"] .cols:has(> .lastAlbum:not([hidden])) .lo-frame { display: none; }
+:root[data-style="lolitta"] .lo-frame .lo-c { width: 40px; height: 40px; }
+:root[data-style="lolitta"] .lo-frame .lo-c.tl { left: -6px; top: -6px; }
+:root[data-style="lolitta"] .lo-frame .lo-c.tr { right: -6px; top: -6px; }
+:root[data-style="lolitta"] .lo-frame .lo-c.bl { left: -6px; bottom: -6px; }
+:root[data-style="lolitta"] .lo-frame .lo-c.br { right: -6px; bottom: -6px; }
+:root[data-style="lolitta"] .lo-frame .lo-bowtr { right: -12px; top: -24px; width: 60px; height: 52px; transform: rotate(24deg); }
+:root[data-style="lolitta"] .lo-frame .lo-gem { width: 22px; height: 14px; }
+:root[data-style="lolitta"] .lo-frame .lo-gem.t { left: 50%; top: -7px; transform: translateX(-50%); }
+:root[data-style="lolitta"] .lo-frame .lo-gem.b { left: 50%; bottom: -7px; transform: translateX(-50%); }
+:root[data-style="lolitta"] .lo-frame .lo-gem.r { right: -11px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+:root[data-style="lolitta"] .lo-frame .lo-gem.l { left: -11px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+:root[data-style="lolitta"] .more { padding: 9px 26px; }
+
+/* ---------- карточки (статистика, настройки, альбомы): прозрачные, в тонкой розовой рамке ---------- */
+:root[data-style="lolitta"] .card, :root[data-style="lolitta"] .lastAlbum, :root[data-style="lolitta"] .simcard, :root[data-style="lolitta"] .stylecard {
+  background: transparent; border-radius: 10px; border: 1px solid var(--l-line); outline: 1px solid var(--l-line2); outline-offset: -6px; box-shadow: none;
+}
+:root[data-style="lolitta"] .card { padding: 20px 22px; }
+:root[data-style="lolitta"] .simcard:hover, :root[data-style="lolitta"] .lastAlbum:hover, :root[data-style="lolitta"] .stylecard:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: var(--l-mid); }
+:root[data-style="lolitta"] .stylecard.on { border-color: var(--l-hi); outline-color: var(--l-line); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+:root[data-style="lolitta"] .card h3, :root[data-style="lolitta"] .stbox h3, :root[data-style="lolitta"] .similar h3, :root[data-style="lolitta"] .simcard b, :root[data-style="lolitta"] .lastAlbum b, :root[data-style="lolitta"] .stalbum .ttl, :root[data-style="lolitta"] .nptitle, :root[data-style="lolitta"] .ftitle, :root[data-style="lolitta"] .statcard b {
+  font-family: var(--font-display); color: var(--l-hi); letter-spacing: .02em;
+}
+:root[data-style="lolitta"] .card h3::before { content: "♡ "; color: var(--l-mid); }
+:root[data-style="lolitta"] .stbox h3 { border-bottom: 1px solid var(--l-line2); }
+:root[data-style="lolitta"] .stbox h3::before { content: none; }
+:root[data-style="lolitta"] .stlegend li { border-top-color: color-mix(in srgb, var(--accent) 20%, transparent); }
+:root[data-style="lolitta"] .statcard svg { color: var(--l-mid); }
+:root[data-style="lolitta"] .stperson img, :root[data-style="lolitta"] .stpic { box-shadow: 0 0 0 2px var(--l-pearl), 0 0 0 3px var(--l-lo); }
+:root[data-style="lolitta"] .list img, :root[data-style="lolitta"] .simcard img, :root[data-style="lolitta"] .lastAlbum img, :root[data-style="lolitta"] .stalbum img { border-radius: 4px; }
+:root[data-style="lolitta"] .drop { border-radius: 10px; border-color: var(--l-line); color: var(--l-hi); background: linear-gradient(rgba(40, 16, 23, .6), rgba(40, 16, 23, .6)), var(--drop-img, none) center / cover; }
+:root[data-style="lolitta"] .switch input:checked + i { background: linear-gradient(90deg, var(--l-mid), var(--l-lo)); }
+:root[data-style="lolitta"] .stations, :root[data-style="lolitta"] .stcardhover {
+  border-radius: 14px; border: 1px solid var(--l-mid); background: rgba(44, 20, 27, .96); backdrop-filter: none;
+  box-shadow: 0 0 0 3px rgba(20,6,10,.5), 0 0 0 4px var(--l-line2), 0 12px 28px rgba(0,0,0,.6);
+}
+:root[data-style="lolitta"] .search:not(.side .search), :root[data-style="lolitta"] input[type=password] { border-radius: 999px; border: 1px solid var(--l-line); background: rgba(0,0,0,.25); }
+
+/* ---------- Моя волна и полноэкранный плеер ---------- */
+:root[data-style="lolitta"] .wavebtn { width: 116px; height: 116px; }
+:root[data-style="lolitta"] .wavebtn::before {
+  content: ""; position: absolute; inset: -20px; border-radius: 50%; pointer-events: none;
+  background: var(--pearl) center / 11px 11px;
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 11px), #000 calc(100% - 10.5px));
+  mask: radial-gradient(closest-side, transparent calc(100% - 11px), #000 calc(100% - 10.5px));
+}
+:root[data-style="lolitta"] .wavebtn.playing { animation: loBreath 2.8s ease-in-out infinite; }
+@keyframes loBreath { 50% { filter: drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 70%, transparent)); } }
+@media (prefers-reduced-motion: reduce) { :root[data-style="lolitta"] .wavebtn.playing { animation: none; } }
+:root[data-style="lolitta"] .nptitle { text-shadow: 0 2px 0 rgba(50, 15, 25, .6), 0 0 18px color-mix(in srgb, var(--accent) 50%, transparent); }
+:root[data-style="lolitta"] .ln.on { text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 80%, transparent); }
+:root[data-style="lolitta"] .fcover { border-radius: 6px; box-shadow: 0 0 0 3px var(--l-pearl), 0 0 0 5px var(--l-lo), 0 20px 50px rgba(0,0,0,.5); }
+
+@media (max-width: 880px) {
+  :root[data-style="lolitta"] .side { padding: 22px 14px 40px; }
+  :root[data-style="lolitta"] .side .nav { font-size: 14px; gap: 10px; padding: 8px 12px; min-height: 42px; }
+  :root[data-style="lolitta"] .player { padding: 22px 30px 14px; }
+  :root[data-style="lolitta"] .head h2 { font-size: 32px; }
+  :root[data-style="lolitta"] .lo-medal { width: 60px; height: 60px; }
+}
+
+/* ---------- Lolitta: анимации ---------- */
+/* закреплённая закладка при наведении покачивается, как подвеска на ленте, а искорка в углу вспыхивает */
+:root[data-style="lolitta"] .tab:has(> i):hover { transform-origin: 50% -8px; animation: loSwing .95s ease-in-out; }
+:root[data-style="lolitta"] .tab:has(> i):hover::after { animation: loTwinkle .95s ease-in-out; }
+@keyframes loSwing {
+  0% { transform: translateY(-1px) rotate(0); }
+  22% { transform: translateY(-3px) rotate(-3.2deg); }
+  48% { transform: translateY(-2px) rotate(2.4deg); }
+  72% { transform: translateY(-1px) rotate(-1.1deg); }
+  100% { transform: translateY(-1px) rotate(0); }
+}
+@keyframes loTwinkle {
+  0%, 100% { transform: scale(1) rotate(0); }
+  45% { transform: scale(1.9) rotate(90deg); color: #fff; text-shadow: 0 0 10px var(--l-mid), 0 0 3px #fff; }
+}
+/* Моя волна играет: жемчужное кольцо вокруг кнопки медленно вращается, из-за кнопки всплывают сердечки */
+:root[data-style="lolitta"] .wavebtn.playing::before { animation: loSpin 16s linear infinite; }
+@keyframes loSpin { to { transform: rotate(360deg); } }
+:root[data-style="lolitta"] .lo-hearts { left: 50%; top: 50%; width: 0; height: 0; z-index: 2; }
+:root[data-style="lolitta"] .lo-hearts i {
+  left: -9px; top: -9px; width: 18px; height: 18px; opacity: 0;
+  background: linear-gradient(180deg, var(--l-hi), var(--l-mid) 60%, var(--l-lo));
+  -webkit-mask: var(--i-heart) center / contain no-repeat; mask: var(--i-heart) center / contain no-repeat;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 70%, transparent));
+}
+:root[data-style="lolitta"] .wavebtn.playing ~ .lo-hearts i { animation: loFloat 4.2s ease-out infinite; animation-delay: var(--d); }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(1) { --x0: -26px; --x: -70px; --r: -24deg; --s: .9; --d: 0s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(2) { --x0: 22px; --x: 64px; --r: 20deg; --s: .7; --d: .55s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(3) { --x0: -8px; --x: -18px; --r: -8deg; --s: 1.15; --d: 1.1s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(4) { --x0: 30px; --x: 96px; --r: 28deg; --s: .6; --d: 1.6s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(5) { --x0: -32px; --x: -104px; --r: -30deg; --s: .75; --d: 2.1s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(6) { --x0: 10px; --x: 30px; --r: 12deg; --s: 1; --d: 2.6s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(7) { --x0: -18px; --x: -46px; --r: -16deg; --s: .65; --d: 3.1s; }
+:root[data-style="lolitta"] .lo-hearts i:nth-child(8) { --x0: 18px; --x: 52px; --r: 18deg; --s: .85; --d: 3.6s; }
+@keyframes loFloat {
+  0% { opacity: 0; transform: translate(var(--x0), -46px) scale(calc(var(--s) * .4)); }
+  14% { opacity: .95; }
+  70% { opacity: .7; }
+  100% { opacity: 0; transform: translate(var(--x), -175px) rotate(var(--r)) scale(var(--s)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style="lolitta"] .tab:has(> i):hover, :root[data-style="lolitta"] .tab:has(> i):hover::after,
+  :root[data-style="lolitta"] .wavebtn.playing::before, :root[data-style="lolitta"] .wavebtn.playing ~ .lo-hearts i { animation: none; }
+}
+
+/* =================== ОБЩАЯ ГЕОМЕТРИЯ НИЖНЕЙ ПАНЕЛИ =================== */
+/* Во всех стилях одинаковы отступы панели, размер и место обложки, размеры кнопок и расстояния между ними.
+   Стили меняют только внешний вид (цвета, рамки, тени). Правила стоят в самом конце файла и поэтому перекрывают стилевые. */
+:root[data-style] .player { padding: 22px 64px 16px 36px; gap: 18px; border-width: 1px; border-style: solid; }      /* рамка везде 1px, чтобы содержимое не сдвигалось */
+:root[data-style="steam"] .player { border-color: transparent; }
+:root[data-style="lolitta"] .player { box-shadow: inset 0 0 0 1px var(--l-mid), 0 0 0 2px var(--l-btn2), 0 0 0 4px var(--l-line), 0 0 0 5px rgba(20,6,10,.5),
+    inset 0 0 0 5px color-mix(in srgb, var(--l-light) 80%, #fff), inset 0 0 0 6px var(--l-lo), inset 0 0 22px rgba(120, 45, 65, .22), 0 -6px 30px rgba(0,0,0,.35); }
+:root[data-style] .player .pinfo { gap: 14px; }
+:root[data-style] .player .meta b { font-size: 20px; }
+:root[data-style] .player .meta span, :root[data-style] .player .meta .art { font-size: 15px; }
+:root[data-style] .player .cover { width: 56px; height: 56px; }
+:root[data-style] .player .pcenter { gap: 6px; }
+:root[data-style] .player .ctrls { gap: 18px; }
+:root[data-style] .player button { width: 40px; height: 40px; margin: 0; }
+:root[data-style] .player .playbtn { width: 56px; height: 56px; margin: 0; }
+:root[data-style] .player .playbtn svg { width: 26px; height: 26px; }
+:root[data-style] .player .ctrls button:not(.playbtn) svg, :root[data-style] .player .likebtn svg { width: 20px; height: 20px; }
+:root[data-style] .player #volBtn svg { width: 22px; height: 22px; }
+@media (max-width: 880px) {
+  :root[data-style] .player { padding: 18px 30px 12px; gap: 12px; grid-template-columns: minmax(110px, 190px) 1fr 40px; }
+  :root[data-style] .player .cover { width: 44px; height: 44px; }
+  :root[data-style] .player .ctrls { gap: 10px; }
+  :root[data-style] .player button { width: 36px; height: 36px; }
+  :root[data-style] .player .playbtn { width: 48px; height: 48px; }
+}
+@media (max-height: 680px) { :root[data-style] .player { padding-top: 16px; } }
+
+/* =================== ВЫКЛЮЧАТЕЛЬ АНИМАЦИЙ =================== */
+/* «Анимации интерфейса» выключены в настройках — ни одна анимация и ни один плавный переход не проигрываются ни в одном стиле */
+:root[data-anim="off"] *, :root[data-anim="off"] *::before, :root[data-anim="off"] *::after {
+  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+}
+
+/* Lolitta: панели на страницах «Статистика» и «Настройки» слегка затемнены, чтобы текст читался на ярких фонах */
+:root[data-style="lolitta"] .settings > .card, :root[data-style="lolitta"] .stats .card { background: rgba(30, 11, 17, .34); }
+/* оверлей: быстрые кнопки по клику на обложку */
+.fquick { position: absolute; z-index: 3; display: none; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 999px; background: rgba(10,6,18,.72); backdrop-filter: blur(8px); box-shadow: 0 6px 24px rgba(0,0,0,.5); transform: translate(-50%, -50%); }
+.full.qc .fquick { display: flex; }
+.fquick button { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.fquick button:hover { background: rgba(255,255,255,.14); }
+.fquick .playbtn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent, #0b0618); }
+.fcover { cursor: pointer; }
+
+/* жанры и настроения: пять вкладок (Жанры, Поджанры, Настроение, Характер, Язык) всегда в одном ряду и внутри окна */
+:root[data-style] .stations { width: min(420px, 92vw); box-sizing: border-box; }
+:root[data-style] .stations .chips { display: flex; flex-wrap: nowrap; gap: 3px; min-width: 0; }
+:root[data-style] .stations .chip { flex: 1 1 auto; min-width: 0; padding: 5px 4px; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
