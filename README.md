@@ -22,7 +22,48 @@ Yandex Music Desktop — неофициальный сторонний клие�
 
 Для Windows доступен установщик `.exe`.
 
-Для Linux в дальнейшем могут быть доступны соответствующие сборки.
+Для Linux в дальнейшем могут быть доступны соответствующие сборки (`.deb`, `.rpm`, `.AppImage`). Пока их можно собрать самостоятельно — см. ниже.
+
+### Сборка под Linux
+
+Нужны Rust, Node.js и системные библиотеки.
+
+Debian / Ubuntu / Mint:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
+  libayatana-appindicator3-dev librsvg2-dev gstreamer1.0-plugins-good gstreamer1.0-libav
+```
+
+Fedora:
+
+```bash
+sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libxdo-devel \
+  libappindicator-gtk3-devel librsvg2-devel gstreamer1-plugins-good
+sudo dnf group install "c-development"
+```
+
+Arch / Manjaro:
+
+```bash
+sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl xdotool \
+  libappindicator-gtk3 librsvg gst-plugins-good gst-libav
+```
+
+Затем `npm install` и `npm run tauri build`.
+
+Особенности Linux:
+
+* **Трей.** Значок в трее работает через AppIndicator. В GNOME для этого нужно расширение
+  «AppIndicator and KStatusNotifierItem Support» (в Ubuntu оно включено по умолчанию). Щелчок по значку
+  в Linux всегда открывает меню — окно открывается пунктом «Открыть». Если значка в трее нет совсем,
+  окно можно вернуть, просто запустив приложение ещё раз.
+* **Вход.** Токен хранится в системной связке ключей (GNOME Keyring, KWallet, KeePassXC). Если связки ключей
+  в системе нет, токен сохраняется в файл в папке настроек приложения, доступный только вашему пользователю.
+* **Обои рабочего стола.** Поддерживаются GNOME, KDE Plasma, Cinnamon, MATE, Xfce, LXDE/LXQt, а также
+  feh, nitrogen, hyprpaper и sway.
+* **Звук и видеообои** воспроизводятся через GStreamer — без пакетов `gstreamer…-good` / `-libav` музыка и видео не заиграют.
+* Режим глубокой экономии в трее (заморозка страницы) есть только в Windows: в Linux у движка окна такой функции нет.
 
 ## Возможности
 

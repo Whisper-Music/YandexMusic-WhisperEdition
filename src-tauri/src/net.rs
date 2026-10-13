@@ -1,15 +1,4 @@
-// src-tauri/src/net.rs — сетевые команды с ограничениями. Заменяет http_request и fetch_bytes из lib.rs.
-//
-// Что изменилось по сравнению с «универсальным прокси»:
-//  * только HTTPS, без логина в адресе и без нестандартных портов;
-//  * только домены Яндекса (граница — точка: «evilyandex.net» не пройдёт), перенаправления проверяются так же;
-//  * только методы GET и POST и короткий белый список заголовков;
-//  * заголовок Authorization берётся ТОЛЬКО из системного хранилища и ТОЛЬКО для api.music.yandex.net —
-//    токен больше не передаётся из JavaScript и не может уйти на другой адрес;
-//  * таймауты и жёсткий предел размера ответа (читаем кусками, а не целиком в память).
 
-use keyring::Entry;
-// reqwest в проекте приходит через tauri-plugin-http (отдельной зависимости в Cargo.toml нет), поэтому берём его оттуда
 use tauri_plugin_http::reqwest::{self, redirect, Client, Method, Url};
 use serde::Serialize;
 use std::{collections::HashMap, sync::OnceLock, time::Duration};
@@ -21,11 +10,10 @@ const API_HOST: &str = "api.music.yandex.net";
 const TRUSTED_SUFFIXES: [&str; 5] = ["yandex.net", "yandex.ru", "yandex.com", "yandex.by", "yandex.kz"];
 const ALLOWED_HEADERS: [&str; 5] = ["user-agent", "x-yandex-music-client", "content-type", "accept", "accept-language"];
 
-const MAX_API_BODY: usize = 8 * 1024 * 1024; // ответ API / текста песни — до 8 МБ
-const MAX_AUDIO_BODY: usize = 120 * 1024 * 1024; // аудиофайл — до 120 МБ
-const MAX_REQUEST_BODY: usize = 1024 * 1024; // тело запроса от интерфейса — до 1 МБ
+const MAX_API_BODY: usize = 8 * 1024 * 1024;
+const MAX_AUDIO_BODY: usize = 120 * 1024 * 1024;
+const MAX_REQUEST_BODY: usize = 1024 * 1024;
 
-/// Принадлежит ли хост доверенным доменам (сам домен или поддомен через точку).
 pub fn host_trusted(host: &str) -> bool {
     let h = host.to_ascii_lowercase();
     TRUSTED_SUFFIXES
@@ -33,8 +21,6 @@ pub fn host_trusted(host: &str) -> bool {
         .any(|s| h == *s || h.ends_with(&format!(".{s}")))
 }
 
-/// Единая строгая политика адреса: https, без логина/пароля, без явного порта, только домены Яндекса.
-/// Ею проверяются запросы интерфейса, КАЖДОЕ перенаправление и навигация окна входа.
 pub fn url_ok(url: &Url) -> bool {
     url.scheme() == "https"
         && url.username().is_empty()
@@ -61,15 +47,10 @@ fn checked_url(raw: &str) -> Result<Url, String> {
     }
 }
 
-/// Токен из системного хранилища (в JavaScript он не передаётся).
 fn read_token() -> Option<String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-        .ok()?
-        .get_password()
-        .ok()
+    crate::secret::get().ok().flatten()
 }
 
-/// `same_host`: перенаправления разрешены только в пределах того же хоста (для запросов с токеном).
 fn build_client(total_secs: u64, same_host: bool) -> Client {
     Client::builder()
         .connect_timeout(Duration::from_secs(10))
@@ -93,7 +74,6 @@ fn build_client(total_secs: u64, same_host: bool) -> Client {
         .expect("не удалось создать HTTP-клиент")
 }
 
-/// Клиент для запросов с токеном: уйти перенаправлением с api.music.yandex.net нельзя.
 fn auth_client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| build_client(30, true))
@@ -109,8 +89,6 @@ fn media_client() -> &'static Client {
     C.get_or_init(|| build_client(180, false))
 }
 
-/// Белый список операций API Яндекс Музыки, которые реально нужны интерфейсу.
-/// `*` — один сегмент пути из букв, цифр и `-_:.`; строка запроса проверяется отдельно.
 const API_ROUTES: &[(&str, &str)] = &[
     ("GET", "/account/status"),
     ("GET", "/users/*/likes/tracks"),
@@ -118,7 +96,7 @@ const API_ROUTES: &[(&str, &str)] = &[
     ("POST", "/users/*/likes/tracks/remove"),
     ("POST", "/tracks"),
     ("GET", "/tracks/*/download-info"),
-    ("GET", "/get-mp3/**"), // сюда ведёт downloadInfoUrl из download-info: сведения о файле трека
+    ("GET", "/get-mp3/**"),
     ("GET", "/tracks/*/lyrics"),
     ("GET", "/albums/*/with-tracks"),
     ("GET", "/artists/*/brief-info"),
@@ -126,11 +104,19 @@ const API_ROUTES: &[(&str, &str)] = &[
     ("GET", "/artists/*/tracks"),
     ("GET", "/search"),
     ("GET", "/rotor/stations/list"),
-    ("GET", "/rotor/wave/settings"), // настроения, характер и язык Моей волны
-    ("GET", "/genres"),              // список жанров (stations/list теперь отдаёт пустой список)
+    ("GET", "/rotor/wave/settings"),
+    ("GET", "/genres"),
     ("POST", "/rotor/session/new"),
     ("POST", "/rotor/session/*/tracks"),
     ("POST", "/rotor/session/*/feedback"),
+    ("GET", "/users/*/playlists/list"),
+    ("GET", "/users/*/playlists/*"),
+    ("POST", "/users/*/playlists/create"),
+    ("POST", "/users/*/playlists/*/name"),
+    ("POST", "/users/*/playlists/*/change"),
+    ("POST", "/users/*/playlists/*/change-relative"),
+    ("POST", "/users/*/playlists/*/delete"),
+    ("GET", "/users/*/playlists/*/recommendations"),
 ];
 
 fn segment_ok(s: &str, max: usize) -> bool {
@@ -145,7 +131,6 @@ fn api_route_allowed(method: &Method, url: &Url) -> bool {
         }
         let p: Vec<&str> = pat.split('/').skip(1).collect();
         let seg = |a: &str, b: &str| if a == "*" { segment_ok(b, 128) && b != "." && b != ".." } else { a == b };
-        // `**` в конце шаблона — один или больше сегментов; там лежит подписанный ключ (~1000 символов)
         if p.last() == Some(&"**") {
             let fixed = p.len() - 1;
             return path.len() > fixed
@@ -157,7 +142,6 @@ fn api_route_allowed(method: &Method, url: &Url) -> bool {
     })
 }
 
-/// Читает тело ответа кусками и обрывает загрузку, как только лимит превышен.
 async fn read_limited(mut resp: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
     if let Some(len) = resp.content_length() {
         if len > max as u64 {
@@ -194,8 +178,6 @@ pub async fn http_request(
         _ => return Err("Метод не разрешён".into()),
     };
 
-    // К API Яндекс Музыки — только операции из белого списка (с токеном и без ухода на другой хост).
-    // Остальные домены Яндекса (файл текста песни, сведения о загрузке трека) — только GET, без тела и без токена.
     let is_api = url.host_str() == Some(API_HOST);
     if is_api {
         if !api_route_allowed(&method, &url) {
@@ -207,13 +189,11 @@ pub async fn http_request(
 
     let mut req = if is_api { auth_client() } else { api_client() }.request(method, url.clone());
 
-    // от интерфейса принимаем только безопасные заголовки; Authorization из JavaScript игнорируется
     for (k, v) in headers.unwrap_or_default() {
         if ALLOWED_HEADERS.contains(&k.to_ascii_lowercase().as_str()) && v.len() <= 256 {
             req = req.header(k.as_str(), v.as_str());
         }
     }
-    // токен подставляем сами и только для API Яндекс Музыки
     if is_api {
         if let Some(t) = read_token() {
             req = req.header("Authorization", format!("OAuth {t}"));
@@ -235,10 +215,8 @@ pub async fn http_request(
     })
 }
 
-/// Скачивает аудио для визуализатора. Возвращает «сырые» байты (ArrayBuffer на стороне JS).
-#[tauri::command]
-pub async fn fetch_bytes(url: String) -> Result<tauri::ipc::Response, String> {
-    let url = checked_url(&url)?;
+pub async fn fetch_checked(url: &str) -> Result<Vec<u8>, String> {
+    let url = checked_url(url)?;
     let resp = media_client()
         .get(url)
         .send()
@@ -247,8 +225,12 @@ pub async fn fetch_bytes(url: String) -> Result<tauri::ipc::Response, String> {
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status().as_u16()));
     }
-    let bytes = read_limited(resp, MAX_AUDIO_BODY).await?;
-    Ok(tauri::ipc::Response::new(bytes))
+    read_limited(resp, MAX_AUDIO_BODY).await
+}
+
+#[tauri::command]
+pub async fn fetch_bytes(url: String) -> Result<tauri::ipc::Response, String> {
+    Ok(tauri::ipc::Response::new(fetch_checked(&url).await?))
 }
 
 #[cfg(test)]
@@ -278,7 +260,19 @@ mod tests {
         assert!(a(Method::GET, "/search?text=a&type=all&page=0"));
         assert!(!a(Method::POST, "/account/status"));
         assert!(!a(Method::GET, "/account/settings"));
-        assert!(!a(Method::POST, "/users/123/playlists/create"));
+        assert!(a(Method::POST, "/users/123/playlists/create"));
+        assert!(a(Method::GET, "/users/123/playlists/list"));
+        assert!(a(Method::GET, "/users/123/playlists/1005"));
+        assert!(a(Method::POST, "/users/123/playlists/1005/name"));
+        assert!(a(Method::POST, "/users/123/playlists/1005/change"));
+        assert!(a(Method::POST, "/users/123/playlists/1005/change-relative"));
+        assert!(a(Method::POST, "/users/123/playlists/1005/delete"));
+        assert!(a(Method::GET, "/users/123/playlists/1005/recommendations"));
+        assert!(!a(Method::POST, "/users/123/playlists/1005/visibility"));
+        assert!(!a(Method::POST, "/users/123/playlists/1005"));
+        assert!(!a(Method::GET, "/users/123/playlists/1005/delete"));
+        assert!(!a(Method::GET, "/users/123/playlists/1005/name/extra"));
+        assert!(!a(Method::POST, "/users/123/playlists/../create"));
         assert!(!a(Method::GET, "/users/123/likes/tracks/extra"));
         assert!(!a(Method::GET, "/tracks/a%2Fb/lyrics"));
         assert!(!a(Method::GET, "/users//likes/tracks"));

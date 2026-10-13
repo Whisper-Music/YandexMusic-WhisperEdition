@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-win-set-fullscreen"
+description = "Enables the win_set_fullscreen command without any pre-configured scope."
+commands.allow = ["win_set_fullscreen"]
+
+[[permission]]
+identifier = "deny-win-set-fullscreen"
+description = "Denies the win_set_fullscreen command without any pre-configured scope."
+commands.deny = ["win_set_fullscreen"]

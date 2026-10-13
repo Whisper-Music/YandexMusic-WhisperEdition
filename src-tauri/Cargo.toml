@@ -20,13 +20,28 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-http = "2"
 md5 = "0.8.1"
-keyring = { version = "3", features = ["windows-native"] }
+keyring = "3"
 getrandom = "0.3"
+# второй запуск приложения не открывает новую копию, а показывает уже запущенное окно
+# (в Linux это единственный способ вернуть окно из трея, если в оболочке нет значков трея)
+tauri-plugin-single-instance = "2"
 
+
+# режим экономии в трее: доступ к движку окна WebView2 (версии те же, что уже тянет Tauri — ничего нового не скачивается)
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_System_ProcessStatus", "Win32_System_Threading"] }
+keyring = { version = "3", features = ["windows-native"] }
+
+# Linux: токен хранится в системной «связке ключей» (GNOME Keyring / KWallet через Secret Service).
+# vendored — libdbus собирается вместе с приложением, отдельный dev-пакет не нужен.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
