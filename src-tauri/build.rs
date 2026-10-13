@@ -1,5 +1,3 @@
-// Собственные Rust-команды объявлены в манифесте приложения: без него Tauri разрешает их любому окну.
-// С манифестом каждая команда доступна только окнам, которым её явно выдали в capabilities/*.json.
 const COMMANDS: &[&str] = &[
     "md5_hex",
     "win_minimize",
@@ -7,6 +5,7 @@ const COMMANDS: &[&str] = &[
     "win_is_max",
     "win_close",
     "win_drag",
+    "win_set_fullscreen",
     "tray_playing",
     "http_request",
     "fetch_bytes",
@@ -15,6 +14,12 @@ const COMMANDS: &[&str] = &[
     "token_store",
     "token_clear",
     "yandex_login",
+    "download_track",
+    "downloaded_ids",
+    "download_dir_get",
+    "download_dir_pick",
+    "download_dir_reset",
+    "download_dir_open",
 ];
 
 fn main() {

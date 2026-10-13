@@ -11,7 +11,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html, body { height: 100%; margin: 0; overflow: hidden; overflow: clip; }   /* clip: окно нельзя сдвинуть даже программно (например, фокусом на скрытом поле) */
+html, body { height: 100%; margin: 0; overflow: hidden; overflow: clip; }
 body {
   font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   color: var(--text);
@@ -34,7 +34,7 @@ body {
 }
 .panel {
   background: rgba(15, 10, 32, var(--panel-a));
-  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%);
   border-radius: 22px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   box-shadow:
@@ -58,11 +58,11 @@ body {
 .round { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.08); font-size: 18px; }
 
 button { font: inherit; color: var(--text); cursor: pointer; border: 0; background: none; padding: 0; }
-.search, input[type=password] {
+.search, input[type=password], .field {
   width: 100%; padding: 10px 14px; border-radius: 999px; outline: none; color: var(--text);
   border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
 }
-.search:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); }
+.search:focus, input[type=password]:focus, .field:focus { border-color: var(--accent); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); }
 .nav { padding: 10px 14px; border-radius: 999px; text-align: left; background: rgba(255,255,255,.06); transition: background .15s; }
 .nav:hover:not(:disabled):not(.active) { background: rgba(255,255,255,.13); }
 .nav.active { color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 55%, transparent); }
@@ -79,7 +79,6 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 .art { cursor: pointer; }
 .art:hover { color: var(--accent); text-decoration: underline; }
 
-/* плеер */
 .pinfo { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .meta { display: flex; flex-direction: column; min-width: 0; overflow: hidden; white-space: nowrap; }
 .meta b { overflow: hidden; text-overflow: ellipsis; }
@@ -91,7 +90,7 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 .volpop {
   position: absolute; bottom: 100%; left: 50%; padding: 12px 10px 14px; border-radius: 16px;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  background: rgba(18, 12, 38, 0.94); backdrop-filter: blur(18px);
+  background: rgba(18, 12, 38, 0.94); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   box-shadow: 0 0 var(--glow) color-mix(in srgb, var(--accent) 35%, transparent);
   opacity: 0; visibility: hidden; transform: translate(-50%, 6px); transition: opacity .15s, transform .15s, visibility .15s;
@@ -107,7 +106,6 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 svg { display: block; }
 #seek { flex: 1; min-width: 0; }
 
-/* ползунки */
 input[type=range] { -webkit-appearance: none; appearance: none; background: none; height: 18px; cursor: pointer; margin: 0; }
 input[type=range]::-webkit-slider-runnable-track {
   height: 6px; border-radius: 6px;
@@ -118,7 +116,6 @@ input[type=range]::-webkit-slider-thumb {
   background: #fff; box-shadow: 0 0 10px var(--accent);
 }
 
-/* Моя волна */
 .main.wavemode { overflow: hidden; display: flex; flex-direction: column; }
 .main.wavemode .head { flex: none; }
 .main.wavemode .wavepage { flex: 1; min-height: 0; }
@@ -140,7 +137,6 @@ input[type=range]::-webkit-slider-thumb {
 @media (prefers-reduced-motion: reduce) { .wavebtn.playing { animation: none; } }
 .wavehint { margin: 0; color: var(--muted); text-align: center; max-width: min(420px, 100%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Настройки */
 .settings { display: flex; flex-direction: column; gap: 14px; max-width: 560px; padding-bottom: 20px; }
 .card { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 .card h3 { margin: 0; font-size: 15px; font-weight: 600; }
@@ -170,7 +166,6 @@ input[type=color]::-webkit-color-swatch { border: 2px solid rgba(255,255,255,.45
 .manual p { margin: 0; font-size: 13px; line-height: 1.5; }
 a { color: var(--accent); }
 
-/* шапка, фильтры, колонки */
 .headtext { min-width: 0; }
 .sub { color: var(--muted); margin-top: 6px; font-size: 14px; }
 .headimg.sq { border-radius: 16px; }
@@ -191,12 +186,10 @@ a { color: var(--accent); }
 .list img.rnd { border-radius: 50%; }
 #pTitle.link { cursor: pointer; } #pTitle.link:hover { text-decoration: underline; }
 
-/* визуализатор */
 .stage { position: relative; flex: 1 1 0; min-height: 0; width: 100%; max-width: 640px; display: grid; place-items: center; }
 #viz { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .stage.viz .wavebtn.playing { animation: none; }
-/* переключатель и кнопка палитры */
-.switch { position: relative; display: flex; align-items: center; gap: 12px; cursor: pointer; }   /* position: relative — скрытый чекбокс остаётся внутри строки, иначе при клике он утягивал за собой всё окно */
+.switch { position: relative; display: flex; align-items: center; gap: 12px; cursor: pointer; }
 .switch input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
 .switch i { flex: none; width: 46px; height: 26px; border-radius: 999px; background: rgba(255,255,255,.14); position: relative; transition: background .15s; }
 .switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
@@ -204,17 +197,15 @@ a { color: var(--accent); }
 .switch input:checked + i::after { transform: translateX(20px); }
 .palette { text-align: center; }
 
-/* жанры и настроения */
-.stwrap { position: relative; display: block; width: 0; min-width: 100%; margin-top: 8px; }   /* ширина = ширине заголовка */
+.stwrap { position: relative; display: block; width: 0; min-width: 100%; margin-top: 8px; }
 .stbtn { width: 100%; padding: 8px 16px; font-size: 14px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stations { position: absolute; top: calc(100% + 8px); left: 0; z-index: 6; width: min(340px, 70vw); max-height: 50vh; padding: 12px 14px; border-radius: 22px; display: flex; flex-direction: column; gap: 8px; background: rgba(15, 10, 32, calc(var(--panel-a) * .8)); backdrop-filter: blur(18px) saturate(140%); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: 0 0 calc(var(--glow) * .5) color-mix(in srgb, var(--accent) 14%, transparent); }
+.stations { position: absolute; top: calc(100% + 8px); left: 0; z-index: 6; width: min(340px, 70vw); max-height: 50vh; padding: 12px 14px; border-radius: 22px; display: flex; flex-direction: column; gap: 8px; background: rgba(15, 10, 32, calc(var(--panel-a) * .8)); -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: 0 0 calc(var(--glow) * .5) color-mix(in srgb, var(--accent) 14%, transparent); }
 .stations .chips { margin: 0; flex: none; }
 .stgrid { flex: 1; min-height: 0; overflow-y: auto; align-content: flex-start; display: flex; flex-wrap: wrap; gap: 5px; scrollbar-width: thin; }
 .pill { padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,.07); font-size: 13px; transition: background .15s; }
 .pill:hover { background: rgba(255,255,255,.14); }
 .pill.active { color: var(--on-accent, #0b0618); text-shadow: var(--on-accent-shadow, none); font-weight: 600; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 
-/* компактные окна */
 @media (max-width: 960px) {
   .app { grid-template-columns: 188px 1fr; }
   .head h2 { font-size: 32px; }
@@ -244,7 +235,6 @@ a { color: var(--accent); }
   .player { padding-top: 14px; }
 }
 
-/* лайки и режимы воспроизведения */
 .likebtn { flex: none; margin-left: auto; opacity: .5; color: var(--muted); transition: opacity .15s, color .15s; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; }
 .likebtn svg { width: 20px; height: 20px; }
 .list li:hover .likebtn { opacity: 1; }
@@ -258,7 +248,6 @@ a { color: var(--accent); }
 .modebtn:disabled { opacity: .3; cursor: default; }
 .modebtn:disabled:hover { background: none; }
 
-/* закладки (вкладки вверху) */
 .tabs { overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab { display: flex; align-items: center; gap: 8px; flex: none; max-width: 220px; white-space: nowrap; }
@@ -267,14 +256,12 @@ a { color: var(--accent); }
 .tab i:hover { opacity: 1; }
 .pin { margin-left: auto; flex: none; }
 
-/* текущий трек на странице волны */
 .nowplay { display: flex; flex-direction: column; gap: 2px; text-align: center; max-width: min(620px, 100%); }
 .nptitle { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent); }
 .nptitle.link { cursor: pointer; }
 .nptitle.link:hover { text-decoration: underline; }
 .npartist { font-size: 18px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* похожие альбомы */
 .similar { margin: 26px 0 12px; }
 .similar h3 { margin: 0 0 12px; font-size: 18px; }
 .simgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
@@ -284,7 +271,6 @@ a { color: var(--accent); }
 .simcard b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .simcard span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 
-/* полноэкранный плеер */
 #cover { cursor: pointer; transition: filter .15s; }
 #cover:hover { filter: brightness(1.15); }
 .full { position: fixed; inset: 0; z-index: 40; overflow: hidden; background: #0a0612; }
@@ -324,7 +310,6 @@ a { color: var(--accent); }
 .fbtns .playbtn:hover { filter: brightness(1.12); }
 @media (max-width: 880px) { .fwrap { padding: 22px 22px 16px; } }
 
-/* список жанров: тихий, компактный */
 .stations .chips { gap: 4px; }
 .stations .chip { padding: 4px 10px; font-size: 12px; background: none; box-shadow: none; color: var(--muted); font-weight: 400; }
 .stations .chip:hover { background: rgba(255,255,255,.08); }
@@ -334,13 +319,11 @@ a { color: var(--accent); }
 .stations .pill { color: var(--muted); }
 .stations .pill:hover { color: var(--text); }
 
-/* вкладки списка: одна строка, отделена линией от содержимого */
 .stations { gap: 10px; }
 .stations .chips { flex-wrap: nowrap; gap: 4px; margin: 0; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
 .stations .chip { flex: 1 1 auto; padding: 5px 6px; text-align: center; white-space: nowrap; }
 .stations .pill.reset { flex: 1 0 100%; text-align: center; }
 
-/* крестик сброса жанра */
 .stbtn { display: block; }
 .streset { position: absolute; right: 6px; top: 8px; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; display: grid; place-items: center; background: rgba(255,255,255,.14); }
 .streset:hover { background: rgba(255,255,255,.28); }
@@ -349,28 +332,22 @@ a { color: var(--accent); }
 .stbtn.album .lbl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .stwrap.album .streset { top: 50%; transform: translateY(-50%); }
 
-/* название трека — в одной строке с заголовком «Моя волна» */
 .headinfo { flex: 1; min-width: 0; }
-/* страница волны: заголовок слева, название трека строго по центру страницы (над кнопкой Play) */
-/* боковые колонки одинаковой ширины (--hw = ширина надписи «Моя волна», считает скрипт): центр строго по оси страницы */
 .main.wavemode .head { display: grid; grid-template-columns: var(--hw, 200px) minmax(0, 1fr) var(--hw, 200px); column-gap: 16px; align-items: start; }
 .main.wavemode .head h2 { white-space: nowrap; }
 .main.wavemode .headtext { grid-column: 1; width: var(--hw, 200px); justify-self: start; min-width: 0; }
 .main.wavemode .headinfo { grid-column: 2; padding-top: 2px; }
 
-/* полноэкранный плеер: Play строго по центру, сердечко сбоку от группы кнопок */
 .fbtns { position: relative; }
 .fbtns .likebtn { position: absolute; right: calc(50% + 108px); top: 50%; transform: translateY(-50%); }
 
-/* длинное название на странице волны: до двух строк вместо обрезки */
 .nptitle { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; overflow: hidden; text-wrap: balance; }
 @media (max-width: 880px) { .nptitle { font-size: 24px; } .npartist { font-size: 16px; } }
 @media (max-height: 680px) { .nptitle { font-size: 20px; } .npartist { font-size: 15px; } }
 
 @media (max-width: 880px) { .stbtn { font-size: 13px; padding: 7px 12px; } }
 
-/* своя верхняя панель окна */
-.titlebar { position: fixed; top: 0; left: 0; right: 0; height: 34px; z-index: 60; display: flex; justify-content: space-between; align-items: center; user-select: none; background: linear-gradient(rgba(5, 3, 12, .45), rgba(5, 3, 12, 0)); }
+.titlebar { position: fixed; top: 0; left: 0; right: 0; height: 34px; z-index: 60; display: flex; justify-content: space-between; align-items: center; -webkit-user-select: none; user-select: none; background: linear-gradient(rgba(5, 3, 12, .45), rgba(5, 3, 12, 0)); }
 .tbtitle { display: flex; align-items: center; gap: 9px; padding-left: 16px; font-size: 12px; letter-spacing: .02em; color: var(--muted); pointer-events: none; }
 .tbtext { display: flex; flex-direction: column; justify-content: center; gap: 2px; line-height: 1.05; }
 .tbbrand { font-size: 10px; font-weight: 700; }
@@ -384,7 +361,6 @@ a { color: var(--accent); }
 .fclose { top: 46px; }
 .fwrap { padding-top: 52px; }
 
-/* ---------- выбор стиля в настройках ---------- */
 .stylepick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .stylecard { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
 .stylecard:hover { background: rgba(255,255,255,.08); }
@@ -396,7 +372,6 @@ a { color: var(--accent); }
 .sp-royal { border-radius: 3px; background: linear-gradient(180deg, #1d1713, #0e0b09); box-shadow: inset 0 0 0 1px #c9a24b, inset 0 0 0 4px #0e0b09, inset 0 0 0 5px rgba(201,162,75,.6); }
 .tab small { display: none; }
 
-/* =================== КОРОЛЕВСКИЙ СТИЛЬ =================== */
 :root[data-style="royal"] {
   --text: #eadfc6; --muted: #a39579;
   --font-display: "Cinzel", "Trajan Pro", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
@@ -413,9 +388,8 @@ a { color: var(--accent); }
     repeating-linear-gradient(135deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px),
     linear-gradient(180deg, #0d0b0c, #17120f 60%, #0b090a);
 }
-/* панели: золотая рамка, вторая линия внутри, готические углы и вставки по центру */
 :root[data-style="royal"] .panel {
-  position: relative; border-radius: 6px; backdrop-filter: blur(10px);
+  position: relative; border-radius: 6px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   background: linear-gradient(180deg, rgba(27, 21, 17, var(--panel-a)), rgba(14, 11, 9, var(--panel-a)));
   border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
   box-shadow: 0 10px 36px rgba(0,0,0,.55), 0 0 var(--glow) color-mix(in srgb, var(--accent) 22%, transparent);
@@ -423,7 +397,6 @@ a { color: var(--accent); }
 :root[data-style="royal"] .panel::before { content: ""; position: absolute; inset: 6px; border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius: 3px; pointer-events: none; }
 :root[data-style="royal"] .side { padding: 30px 28px; }
 :root[data-style="royal"] .player { padding: 26px 36px 16px; }
-/* надписи и кнопки */
 :root[data-style="royal"] .head h2 { font-family: var(--font-display); font-weight: 700; letter-spacing: .04em; color: #f0e2b6; text-shadow: 0 2px 0 rgba(0,0,0,.7), 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent); }
 :root[data-style="royal"] .nptitle, :root[data-style="royal"] .ftitle { font-family: var(--font-display); letter-spacing: .03em; text-shadow: 0 2px 0 rgba(0,0,0,.7); }
 :root[data-style="royal"] .nav, :root[data-style="royal"] .chip, :root[data-style="royal"] .pill { border-radius: 3px; background: transparent; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); letter-spacing: .04em; }
@@ -433,7 +406,7 @@ a { color: var(--accent); }
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent2) 85%, #000), color-mix(in srgb, var(--accent2) 55%, #000));
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.45);
 }
-:root[data-style="royal"] .search, :root[data-style="royal"] input[type=password] { border-radius: 3px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: rgba(0,0,0,.3); font-family: inherit; }
+:root[data-style="royal"] .search, :root[data-style="royal"] input[type=password], :root[data-style="royal"] .field { border-radius: 3px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: rgba(0,0,0,.3); font-family: inherit; }
 :root[data-style="royal"] .search:focus { box-shadow: 0 0 0 1px var(--accent); }
 :root[data-style="royal"] .player .playbtn, :root[data-style="royal"] .wavebtn, :root[data-style="royal"] .fbtns .playbtn {
   color: #1a120a; background: radial-gradient(circle at 35% 30%, #f3e2a2, var(--accent) 55%, color-mix(in srgb, var(--accent) 45%, #000));
@@ -453,12 +426,11 @@ a { color: var(--accent); }
 :root[data-style="royal"] .tbsubtitle { color: var(--accent2); }
 :root[data-style="royal"] .tbdot { border-radius: 0; transform: rotate(45deg); background: var(--accent); box-shadow: none; }
 :root[data-style="royal"] .titlebar { background: linear-gradient(rgba(5, 3, 3, .6), rgba(5, 3, 3, 0)); }
-/* готический угловой узор: роза-окно в углу, аркада стрельчатых окон и шпили вдоль краёв; часть рамки, под содержимым, зеркально в четырёх углах */
 :root[data-style="royal"] .panel { isolation: isolate; --fs: 98px; }
 :root[data-style="royal"] .player { --fs: 68px; }
 :root[data-style="royal"] .panel::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
-  background: var(--accent);      /* ровно основной цвет — как и у линий рамки */
+  background: var(--accent);
   opacity: .85;
   -webkit-mask-image: var(--f-tl), var(--f-tr), var(--f-bl), var(--f-br);
   mask-image: var(--f-tl), var(--f-tr), var(--f-bl), var(--f-br);
@@ -467,11 +439,10 @@ a { color: var(--accent); }
   -webkit-mask-position: left top, right top, left bottom, right bottom;
   mask-position: left top, right top, left bottom, right bottom;
 }
-/* верхняя панель: ровные знамёна на карнизе; основной цвет (--accent) задаёт ткань, второй (--accent2) — контур знамён */
 :root[data-style="royal"] { --notch: 24px; }
 :root[data-style="royal"] .tabs {
   align-items: flex-start; gap: 12px; padding: 10px 0 12px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent) 45%, color-mix(in srgb, var(--accent) 60%, transparent)) top / 100% 5px no-repeat;   /* только основной цвет: чёрный даёт чёрную полосу, а не серую */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent) 45%, color-mix(in srgb, var(--accent) 60%, transparent)) top / 100% 5px no-repeat;
 }
 :root[data-style="royal"] .tab {
   position: relative; isolation: isolate; transform-origin: 50% 0; transition: transform .35s ease;
@@ -493,10 +464,8 @@ a { color: var(--accent); }
 :root[data-style="royal"] .tab.active { color: #fff; background: none; box-shadow: none; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 65%, transparent)) drop-shadow(0 5px 5px rgba(0,0,0,.5)); }
 :root[data-style="royal"] .tab.active::after { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 68%, #1a0c0c), color-mix(in srgb, var(--accent) 36%, #0d0606)); }
 
-/* ---------- неон: анимации и верхняя панель ---------- */
-/* верхняя панель: фон — тёмный оттенок основного цвета (всегда темнее него), обводка и надписи — дополнительный цвет */
 :root[data-style="neon"] { --tab-bg: color-mix(in srgb, var(--accent) 24%, #07040f); }
-:root[data-style="neon"] .tabs { padding: 14px 18px 16px 14px; margin: -12px -14px -10px; gap: 10px; }      /* запас под свечение и подъём вкладок */
+:root[data-style="neon"] .tabs { padding: 14px 18px 16px 14px; margin: -12px -14px -10px; gap: 10px; }
 :root[data-style="neon"] .tab {
   padding: 6px 15px; background: var(--tab-bg); color: var(--accent2); border: 1px solid var(--accent2);
   transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .25s, background .25s;
@@ -516,17 +485,15 @@ a { color: var(--accent); }
   50%      { box-shadow: 0 0 16px color-mix(in srgb, var(--accent2) 62%, transparent), inset 0 0 12px color-mix(in srgb, var(--accent2) 26%, transparent); }
 }
 
-/* кнопки: сдвиг и свечение при наведении, «нажатие», переливающаяся активная кнопка */
 :root[data-style="neon"] .nav { transition: background .15s, transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .2s; }
 :root[data-style="neon"] .nav:hover:not(:disabled):not(.active) { transform: translateX(3px); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent); }
 :root[data-style="neon"] .nav:active:not(:disabled) { transform: scale(.98); }
 :root[data-style="neon"] .nav.active { background-size: 220% 100%; animation: neonSheen 7s ease-in-out infinite alternate; }
 @keyframes neonSheen { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
 
-/* список треков: плавное появление первых строк, сдвиг и подсветка при наведении */
 :root[data-style="neon"] .list li {
   transition: background .15s, transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .2s;
-  animation: neonRise .38s cubic-bezier(.2, .8, .2, 1) backwards;      /* backwards: после показа анимация не мешает hover */
+  animation: neonRise .38s cubic-bezier(.2, .8, .2, 1) backwards;
 }
 :root[data-style="neon"] .list li:nth-child(n+16) { animation: none; }
 :root[data-style="neon"] .list li:nth-child(2) { animation-delay: 28ms; }
@@ -549,7 +516,6 @@ a { color: var(--accent); }
 :root[data-style="neon"] .list li:hover img { transform: scale(1.06); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); }
 @keyframes neonRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-/* заголовок «дышит» мягким свечением; пока играет музыка, обложка и кнопка пуска пульсируют */
 :root[data-style="neon"] .head h2 { animation: neonTitle 5s ease-in-out infinite; }
 @keyframes neonTitle {
   0%, 100% { text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 50%, transparent); }
@@ -567,20 +533,18 @@ a { color: var(--accent); }
   100% { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 0 transparent; }
 }
 
-/* тем, кто отключил анимации в системе, всё это не показываем */
 @media (prefers-reduced-motion: reduce) {
   :root[data-style="neon"] *, :root[data-style="neon"] *::before, :root[data-style="neon"] *::after { animation: none !important; transition-duration: .01ms !important; }
 }
 
-/* ---------- страница «Статистика» ---------- */
 .stats { display: flex; flex-direction: column; gap: 16px; padding-bottom: 20px; }
 .stats > div { display: flex; flex-direction: column; gap: 16px; }
-.statcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }      /* карточки одного размера */
+.statcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .statcard { flex-direction: row; align-items: center; gap: 16px; padding: 16px 20px; }
 .statcard svg { width: 34px; height: 34px; flex: none; color: var(--accent); }
 .statcard small { display: block; font-size: 13px; color: var(--muted); }
 .statcard b { display: block; margin-top: 2px; font-size: 22px; font-weight: 600; }
-.statgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }      /* два блока одного размера */
+.statgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .statgrid .stbox { height: 100%; min-height: 480px; }
 .stbox { gap: 12px; }
 .stbox h3 { font-size: 18px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.08); }
@@ -609,17 +573,15 @@ a { color: var(--accent); }
 .stlegend .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stlegend .pct { margin-left: auto; color: var(--muted); }
 
-/* королевский стиль: линии везде красятся одинаково — чистым цветом темы, без подмешивания белого и чёрного */
 :root[data-style="royal"] .player input[type=range]::-webkit-slider-runnable-track,
-:root[data-style="royal"] .fseek input[type=range]::-webkit-slider-runnable-track {      /* полоса проигрывателя — второй цвет */
+:root[data-style="royal"] .fseek input[type=range]::-webkit-slider-runnable-track {
   background: linear-gradient(90deg, var(--accent2) var(--p, 0%), rgba(255,255,255,.16) var(--p, 0%));
 }
 :root[data-style="royal"] .player input[type=range]::-webkit-slider-thumb,
 :root[data-style="royal"] .fseek input[type=range]::-webkit-slider-thumb { box-shadow: 0 0 10px var(--accent2); }
-:root[data-style="royal"] .stbox h3 { border-bottom-color: color-mix(in srgb, var(--accent) 28%, transparent); }          /* разделители в статистике */
+:root[data-style="royal"] .stbox h3 { border-bottom-color: color-mix(in srgb, var(--accent) 28%, transparent); }
 :root[data-style="royal"] .stlegend li { border-top-color: color-mix(in srgb, var(--accent) 22%, transparent); }
 
-/* любимые исполнители: круглые портреты в ряд, как в Яндекс Музыке */
 .stpeople { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px; padding-top: 4px; }
 .stperson { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; cursor: pointer; }
 .stperson img { display: block; width: 100%; max-width: 190px; aspect-ratio: 1; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.08); box-shadow: 0 0 0 1px rgba(255,255,255,.1); transition: transform .2s; }
@@ -666,12 +628,9 @@ a { color: var(--accent); }
 .stcardhover small { display: block; font-size: 12px; color: var(--muted); }
 :root[data-style="royal"] .stcardhover { border-radius: 4px; background: rgba(16,12,10,.97); }
 
-
-/* ---------- королевский стиль: основное окно ---------- */
 :root[data-style="royal"] .main::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, #1a1410); border-radius: 0; }
 :root[data-style="royal"] .main::-webkit-scrollbar-track { background: rgba(0,0,0,.25); }
 
-/* заголовок страницы: золотая линия с ромбом посередине */
 :root[data-style="royal"] .main:not(.wavemode) .head {
   position: relative; margin: 4px 0 22px; padding-bottom: 18px;
   background:
@@ -685,8 +644,6 @@ a { color: var(--accent); }
 :root[data-style="royal"] .sub { font-style: italic; letter-spacing: .03em; }
 :root[data-style="royal"] .status { font-style: italic; }
 
-/* список треков: строки рукописной книги с номерами и тонкими линиями */
-/* список треков: тонкие линии между строками (без номеров) */
 :root[data-style="royal"] .list li {
   position: relative; gap: 14px; padding: 8px 14px 8px 22px; border-radius: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
@@ -697,7 +654,6 @@ a { color: var(--accent); }
 :root[data-style="royal"] .list li:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 80%); }
 :root[data-style="royal"] .list img { outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 2px; }
 
-/* выделенный (играющий) трек: золотая плашка-знамя, ромб вместо номера, линии сверху и снизу */
 :root[data-style="royal"] .list li.playing {
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent) 6%, transparent) 75%, transparent);
   box-shadow: inset 4px 0 0 var(--accent);
@@ -712,7 +668,6 @@ a { color: var(--accent); }
 @keyframes royalPulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { :root[data-style="royal"] body.is-playing .list li.playing::before { animation: none; } }
 
-/* заголовки разделов с орнаментальной линией */
 :root[data-style="royal"] .similar h3 { display: flex; align-items: center; gap: 14px; font-family: var(--font-display); letter-spacing: .06em; color: #efe3c0; }
 :root[data-style="royal"] .similar h3::before, :root[data-style="royal"] .similar h3::after { content: ""; height: 1px; flex: 1; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 55%, transparent)); }
 :root[data-style="royal"] .similar h3::after { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), transparent); }
@@ -720,7 +675,6 @@ a { color: var(--accent); }
 :root[data-style="royal"] .similar h3::before { max-width: 60px; }
 :root[data-style="royal"] .stbox h3, :root[data-style="royal"] .card h3 { font-family: var(--font-display); letter-spacing: .06em; color: #efe3c0; }
 
-/* карточки: двойная рамка */
 :root[data-style="royal"] .card, :root[data-style="royal"] .lastAlbum, :root[data-style="royal"] .simcard {
   outline: 1px solid color-mix(in srgb, var(--accent) 18%, transparent); outline-offset: -5px;
 }
@@ -732,9 +686,6 @@ a { color: var(--accent); }
 :root[data-style="royal"] .stpic { outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; }
 :root[data-style="royal"] .stplay { border-radius: 50%; }
 
-/* =================== СТИМПАНК =================== */
-/* тёмная бронза: тонкие двойные рамки, уголки с одной заклёпкой, неподвижные шестерни в углах.
-   Основной цвет — бронза рамок, иконок и заклёпок; второй — заполнение полосы проигрывателя. Без шума и почти без анимаций. */
 .sp-steam { border-radius: 2px; background: linear-gradient(180deg, #241b13, #120d09); box-shadow: inset 0 0 0 1px #9a7444, inset 0 0 0 5px #120d09, inset 0 0 0 6px rgba(154,116,68,.45); }
 :root[data-style="steam"] {
   --text: #e6d5b5; --muted: #9c876a;
@@ -744,8 +695,8 @@ a { color: var(--accent); }
   --m: color-mix(in srgb, var(--accent) 80%, #2a1c10);
   --m-hi: color-mix(in srgb, var(--accent) 60%, #fff3dc);
   --m-lo: color-mix(in srgb, var(--accent) 40%, #0a0604);
-  --ln: color-mix(in srgb, var(--accent) 60%, transparent);          /* внешняя линия рамки */
-  --ls: color-mix(in srgb, var(--accent) 26%, transparent);          /* внутренняя, тонкая */
+  --ln: color-mix(in srgb, var(--accent) 60%, transparent);
+  --ls: color-mix(in srgb, var(--accent) 26%, transparent);
   --plate-a: rgba(30, 23, 16, var(--panel-a)); --plate-b: rgba(14, 10, 7, var(--panel-a));
   --rivet: radial-gradient(circle at 50% 50%, var(--m-hi) 0 1.1px, var(--m) 2.6px, var(--m-lo) 4.2px, #050302 4.8px, transparent 5.4px);
   --search-ic: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10.5' cy='10.5' r='6' fill='none' stroke='%23a98458' stroke-width='2'/%3E%3Cpath d='M15 15l5 5' stroke='%23a98458' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
@@ -758,10 +709,9 @@ a { color: var(--accent); }
     linear-gradient(180deg, #120d09, #19120c 55%, #0d0906);
 }
 
-/* ---------- рама: внешняя линия, внутренняя линия, уголки и по одной заклёпке в каждом углу ---------- */
 :root[data-style="steam"] .panel,
 :root[data-style="steam"] .list {
-  position: relative; isolation: isolate; border-radius: 3px; backdrop-filter: blur(6px);
+  position: relative; isolation: isolate; border-radius: 3px; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   border: 1px solid var(--ln);
   background:
     var(--rivet) left 4px top 4px / 12px 12px no-repeat,
@@ -786,7 +736,6 @@ a { color: var(--accent); }
 :root[data-style="steam"] .side { padding: 26px 22px; }
 :root[data-style="steam"] .player { padding: 22px 70px 18px; }
 
-/* шестерни: неподвижные, видна четверть, лежат под содержимым */
 :root[data-style="steam"] .list::after {
   content: ""; position: absolute; z-index: -1; pointer-events: none; width: var(--q); height: var(--q); opacity: .8;
   background: radial-gradient(circle at 30% 25%, var(--m-hi), var(--m) 40%, var(--m-lo));
@@ -795,13 +744,10 @@ a { color: var(--accent); }
 }
 :root[data-style="steam"] .list::after { --q: 40px; --gx: 0px; --gy: 0px; right: 0; bottom: 0; opacity: .55; }
 
-
-/* боковая и нижняя панели со срезанными углами: рама рисуется на подложке (::before),
-   чтобы срез не обрезал всплывающее окно громкости */
-:root[data-style="steam"] .side, :root[data-style="steam"] .player { background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+:root[data-style="steam"] .side, :root[data-style="steam"] .player { background: none; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 :root[data-style="steam"] .side::before, :root[data-style="steam"] .player::before {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  border: 1px solid var(--ln); backdrop-filter: blur(6px);
+  border: 1px solid var(--ln); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
   background:
     linear-gradient(135deg, transparent 50%, var(--m) 50%, var(--m) calc(50% + 2.5px), transparent calc(50% + 2.5px)) left 0 top 0 / 16px 16px no-repeat,
@@ -832,17 +778,14 @@ a { color: var(--accent); }
   background-origin: border-box;
 }
 
-
 :root[data-style="steam"] .player { padding: 22px 40px 18px; }
 
-/* ---------- заголовок окна ---------- */
 :root[data-style="steam"] .titlebar { background: linear-gradient(rgba(8, 5, 2, .7), rgba(8, 5, 2, 0)); }
 :root[data-style="steam"] .tbtitle { font-family: var(--font-display); letter-spacing: .16em; text-transform: uppercase; color: var(--m-hi); }
 :root[data-style="steam"] .tbbrand { color: var(--m-hi); }
 :root[data-style="steam"] .tbsubtitle { color: var(--muted); }
 :root[data-style="steam"] .tbdot { border-radius: 0; transform: rotate(45deg); background: linear-gradient(135deg, var(--m-hi), var(--m-lo)); box-shadow: 0 0 0 1px #050302; }
 
-/* ---------- закладки: тонкий рельс сверху и бронзовые таблички (отступы между ними прежние) ---------- */
 :root[data-style="steam"] .tabs {
   align-items: center; gap: 16px; padding: 16px 0 14px;
   background:
@@ -856,8 +799,6 @@ a { color: var(--accent); }
   font-family: var(--font-display); font-size: 12.5px; font-weight: 600; text-shadow: 0 1px 1px #000;
   transition: color .15s;
 }
-/* форма билетика: в углах вогнутые полукруглые вырезы; окантовка и внутренняя линия повторяют вырез.
-   Цвет окантовки — от «Второго» цвета. */
 :root[data-style="steam"] {
   --a2: color-mix(in srgb, var(--accent2) 80%, #2a1c10);
   --a2-hi: color-mix(in srgb, var(--accent2) 60%, #fff3dc);
@@ -906,7 +847,6 @@ a { color: var(--accent); }
 }
 :root[data-style="steam"] .tab i { margin-left: 6px; font-size: 10px; opacity: .55; }
 
-/* ---------- кнопки ---------- */
 :root[data-style="steam"] .nav, :root[data-style="steam"] .chip, :root[data-style="steam"] .pill {
   border-radius: 3px; letter-spacing: .02em; color: var(--text);
   border: 1px solid var(--ls); background: linear-gradient(180deg, #1f1811, #120d09);
@@ -931,13 +871,13 @@ a { color: var(--accent); }
 :root[data-style="steam"] #statsBtn { --ic: var(--i-stats); }
 :root[data-style="steam"] #settingsBtn { --ic: var(--gear); }
 :root[data-style="steam"] #profile { --ic: var(--i-user); }
-:root[data-style="steam"] .search, :root[data-style="steam"] input[type=password] {
+:root[data-style="steam"] .search, :root[data-style="steam"] input[type=password], :root[data-style="steam"] .field {
   border-radius: 3px; border: 1px solid var(--ln); font-family: inherit;
   background: var(--search-ic) 12px center / 16px 16px no-repeat, rgba(0,0,0,.45);
   box-shadow: inset 0 2px 5px rgba(0,0,0,.6);
 }
 :root[data-style="steam"] .search { padding-left: 38px; }
-:root[data-style="steam"] input[type=password] { background: rgba(0,0,0,.45); }
+:root[data-style="steam"] input[type=password], :root[data-style="steam"] .field { background: rgba(0,0,0,.45); }
 :root[data-style="steam"] .search:focus { border-color: var(--m-hi); box-shadow: inset 0 2px 5px rgba(0,0,0,.6); }
 
 :root[data-style="steam"] .side .nav.active {
@@ -946,7 +886,6 @@ a { color: var(--accent); }
   box-shadow: inset 0 1px 0 rgba(255,230,180,.14), inset 0 0 0 3px rgba(0,0,0,.25), inset 0 0 0 4px var(--a2-ls);
 }
 
-/* кнопка пуска: тёмный диск в бронзовом кольце */
 :root[data-style="steam"] .player .playbtn, :root[data-style="steam"] .wavebtn, :root[data-style="steam"] .fbtns .playbtn {
   color: #f3e3c3; text-shadow: none;
   background: radial-gradient(circle at 50% 35%, #2c2218, #0e0a07 75%);
@@ -959,13 +898,11 @@ a { color: var(--accent); }
 :root[data-style="steam"] .modebtn.on { color: var(--m-hi); filter: none; }
 :root[data-style="steam"] .player .cover { border-radius: 2px; border: 1px solid var(--ln); box-shadow: 0 0 0 1px #050302; }
 
-/* шкалы: тонкая линия, бронзовая шайба; полоса проигрывателя — второй цвет */
 :root[data-style="steam"] input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.5); background: linear-gradient(90deg, var(--accent) var(--p, 0%), rgba(255,255,255,.12) var(--p, 0%)); }
 :root[data-style="steam"] .player input[type=range]::-webkit-slider-runnable-track,
 :root[data-style="steam"] .fseek input[type=range]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--accent2) var(--p, 0%), rgba(255,255,255,.12) var(--p, 0%)); }
 :root[data-style="steam"] input[type=range]::-webkit-slider-thumb { width: 13px; height: 13px; margin-top: -5px; background: radial-gradient(circle at 40% 35%, var(--m-hi), var(--m) 55%, var(--m-lo)); box-shadow: 0 0 0 1px #050302, 0 1px 3px rgba(0,0,0,.8); }
 
-/* ---------- заголовок страницы с медальоном ---------- */
 :root[data-style="steam"] .head h2 { font-family: var(--font-display); font-weight: 700; letter-spacing: .02em; color: color-mix(in srgb, var(--accent) 35%, #f4e3c0); text-shadow: 0 2px 3px rgba(0,0,0,.8); }
 :root[data-style="steam"] .main:not(.wavemode) .head { margin-bottom: 16px; }
 :root[data-style="steam"] .main[data-page="likes"] { --ic: var(--i-heart); }
@@ -985,9 +922,8 @@ a { color: var(--accent); }
 :root[data-style="steam"] .main::-webkit-scrollbar-thumb { background: var(--m-lo); border-radius: 0; border: 1px solid var(--ls); }
 :root[data-style="steam"] .main::-webkit-scrollbar-track { background: rgba(0,0,0,.3); }
 
-/* ---------- список треков: рамка, номера, тонкие разделители ---------- */
-:root[data-style="steam"] .list { padding: 16px 20px; counter-reset: trk; --plate-a: transparent; --plate-b: transparent; backdrop-filter: none; box-shadow: none; }
-:root[data-style="steam"] .list::before {          /* ромбик по центру верхней линии */
+:root[data-style="steam"] .list { padding: 16px 20px; counter-reset: trk; --plate-a: transparent; --plate-b: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+:root[data-style="steam"] .list::before {
   content: ""; position: absolute; top: -5px; left: 50%; width: 8px; height: 8px; margin-left: -4px; transform: rotate(45deg);
   background: var(--m); box-shadow: 0 0 0 1px #050302;
 }
@@ -1010,7 +946,6 @@ a { color: var(--accent); }
 :root[data-style="steam"] .likebtn { color: var(--muted); }
 :root[data-style="steam"] .likebtn.on { color: var(--m); filter: none; }
 
-/* ---------- карточки и всплывающие окна: двойная тонкая рамка, без заклёпок ---------- */
 :root[data-style="steam"] .card, :root[data-style="steam"] .lastAlbum, :root[data-style="steam"] .simcard, :root[data-style="steam"] .stylecard {
   border-radius: 3px; border: 1px solid var(--ln); outline: 1px solid var(--ls); outline-offset: -5px;
   background: rgba(255,255,255,.03);
@@ -1027,18 +962,14 @@ a { color: var(--accent); }
 :root[data-style="steam"] .stbox h3 { border-bottom: 1px solid var(--ls); }
 :root[data-style="steam"] .stlegend li { border-top-color: color-mix(in srgb, var(--accent) 16%, transparent); }
 
-/* ---------- анимации стимпанка: короткие и механические ---------- */
 @property --sx { syntax: "<percentage>"; inherits: false; initial-value: 100%; }
 @property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 
-/* закладки: при наведении табличка чуть приподнимается, по латуни проходит один блик */
 :root[data-style="steam"] .tab { transition: color .15s, transform .18s ease; }
 :root[data-style="steam"] .tab:hover { transform: translateY(-2px); }
 :root[data-style="steam"] .tab:hover::after { --sx: 0%; transition: --sx .7s ease-out; }
 :root[data-style="steam"] .tab:active { transform: translateY(0); transition-duration: .05s; }
 
-/* Моя волна: вокруг кнопки шкала-циферблат из рисок. Пока волна играет, по рискам бежит огонёк,
-   как стрелка хронометра, а бронзовое кольцо кнопки мерно «дышит». Сами риски не вращаются. */
 :root[data-style="steam"] .wavebtn { box-shadow: 0 0 0 2px #050302, 0 0 0 6px var(--m), 0 0 0 7px #050302, 0 10px 26px rgba(0,0,0,.7), inset 0 3px 8px rgba(0,0,0,.7); }
 :root[data-style="steam"] .wavebtn::before, :root[data-style="steam"] .wavebtn::after {
   content: ""; position: absolute; border-radius: 50%; pointer-events: none; z-index: -1;
@@ -1067,10 +998,6 @@ a { color: var(--accent); }
   :root[data-style="steam"] .tab, :root[data-style="steam"] .tab:hover::after { transition: none; }
 }
 
-/* =================== LOLITTA =================== */
-/* пудрово-розовый: стёганая боковая панель с бантами, жемчугом и камеей, филигранная рамка вокруг прозрачного списка,
-   светлая панель плеера с розами и бантом над кнопкой паузы. Основной цвет — розовый металл декора и светлых панелей,
-   второй — тёмные кнопки и текст на светлом. Декор (банты, розы, камея) рисует main.js — блоки .lodeco. */
 .stylepick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 :root:not([data-style="lolitta"]) .lodeco { display: none !important; }
 .sp-lolitta {
@@ -1090,9 +1017,9 @@ a { color: var(--accent); }
   --l-light2: color-mix(in srgb, var(--accent) 72%, #f1d8d9);
   --l-btn: color-mix(in srgb, var(--accent2) 60%, #2a1218);
   --l-btn2: color-mix(in srgb, var(--accent2) 42%, #1c0b10);
-  --l-ink: var(--lo-ink, color-mix(in srgb, var(--accent2) 64%, #24100f));      /* --lo-* подбирает main.js по контрасту */
+  --l-ink: var(--lo-ink, color-mix(in srgb, var(--accent2) 64%, #24100f));
   --l-ink2: color-mix(in srgb, var(--l-ink) 74%, var(--l-light));
-  --l2-hi: color-mix(in srgb, var(--accent2) 50%, #fff3f4);                    /* второй цвет — для бантика под активной закладкой */
+  --l2-hi: color-mix(in srgb, var(--accent2) 50%, #fff3f4);
   --l2-mid: var(--accent2);
   --l2-lo: color-mix(in srgb, var(--accent2) 62%, #12060a);
   --l-line: color-mix(in srgb, var(--accent) 72%, transparent);
@@ -1116,7 +1043,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .lodeco i { position: absolute; display: block; }
 :root[data-style="lolitta"] .lodeco svg { display: block; width: 100%; height: 100%; overflow: visible; }
 
-/* ---------- заголовок окна: корона и надпись с разрядкой ---------- */
 :root[data-style="lolitta"] .titlebar { background: linear-gradient(rgba(30, 12, 17, .6), rgba(30, 12, 17, 0)); }
 :root[data-style="lolitta"] .tbtitle { gap: 10px; padding-left: 14px; font-family: var(--font-display); }
 :root[data-style="lolitta"] .tbdot { width: 22px; height: 18px; border-radius: 0; box-shadow: none; background: linear-gradient(180deg, var(--l-hi), var(--l-mid) 55%, var(--l-lo)); -webkit-mask: var(--i-crown) center / contain no-repeat; mask: var(--i-crown) center / contain no-repeat; }
@@ -1124,7 +1050,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .tbsubtitle { font-size: 7.5px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
 :root[data-style="lolitta"] .tbctl button { color: var(--l-hi); }
 
-/* ---------- закладки: тёмные таблички в розовой рамке, активная — светлая с бантиком снизу ---------- */
 :root[data-style="lolitta"] .tabs { align-items: flex-start; gap: 14px; padding: 6px 6px 22px; margin-bottom: -14px; }
 :root[data-style="lolitta"] .tab {
   position: relative; flex: none; min-width: 124px; max-width: 230px; height: 46px; padding: 0 24px; justify-content: center;
@@ -1138,19 +1063,17 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .tab:hover { border-color: var(--l-mid); filter: brightness(1.12); transform: translateY(-1px); }
 :root[data-style="lolitta"] .tab.active {
   color: var(--lo-on-tabact, var(--l-ink)); font-weight: 600; text-shadow: var(--lo-on-tabact-sh, 0 1px 0 rgba(255,255,255,.55)); border-color: var(--l-mid);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 75%, #fff), var(--accent));      /* фон — основной цвет, бантик — второй */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 75%, #fff), var(--accent));
   box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 3px var(--l-mid), inset 0 0 0 3px rgba(255,255,255,.3), inset 0 0 0 4px var(--l-line), 0 0 16px color-mix(in srgb, var(--accent) 40%, transparent), 0 5px 14px rgba(0,0,0,.45);
 }
 :root[data-style="lolitta"] .tab i { margin-left: 8px; font-size: 10px; opacity: .6; }
 :root[data-style="lolitta"] .tab .lo-tabbow { display: none; left: 50%; bottom: -19px; width: 44px; height: 36px; transform: translateX(-50%); --l-hi: var(--l2-hi); --l-lo: var(--l2-lo); filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
 :root[data-style="lolitta"] .tab.active .lo-tabbow { display: block; }
 
-/* ---------- панели: общий вид (вход, всплывающие окна) ---------- */
 :root[data-style="lolitta"] .panel { border-radius: 14px; border: 1px solid var(--l-mid); background: rgba(44, 20, 27, .94); box-shadow: 0 0 0 3px rgba(20,6,10,.5), 0 0 0 4px var(--l-line2), 0 14px 34px rgba(0,0,0,.55); }
 
-/* ---------- боковая панель: стёганая розовая подушка с кружевом ---------- */
 :root[data-style="lolitta"] .side {
-  position: relative; padding: 28px 22px 44px; gap: 12px; border-radius: 16px; backdrop-filter: none;
+  position: relative; padding: 28px 22px 44px; gap: 12px; border-radius: 16px; -webkit-backdrop-filter: none; backdrop-filter: none;
   border: 2px solid var(--l-mid);
   background:
     radial-gradient(circle at 50% 0, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px top 9px / 9px 5px repeat-x,
@@ -1174,7 +1097,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .side .search:focus { border-color: var(--l-ink2); box-shadow: 0 0 0 2px color-mix(in srgb, var(--l-light) 50%, #fff), 0 0 0 3px var(--l-mid), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 2px 5px rgba(110, 40, 60, .25); }
 :root[data-style="lolitta"] .side .search + .nav { margin-top: 6px; }
 
-/* кнопки разделов: тёмный бархат в розовой окантовке, иконки — розовый металл */
 :root[data-style="lolitta"] .nav, :root[data-style="lolitta"] .chip, :root[data-style="lolitta"] .pill {
   border-radius: 9px; color: var(--lo-on-btn, var(--text)); font-family: var(--font-display); letter-spacing: .02em;
   border: 1px solid color-mix(in srgb, var(--l-mid) 75%, #fff);
@@ -1207,7 +1129,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] #profile { --ic: var(--i-user); }
 :root[data-style="lolitta"] #profile::before { width: 22px; height: 22px; }
 
-/* декор боковой панели: уголки, банты по бокам, камея, жемчужная нить с бантом снизу, розы в нижних углах */
 :root[data-style="lolitta"] .lo-side { inset: 0; z-index: 1; }
 :root[data-style="lolitta"] .lo-c { width: 46px; height: 46px; }
 :root[data-style="lolitta"] .lo-c.tl { left: -6px; top: -6px; }
@@ -1227,9 +1148,8 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .lo-cameo .lo-cam { left: 50%; top: 50%; width: 96px; height: 113px; transform: translate(-50%, -50%); filter: drop-shadow(0 4px 6px rgba(100, 35, 55, .35)); }
 @container (max-height: 130px) { :root[data-style="lolitta"] .lo-cameo { display: none; } }
 
-/* ---------- нижняя панель: светлый атлас, розы в углах, бант над паузой ---------- */
 :root[data-style="lolitta"] .player {
-  position: relative; padding: 24px 64px 16px; border-radius: 16px; backdrop-filter: none; color: var(--l-ink);
+  position: relative; padding: 24px 64px 16px; border-radius: 16px; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--l-ink);
   border: 2px solid var(--l-mid);
   background:
     radial-gradient(circle at 50% 0, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px top 9px / 9px 5px repeat-x,
@@ -1262,7 +1182,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .player .playbtn:hover, :root[data-style="lolitta"] .fbtns .playbtn:hover { filter: brightness(1.05); background: radial-gradient(circle at 50% 28%, #fff 0, var(--l-light) 48%, var(--l-light2) 76%, var(--l-mid)); }
 :root[data-style="lolitta"] .player .likebtn { color: var(--l-lo); }
 :root[data-style="lolitta"] .player .likebtn.on { color: color-mix(in srgb, var(--accent2) 70%, var(--accent)); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
-/* дорожки в светлой панели — тёмно-розовые, бегунок — жемчужина */
 :root[data-style="lolitta"] .player input[type=range]::-webkit-slider-runnable-track {
   height: 4px; border-radius: 4px; box-shadow: inset 0 1px 1px rgba(80, 20, 35, .25), 0 1px 0 rgba(255,255,255,.6);
   background: linear-gradient(90deg, var(--l-lo) var(--p, 0%), color-mix(in srgb, var(--accent2) 22%, transparent) var(--p, 0%));
@@ -1273,9 +1192,8 @@ a { color: var(--accent); }
   box-shadow: 0 0 0 1px var(--l-lo), 0 0 0 3px color-mix(in srgb, var(--l-pearl) 55%, transparent), 0 1px 4px rgba(60, 15, 30, .5);
 }
 :root[data-style="lolitta"] input[type=range]::-webkit-slider-runnable-track { height: 4px; background: linear-gradient(90deg, var(--l-mid) var(--p, 0%), rgba(255,255,255,.18) var(--p, 0%)); }
-/* громкость: вертикальная, во всплывающей розовой карточке */
 :root[data-style="lolitta"] .volpop {
-  border-radius: 12px; border: 1px solid var(--l-mid); backdrop-filter: none;
+  border-radius: 12px; border: 1px solid var(--l-mid); -webkit-backdrop-filter: none; backdrop-filter: none;
   background: linear-gradient(180deg, color-mix(in srgb, var(--l-light) 70%, #fff), var(--l-light2));
   box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 3px var(--l-line), inset 0 0 0 3px rgba(255,255,255,.35), 0 8px 22px rgba(0,0,0,.45);
 }
@@ -1290,7 +1208,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .lo-player .lo-bowt { left: 50%; top: -38px; width: 86px; height: 72px; transform: translateX(-50%); z-index: 2; }
 :root[data-style="lolitta"] .lo-player .lo-pearls { left: calc(50% - 150px); width: 300px; top: 3px; height: 10px; background: var(--pearl) left center / 10px 10px repeat-x; }
 
-/* ---------- основное окно: прозрачное, заголовок с медальоном ---------- */
 :root[data-style="lolitta"] .main { padding-right: 22px; }
 :root[data-style="lolitta"] .main::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 8px; }
 :root[data-style="lolitta"] .head h2 {
@@ -1311,7 +1228,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .sub, :root[data-style="lolitta"] .status { color: var(--muted); font-style: italic; }
 :root[data-style="lolitta"] .round { background: linear-gradient(180deg, var(--l-btn), var(--l-btn2)); border: 1px solid var(--l-line); color: var(--lo-on-tab, var(--l-hi)); }
 
-/* список: прозрачный, в двойной филигранной рамке; тонкие разделители, сердечки-медальоны */
 :root[data-style="lolitta"] .cols { position: relative; }
 :root[data-style="lolitta"] .list {
   padding: 12px 20px 12px 16px; border-radius: 6px;
@@ -1361,7 +1277,6 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .lo-frame .lo-gem.l { left: -11px; top: 50%; transform: translateY(-50%) rotate(90deg); }
 :root[data-style="lolitta"] .more { padding: 9px 26px; }
 
-/* ---------- карточки (статистика, настройки, альбомы): прозрачные, в тонкой розовой рамке ---------- */
 :root[data-style="lolitta"] .card, :root[data-style="lolitta"] .lastAlbum, :root[data-style="lolitta"] .simcard, :root[data-style="lolitta"] .stylecard {
   background: transparent; border-radius: 10px; border: 1px solid var(--l-line); outline: 1px solid var(--l-line2); outline-offset: -6px; box-shadow: none;
 }
@@ -1381,12 +1296,11 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] .drop { border-radius: 10px; border-color: var(--l-line); color: var(--l-hi); background: linear-gradient(rgba(40, 16, 23, .6), rgba(40, 16, 23, .6)), var(--drop-img, none) center / cover; }
 :root[data-style="lolitta"] .switch input:checked + i { background: linear-gradient(90deg, var(--l-mid), var(--l-lo)); }
 :root[data-style="lolitta"] .stations, :root[data-style="lolitta"] .stcardhover {
-  border-radius: 14px; border: 1px solid var(--l-mid); background: rgba(44, 20, 27, .96); backdrop-filter: none;
+  border-radius: 14px; border: 1px solid var(--l-mid); background: rgba(44, 20, 27, .96); -webkit-backdrop-filter: none; backdrop-filter: none;
   box-shadow: 0 0 0 3px rgba(20,6,10,.5), 0 0 0 4px var(--l-line2), 0 12px 28px rgba(0,0,0,.6);
 }
-:root[data-style="lolitta"] .search:not(.side .search), :root[data-style="lolitta"] input[type=password] { border-radius: 999px; border: 1px solid var(--l-line); background: rgba(0,0,0,.25); }
+:root[data-style="lolitta"] .search:not(.side .search), :root[data-style="lolitta"] input[type=password], :root[data-style="lolitta"] .field { border-radius: 999px; border: 1px solid var(--l-line); background: rgba(0,0,0,.25); }
 
-/* ---------- Моя волна и полноэкранный плеер ---------- */
 :root[data-style="lolitta"] .wavebtn { width: 116px; height: 116px; }
 :root[data-style="lolitta"] .wavebtn::before {
   content: ""; position: absolute; inset: -20px; border-radius: 50%; pointer-events: none;
@@ -1409,8 +1323,6 @@ a { color: var(--accent); }
   :root[data-style="lolitta"] .lo-medal { width: 60px; height: 60px; }
 }
 
-/* ---------- Lolitta: анимации ---------- */
-/* закреплённая закладка при наведении покачивается, как подвеска на ленте, а искорка в углу вспыхивает */
 :root[data-style="lolitta"] .tab:has(> i):hover { transform-origin: 50% -8px; animation: loSwing .95s ease-in-out; }
 :root[data-style="lolitta"] .tab:has(> i):hover::after { animation: loTwinkle .95s ease-in-out; }
 @keyframes loSwing {
@@ -1424,7 +1336,6 @@ a { color: var(--accent); }
   0%, 100% { transform: scale(1) rotate(0); }
   45% { transform: scale(1.9) rotate(90deg); color: #fff; text-shadow: 0 0 10px var(--l-mid), 0 0 3px #fff; }
 }
-/* Моя волна играет: жемчужное кольцо вокруг кнопки медленно вращается, из-за кнопки всплывают сердечки */
 :root[data-style="lolitta"] .wavebtn.playing::before { animation: loSpin 16s linear infinite; }
 @keyframes loSpin { to { transform: rotate(360deg); } }
 :root[data-style="lolitta"] .lo-hearts { left: 50%; top: 50%; width: 0; height: 0; z-index: 2; }
@@ -1454,10 +1365,7 @@ a { color: var(--accent); }
   :root[data-style="lolitta"] .wavebtn.playing::before, :root[data-style="lolitta"] .wavebtn.playing ~ .lo-hearts i { animation: none; }
 }
 
-/* =================== ОБЩАЯ ГЕОМЕТРИЯ НИЖНЕЙ ПАНЕЛИ =================== */
-/* Во всех стилях одинаковы отступы панели, размер и место обложки, размеры кнопок и расстояния между ними.
-   Стили меняют только внешний вид (цвета, рамки, тени). Правила стоят в самом конце файла и поэтому перекрывают стилевые. */
-:root[data-style] .player { padding: 22px 64px 16px 36px; gap: 18px; border-width: 1px; border-style: solid; }      /* рамка везде 1px, чтобы содержимое не сдвигалось */
+:root[data-style] .player { padding: 22px 64px 16px 36px; gap: 18px; border-width: 1px; border-style: solid; }
 :root[data-style="steam"] .player { border-color: transparent; }
 :root[data-style="lolitta"] .player { box-shadow: inset 0 0 0 1px var(--l-mid), 0 0 0 2px var(--l-btn2), 0 0 0 4px var(--l-line), 0 0 0 5px rgba(20,6,10,.5),
     inset 0 0 0 5px color-mix(in srgb, var(--l-light) 80%, #fff), inset 0 0 0 6px var(--l-lo), inset 0 0 22px rgba(120, 45, 65, .22), 0 -6px 30px rgba(0,0,0,.35); }
@@ -1481,23 +1389,293 @@ a { color: var(--accent); }
 }
 @media (max-height: 680px) { :root[data-style] .player { padding-top: 16px; } }
 
-/* =================== ВЫКЛЮЧАТЕЛЬ АНИМАЦИЙ =================== */
-/* «Анимации интерфейса» выключены в настройках — ни одна анимация и ни один плавный переход не проигрываются ни в одном стиле */
 :root[data-anim="off"] *, :root[data-anim="off"] *::before, :root[data-anim="off"] *::after {
   animation: none !important; transition: none !important; scroll-behavior: auto !important;
 }
 
-/* Lolitta: панели на страницах «Статистика» и «Настройки» слегка затемнены, чтобы текст читался на ярких фонах */
 :root[data-style="lolitta"] .settings > .card, :root[data-style="lolitta"] .stats .card { background: rgba(30, 11, 17, .34); }
-/* оверлей: быстрые кнопки по клику на обложку */
-.fquick { position: absolute; z-index: 3; display: none; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 999px; background: rgba(10,6,18,.72); backdrop-filter: blur(8px); box-shadow: 0 6px 24px rgba(0,0,0,.5); transform: translate(-50%, -50%); }
-.full.qc .fquick { display: flex; }
-.fquick button { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
-.fquick button:hover { background: rgba(255,255,255,.14); }
-.fquick .playbtn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent, #0b0618); }
-.fcover { cursor: pointer; }
 
-/* жанры и настроения: пять вкладок (Жанры, Поджанры, Настроение, Характер, Язык) всегда в одном ряду и внутри окна */
 :root[data-style] .stations { width: min(420px, 92vw); box-sizing: border-box; }
 :root[data-style] .stations .chips { display: flex; flex-wrap: nowrap; gap: 3px; min-width: 0; }
 :root[data-style] .stations .chip { flex: 1 1 auto; min-width: 0; padding: 5px 4px; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
+.morebtn { flex: none; width: 30px; height: 34px; margin-left: -8px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); opacity: .5; transition: opacity .15s, color .15s, background .15s; }
+.morebtn svg { width: 20px; height: 20px; }
+.list li:hover .morebtn, .morebtn.open { opacity: 1; }
+.morebtn:hover, .morebtn.open { color: var(--text); background: rgba(255,255,255,.08); }
+
+.tmenu {
+  position: fixed; z-index: 60; min-width: 190px; padding: 6px; border-radius: 14px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: rgba(18, 12, 38, 0.96); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 calc(var(--glow) * .5) color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.tmenu[hidden] { display: none; }
+.tmenu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border-radius: 10px; text-align: left; font-size: 14px; color: var(--text); }
+.tmenu button svg { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.tmenu button:hover { background: rgba(255,255,255,.1); }
+
+.toast {
+  position: fixed; z-index: 70; left: 50%; bottom: 120px; transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px;
+  font-size: 13px; color: var(--text); overflow-wrap: anywhere; text-align: center;
+  background: rgba(18, 12, 38, 0.96); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.toast[hidden] { display: none; }
+
+.dlpath { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 12px; background: rgba(0,0,0,.18); min-width: 0; }
+.dlpath small { color: var(--muted); font-size: 12px; }
+.dlpath span { font-size: 14px; overflow-wrap: anywhere; }
+.nav:disabled { opacity: .4; cursor: default; }
+
+:root[data-style="royal"] .tmenu, :root[data-style="royal"] .toast { border-radius: 4px; background: rgba(16, 12, 10, .97); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,.6); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-style="royal"] .tmenu button { border-radius: 2px; }
+:root[data-style="royal"] .tmenu button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+:root[data-style="royal"] .dlpath { border-radius: 4px; }
+
+:root[data-style="steam"] .tmenu, :root[data-style="steam"] .toast { border-radius: 3px; border: 1px solid var(--ln); background: rgba(18, 13, 9, .97); box-shadow: 0 10px 28px rgba(0,0,0,.65); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-style="steam"] .tmenu button { border-radius: 2px; }
+:root[data-style="steam"] .tmenu button svg { color: var(--m); }
+:root[data-style="steam"] .tmenu button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+:root[data-style="steam"] .morebtn { color: var(--muted); }
+:root[data-style="steam"] .dlpath { border-radius: 3px; }
+
+:root[data-style="lolitta"] .tmenu, :root[data-style="lolitta"] .toast {
+  border-radius: 12px; border: 1px solid var(--l-mid); -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--l-ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--l-light) 70%, #fff), var(--l-light2));
+  box-shadow: 0 0 0 2px var(--l-btn2), 0 0 0 3px var(--l-line), inset 0 0 0 3px rgba(255,255,255,.35), 0 8px 22px rgba(0,0,0,.45);
+}
+:root[data-style="lolitta"] .tmenu button { color: var(--l-ink); }
+:root[data-style="lolitta"] .tmenu button svg { color: var(--l-lo); }
+:root[data-style="lolitta"] .tmenu button:hover { background: color-mix(in srgb, var(--l-mid) 25%, transparent); }
+:root[data-style="lolitta"] .list .morebtn { margin-left: -6px; opacity: 1; color: var(--lo-on-tab, var(--l-hi)); }
+:root[data-style="lolitta"] .list .morebtn:hover, :root[data-style="lolitta"] .list .morebtn.open { background: color-mix(in srgb, var(--l-mid) 30%, transparent); }
+
+:root[data-anim="off"] .morebtn { transition: none; }
+
+.dlbtn { flex: none; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); opacity: .75; transition: opacity .15s, color .15s, background .15s; }
+.dlbtn svg { width: 20px; height: 20px; }
+.dlbtn:hover:not(:disabled) { opacity: 1; color: var(--text); }
+.dlbtn:disabled { opacity: .3; cursor: default; }
+.dlbtn:disabled:hover { background: none; }
+.dlbtn.busy { opacity: 1; color: var(--accent); animation: dlPulse 1s ease-in-out infinite; }
+@keyframes dlPulse { 50% { opacity: .35; } }
+:root[data-anim="off"] .dlbtn, :root[data-anim="off"] .dlbtn.busy { animation: none; transition: none; }
+:root[data-anim="off"] .dlbtn.busy { opacity: .5; }
+@media (max-width: 880px) {
+  .player { grid-template-columns: minmax(150px, 230px) 1fr 40px; }
+  :root[data-style] .player { grid-template-columns: minmax(150px, 230px) 1fr 40px; }
+  .pinfo, :root[data-style] .player .pinfo { gap: 8px; }
+}
+
+:root[data-style="royal"] .player #dlBtn { color: var(--muted); border-radius: 2px; }
+:root[data-style="royal"] .player #dlBtn:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+:root[data-style="steam"] .player #dlBtn { color: var(--muted); opacity: 1; }
+:root[data-style="steam"] .player #dlBtn:hover:not(:disabled) { color: var(--m-hi); }
+:root[data-style="steam"] .player #dlBtn:disabled { opacity: .35; }
+:root[data-style="steam"] .player #dlBtn.busy { color: var(--m-hi); }
+
+:root[data-style="lolitta"] .player #dlBtn { color: var(--l-lo); opacity: 1; }
+:root[data-style="lolitta"] .player #dlBtn:hover:not(:disabled) { color: var(--l-ink); background: rgba(255,255,255,.4); }
+:root[data-style="lolitta"] .player #dlBtn:disabled { opacity: .4; }
+:root[data-style="lolitta"] .player #dlBtn.busy { color: color-mix(in srgb, var(--accent2) 70%, var(--accent)); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+:root[data-style="royal"] .player #dlBtn.busy { color: var(--accent); }
+
+.tmenu { max-width: min(320px, calc(100vw - 16px)); }
+.tmenu .mi .mt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmenu .miarrow { font-style: normal; color: var(--muted); font-size: 18px; line-height: 1; }
+.tmenu .mi.danger, .tmenu .mi.danger svg { color: #ff8a8a; }
+.tmenu .mhead { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 4px; }
+.tmenu .mhead b { font-size: 13px; font-weight: 600; }
+.tmenu .mback { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 50%; flex: none; color: var(--muted); }
+.tmenu .msep { border: 0; border-top: 1px solid rgba(255,255,255,.1); margin: 4px 6px; }
+.tmenu .mnote { margin: 4px 10px 6px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.tmenu .mscroll { max-height: min(46vh, 330px); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.tmenu .mpl { padding: 6px 10px; }
+.tmenu .mpl small { flex: none; font-size: 11px; color: var(--muted); }
+.plcover.mthumb { width: 32px; height: 32px; border-radius: 6px; flex: none; }
+
+.plcover { display: grid; overflow: hidden; background: rgba(255,255,255,.08); border-radius: 10px; }
+.plcover.mosaic { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.plcover img, .simcard .plcover img, :root[data-style] .simcard .plcover img { width: 100%; height: 100%; aspect-ratio: auto; object-fit: cover; margin: 0; border-radius: 0; border: 0; outline: 0; background: none; display: block; }
+.plcover .plnone { display: grid; place-items: center; font-style: normal; font-size: 40%; color: var(--muted); }
+.plcover.mthumb .plnone { font-size: 14px; }
+.plcover.big { width: 100%; aspect-ratio: 1; margin-bottom: 6px; }
+.plcover.big .plnone { font-size: 46px; }
+
+.plpage { margin-top: 4px; }
+.plgrid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.plcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.plcreate { white-space: nowrap; }
+
+.plbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.plbar .nav { padding: 8px 16px; }
+.nav.danger { color: #ff9b9b; }
+.nav.danger:hover:not(:disabled) { background: color-mix(in srgb, #ff4d4d 18%, transparent); }
+.nav.active.danger { color: #fff; background: linear-gradient(90deg, #c0392b, #8e1f1f); box-shadow: 0 0 14px rgba(192, 57, 43, .45); text-shadow: none; }
+
+.grip { flex: none; width: 18px; height: 34px; margin: 0 -8px 0 -4px; display: grid; place-items: center; color: var(--muted); opacity: .35; cursor: grab; touch-action: none; transition: opacity .15s; }
+.grip svg { width: 18px; height: 18px; }
+.list li:hover .grip { opacity: .9; }
+body.pl-drag, body.pl-drag * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+.list li.dragging { opacity: .45; }
+.list li.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.list li.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+.list li.flash { animation: plFlash 1.6s ease-out; }
+@keyframes plFlash { 0%, 30% { background: color-mix(in srgb, var(--accent) 28%, transparent); } 100% { background: transparent; } }
+
+.plrecshead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.plrecshead h3 { margin: 0; flex: 1; }
+.plrecshead .nav { padding: 7px 14px; font-size: 13px; }
+.recadd { flex: none; width: 34px; height: 34px; margin-left: auto; display: grid; place-items: center; border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); transition: background .15s, transform .15s; }
+.recadd svg { width: 20px; height: 20px; }
+.recadd:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 30%, transparent); transform: scale(1.06); }
+.recadd:disabled { opacity: .4; cursor: default; }
+.recadd + .likebtn { margin-left: 0; }
+.list li.added { opacity: .5; }
+
+.toast { display: flex; align-items: center; gap: 10px; text-align: left; }
+.toast .tico { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 13px; }
+.toast.ok .tico { color: #0d2b14; background: #6fdc8c; }
+.toast.err .tico { color: #fff; background: #e05252; }
+.toast.err { border-color: rgba(224, 82, 82, .7); }
+.toast .tact { flex: none; padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--text); background: rgba(255,255,255,.12); }
+.toast .tact:hover { background: rgba(255,255,255,.22); }
+
+.login.modal { z-index: 80; }
+.modalbox { width: min(440px, calc(100vw - 32px)); }
+.modalbox h2 { margin: 0; font-size: 22px; }
+.modalbox p { margin: 0; line-height: 1.5; color: var(--muted); }
+.modalbox .status { min-height: 0; color: #ff9b9b; }
+.modalbox .status:empty { display: none; }
+
+:root[data-anim="off"] .list li.flash { animation: none; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+:root[data-anim="off"] .grip, :root[data-anim="off"] .recadd { transition: none; }
+
+:root[data-style="royal"] .plcover { border-radius: 3px; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+:root[data-style="royal"] .plcover.mthumb { border-radius: 2px; }
+:root[data-style="royal"] .recadd { border-radius: 3px; }
+:root[data-style="royal"] .toast .tact { border-radius: 3px; }
+:root[data-style="royal"] .tmenu .mhead b { font-family: var(--font-display); letter-spacing: .04em; color: #efe3c0; }
+:root[data-style="royal"] .plrecshead h3::before, :root[data-style="royal"] .plrecshead h3::after { max-width: 40px; }
+:root[data-style="royal"] .nav.danger { color: #e8a090; }
+
+:root[data-style="steam"] .plcover { border-radius: 2px; border: 1px solid var(--ls); }
+:root[data-style="steam"] .recadd { border-radius: 3px; color: var(--m-hi); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid var(--ln); }
+:root[data-style="steam"] .toast .tact { border-radius: 3px; border: 1px solid var(--ln); }
+:root[data-style="steam"] .tmenu .mhead b { font-family: var(--font-display); color: #e8d6b4; }
+:root[data-style="steam"] .grip { color: var(--m); }
+:root[data-style="steam"] .list li.drop-before { box-shadow: inset 0 3px 0 var(--m-hi); }
+:root[data-style="steam"] .list li.drop-after { box-shadow: inset 0 -3px 0 var(--m-hi); }
+
+:root[data-style="lolitta"] .plcover { border-radius: 4px; }
+:root[data-style="lolitta"] .tmenu .mhead { border-bottom-color: var(--l-line); }
+:root[data-style="lolitta"] .tmenu .mhead b, :root[data-style="lolitta"] .tmenu .mback { color: var(--l-ink); }
+:root[data-style="lolitta"] .tmenu .mnote, :root[data-style="lolitta"] .tmenu .mpl small, :root[data-style="lolitta"] .tmenu .miarrow { color: var(--l-ink2, var(--l-ink)); }
+:root[data-style="lolitta"] .tmenu .msep { border-top-color: var(--l-line); }
+:root[data-style="lolitta"] .tmenu .mi.danger, :root[data-style="lolitta"] .tmenu .mi.danger svg { color: #b0303c; }
+:root[data-style="lolitta"] .toast .tact { color: var(--l-ink); background: color-mix(in srgb, var(--l-mid) 35%, transparent); }
+:root[data-style="lolitta"] .toast .tact:hover { background: color-mix(in srgb, var(--l-mid) 55%, transparent); }
+:root[data-style="lolitta"] .recadd { color: var(--lo-on-mid, #fff7f7); background: radial-gradient(circle at 50% 30%, var(--l-hi), var(--l-mid) 58%, var(--l-lo)); box-shadow: 0 0 0 1px var(--l-lo), 0 2px 5px rgba(0,0,0,.4); }
+:root[data-style="lolitta"] .grip { color: var(--l-hi); }
+
+.gotmark { flex: none; margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; color: var(--accent); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 65%, transparent)); }
+.gotmark svg { width: 24px; height: 24px; }
+.gotmark + .likebtn, .gotmark + .recadd { margin-left: 0; }
+.list li.got .a { color: color-mix(in srgb, var(--accent) 55%, var(--muted)); }
+.dlbtn.got { color: var(--accent); opacity: 1; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 60%, transparent)); }
+
+:root[data-style="royal"] .gotmark { color: var(--accent); filter: none; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 2px; width: 26px; height: 26px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+:root[data-style="royal"] .gotmark svg { width: 20px; height: 20px; }
+:root[data-style="royal"] .list li.got .a { color: color-mix(in srgb, var(--accent) 65%, var(--muted)); }
+:root[data-style="royal"] .player #dlBtn.got { color: var(--accent); filter: none; }
+
+:root[data-style="steam"] .gotmark { color: var(--m-hi); filter: none; border: 1px solid var(--ln); border-radius: 50%; width: 26px; height: 26px; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--accent) 35%, transparent), rgba(0,0,0,.35)); box-shadow: inset 0 1px 2px rgba(255,255,255,.15), 0 1px 2px rgba(0,0,0,.6); }
+:root[data-style="steam"] .gotmark svg { width: 20px; height: 20px; }
+:root[data-style="steam"] .list li.got .a { color: color-mix(in srgb, var(--m-hi) 55%, var(--muted)); }
+:root[data-style="steam"] .player #dlBtn.got { color: var(--m-hi); filter: none; }
+
+:root[data-style="lolitta"] .gotmark { color: var(--lo-on-mid, #fff7f7); filter: none; border-radius: 50%; width: 26px; height: 26px; background: radial-gradient(circle at 50% 30%, var(--l-hi), var(--l-mid) 58%, var(--l-lo)); box-shadow: 0 0 0 1px var(--l-lo), 0 0 0 2px color-mix(in srgb, var(--l-pearl) 55%, transparent), 0 1px 3px rgba(0,0,0,.4); }
+:root[data-style="lolitta"] .gotmark svg { width: 20px; height: 20px; }
+:root[data-style="lolitta"] .list li.got .a { color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
+:root[data-style="lolitta"] .player #dlBtn.got { color: color-mix(in srgb, var(--accent2) 70%, var(--accent)); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+
+/* ---------- настройки: стили аудиовизуализатора (видны только когда он включён) ---------- */
+.vizstyles { display: flex; flex-direction: column; gap: 10px; animation: vizIn .22s ease-out; }
+@keyframes vizIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+:root[data-anim="off"] .vizstyles { animation: none; }
+.vizpick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.vizopt { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; }
+.vizopt svg { flex: none; }
+
+/* ---------- визуализатор: края холста плавно растворяются, чтобы не было видно прямоугольника ---------- */
+#viz, #vizFullCv {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent), linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent), linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+  mask-composite: intersect;
+}
+#vizFullCv {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent), linear-gradient(180deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent), linear-gradient(180deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+/* кнопка «на весь экран» — в правом нижнем углу страницы волны, как в видеоплеерах */
+.wavepage { position: relative; }
+.vizfsbtn {
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: var(--muted);
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  transition: color .15s, background .15s, box-shadow .2s, transform .15s;
+}
+.vizfsbtn:hover { color: var(--text); background: rgba(255,255,255,.12); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 40%, transparent); transform: scale(1.06); }
+.wavepage > .vizfsbtn { position: absolute; right: 4px; bottom: 6px; z-index: 2; }
+:root[data-style="royal"] .vizfsbtn { border-radius: 3px; border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); }
+:root[data-style="steam"] .vizfsbtn { border-radius: 3px; border-color: var(--ln); color: var(--m); background: linear-gradient(180deg, #1f1811, #120d09); }
+
+/* полноэкранный режим: остаются только фон и визуализатор */
+.vizfull { position: fixed; inset: 0; z-index: 80; animation: vfIn .35s ease-out; }
+.vizfull canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+@keyframes vfIn { from { opacity: 0; } to { opacity: 1; } }
+body.vizfull-on .app, body.vizfull-on .titlebar { opacity: 0; visibility: hidden; transition: opacity .3s, visibility 0s .3s; }
+.vfctl { position: absolute; right: 22px; bottom: 22px; display: flex; align-items: center; gap: 14px; transition: opacity .4s; }
+.vfhint { font-size: 12px; color: rgba(255,255,255,.55); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.vizfull.idle { cursor: none; }
+.vizfull.idle .vfctl { opacity: 0; pointer-events: none; }
+:root[data-anim="off"] .vizfull { animation: none; }
+
+/* весь экран: столбцы стоят на нижнем крае — маска только по бокам; фон чётче и светлее */
+#vizFullCv {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+}
+#bg { transition: filter .5s ease; }
+#dim { transition: opacity .5s ease; }
+body.vizfull-on #bg { filter: blur(0px); }
+body.vizfull-on #dim { opacity: .4; }
+:root[data-anim="off"] #bg, :root[data-anim="off"] #dim { transition: none; }
+
+/* видеообои: под тем же размытием, что и картинка */
+#bgVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.droplink { margin-top: 6px; font-size: 12px; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; background: none; padding: 2px 6px; }
+.droplink:hover { color: var(--text); }
+
+/* ---------- настройки и статистика: лёгкая тонированная подложка под блоками — как в Lolitta, в тоне своего стиля ---------- */
+:root[data-style="neon"] :is(.settings > .card, .stats .card) { background: rgba(15, 10, 32, .34); }
+:root[data-style="royal"] :is(.settings > .card, .stats .card) { background: rgba(20, 15, 12, .34); }
+:root[data-style="steam"] :is(.settings > .card, .stats .card) { background: rgba(22, 16, 11, .34); }
+/* текст в этих блоках — с мягкой тёмной тенью, а мелкий серый текст светлее: читается даже на белом фоне (во всех стилях) */
+/* то же — в списках треков (лайки, альбомы, артисты, поиск), плейлистах, похожих альбомах и подписях под заголовком */
+:is(.settings > .card, .stats .card, .main .list, .main .lastAlbum, .main .similar, .main .plpage, .main .sub, .main > .status) {
+  text-shadow: 0 0 1px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .75), 0 1px 7px rgba(0, 0, 0, .55);
+  --muted: color-mix(in srgb, var(--muted-base, #a99fc9) 35%, #fff);
+}
+/* у списков подложки нет совсем — обводка у букв плотнее */
+:is(.main .list, .main .lastAlbum, .main .similar, .main .plpage, .main .sub, .main > .status) {
+  text-shadow: 0 0 1px #000, 0 0 2px rgba(0, 0, 0, .9), 0 0 5px rgba(0, 0, 0, .6), 0 1px 9px rgba(0, 0, 0, .45);
+}
+:root[data-style="royal"] { --muted-base: #a39579; }
+:root[data-style="steam"] { --muted-base: #9c876a; }
+:root[data-style="lolitta"] { --muted-base: #d4b0b7; }

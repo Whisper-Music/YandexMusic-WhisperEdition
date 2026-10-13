@@ -17,6 +17,7 @@
     "allow-win-is-max",
     "allow-win-close",
     "allow-win-drag",
+    "allow-win-set-fullscreen",
     "allow-tray-playing",
     "allow-http-request",
     "allow-fetch-bytes",
@@ -24,6 +25,12 @@
     "allow-token-exists",
     "allow-token-store",
     "allow-token-clear",
-    "allow-yandex-login"
+    "allow-yandex-login",
+    "allow-download-track",
+    "allow-downloaded-ids",
+    "allow-download-dir-get",
+    "allow-download-dir-pick",
+    "allow-download-dir-reset",
+    "allow-download-dir-open"
   ]
 }

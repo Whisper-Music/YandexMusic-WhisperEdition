@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-downloaded-ids"
+description = "Enables the downloaded_ids command without any pre-configured scope."
+commands.allow = ["downloaded_ids"]
+
+[[permission]]
+identifier = "deny-downloaded-ids"
+description = "Denies the downloaded_ids command without any pre-configured scope."
+commands.deny = ["downloaded_ids"]
