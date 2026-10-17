@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-stream"
+description = "Enables the wa_stream command without any pre-configured scope."
+commands.allow = ["wa_stream"]
+
+[[permission]]
+identifier = "deny-wa-stream"
+description = "Denies the wa_stream command without any pre-configured scope."
+commands.deny = ["wa_stream"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-auth-issue"
+description = "Enables the wa_auth_issue command without any pre-configured scope."
+commands.allow = ["wa_auth_issue"]
+
+[[permission]]
+identifier = "deny-wa-auth-issue"
+description = "Denies the wa_auth_issue command without any pre-configured scope."
+commands.deny = ["wa_auth_issue"]

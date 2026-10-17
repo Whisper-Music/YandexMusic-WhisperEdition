@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-downloaded-tracks"
+description = "Enables the downloaded_tracks command without any pre-configured scope."
+commands.allow = ["downloaded_tracks"]
+
+[[permission]]
+identifier = "deny-downloaded-tracks"
+description = "Denies the downloaded_tracks command without any pre-configured scope."
+commands.deny = ["downloaded_tracks"]

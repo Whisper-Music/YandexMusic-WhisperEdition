@@ -113,11 +113,70 @@ fn id_ok(id: &str) -> bool {
     !id.is_empty() && id.len() <= 40 && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':'))
 }
 
+// Запись индекса скачанных треков. Старый формат — просто путь к файлу (строка), новый — объект
+// с путём, кратким описанием трека (название, исполнители, обложка, длительность — чтобы показать
+// список без сети) и временем скачивания. Старые записи читаются как есть и дополняются описанием позже.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+enum Entry {
+    Full {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        meta: Option<serde_json::Value>,
+        #[serde(default)]
+        ts: u64,
+    },
+    Path(String),
+}
+
+impl Entry {
+    fn path(&self) -> &str {
+        match self {
+            Entry::Full { path, .. } | Entry::Path(path) => path,
+        }
+    }
+    fn meta(&self) -> Option<&serde_json::Value> {
+        match self {
+            Entry::Full { meta, .. } => meta.as_ref(),
+            Entry::Path(_) => None,
+        }
+    }
+    fn ts(&self) -> u64 {
+        match self {
+            Entry::Full { ts, .. } if *ts > 0 => *ts,
+            _ => std::fs::metadata(self.path())
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        }
+    }
+}
+
+type Index = BTreeMap<String, Entry>;
+
+const META_MAX: usize = 16 * 1024;
+
+/// Описание трека принимаем только объектом и разумного размера — это всего лишь подсказка для офлайн-списка.
+fn clean_meta(meta: Option<serde_json::Value>) -> Option<serde_json::Value> {
+    let m = meta.filter(|m| m.is_object())?;
+    let len = serde_json::to_vec(&m).map(|v| v.len()).unwrap_or(usize::MAX);
+    (len <= META_MAX).then_some(m)
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 fn index_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_config_dir().map_err(|e| e.to_string())?.join(INDEX_FILE))
 }
 
-fn read_index(app: &AppHandle) -> BTreeMap<String, String> {
+fn read_index(app: &AppHandle) -> Index {
     index_path(app)
         .ok()
         .and_then(|p| std::fs::read(p).ok())
@@ -125,7 +184,7 @@ fn read_index(app: &AppHandle) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-fn write_index(app: &AppHandle, index: &BTreeMap<String, String>) -> Result<(), String> {
+fn write_index(app: &AppHandle, index: &Index) -> Result<(), String> {
     let p = index_path(app)?;
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -133,16 +192,84 @@ fn write_index(app: &AppHandle, index: &BTreeMap<String, String>) -> Result<(), 
     std::fs::write(p, serde_json::to_vec(index).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 
+/// Индекс без записей, чьи файлы удалены с диска (заодно сохраняется очищенным).
+fn live_index(app: &AppHandle) -> Index {
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut index = read_index(app);
+    let before = index.len();
+    index.retain(|_, e| Path::new(e.path()).is_file());
+    if index.len() != before {
+        let _ = write_index(app, &index);
+    }
+    index
+}
+
+/// Путь к скачанному файлу трека (для локального воспроизведения).
+pub fn local_path(app: &AppHandle, id: &str) -> Option<PathBuf> {
+    if !id_ok(id) {
+        return None;
+    }
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let p = PathBuf::from(read_index(app).get(id)?.path());
+    p.is_file().then_some(p)
+}
+
 #[tauri::command]
 pub fn downloaded_ids(app: AppHandle) -> Vec<String> {
+    live_index(&app).into_keys().collect()
+}
+
+#[derive(Serialize)]
+pub struct DlItem {
+    id: String,
+    name: String,
+    meta: Option<serde_json::Value>,
+    ts: u64,
+}
+
+/// Скачанные треки с описанием — из них собирается список «Лайков» без интернета.
+#[tauri::command]
+pub fn downloaded_tracks(app: AppHandle) -> Vec<DlItem> {
+    live_index(&app)
+        .into_iter()
+        .map(|(id, e)| DlItem {
+            name: Path::new(e.path())
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            meta: e.meta().cloned(),
+            ts: e.ts(),
+            id,
+        })
+        .collect()
+}
+
+#[derive(Deserialize)]
+pub struct MetaItem {
+    id: String,
+    meta: serde_json::Value,
+}
+
+/// Дописать описание трекам, скачанным раньше (когда описание ещё не сохранялось).
+#[tauri::command]
+pub fn downloaded_meta(app: AppHandle, items: Vec<MetaItem>) -> Result<(), String> {
     let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut index = read_index(&app);
-    let before = index.len();
-    index.retain(|_, path| Path::new(path).is_file());
-    if index.len() != before {
-        let _ = write_index(&app, &index);
+    let mut changed = false;
+    for it in items.into_iter().take(5000) {
+        let Some(e) = index.get_mut(&it.id) else { continue };
+        if e.meta().is_some() {
+            continue;
+        }
+        let Some(meta) = clean_meta(Some(it.meta)) else { continue };
+        let ts = e.ts();
+        *e = Entry::Full { path: e.path().to_string(), meta: Some(meta), ts };
+        changed = true;
     }
-    index.into_keys().collect()
+    if changed {
+        write_index(&app, &index)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -189,7 +316,13 @@ pub fn download_dir_open(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn download_track(app: AppHandle, url: String, name: String, id: String) -> Result<String, String> {
+pub async fn download_track(
+    app: AppHandle,
+    url: String,
+    name: String,
+    id: String,
+    meta: Option<serde_json::Value>,
+) -> Result<String, String> {
     if !id_ok(&id) {
         return Err("Некорректный номер трека".into());
     }
@@ -212,10 +345,96 @@ pub async fn download_track(app: AppHandle, url: String, name: String, id: Strin
     {
         let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut index = read_index(&app);
-        index.insert(id, saved.clone());
+        index.insert(id, Entry::Full { path: saved.clone(), meta: clean_meta(meta), ts: now_secs() });
         let _ = write_index(&app, &index);
     }
     Ok(saved)
+}
+
+// ---------------------------------------------------------------------------
+// Локальное воспроизведение: <audio src="ymlocal://localhost/track/<id>"> (на Windows —
+// http://ymlocal.localhost/track/<id>) играет скачанный файл прямо с диска, без запросов к Яндексу.
+// Отдаётся кусками по Range — перемотка работает сразу, в память не грузится весь файл.
+// Путь к файлу берётся только из своего индекса по номеру трека, произвольный файл так не открыть.
+// ---------------------------------------------------------------------------
+
+use std::io::{Read, Seek, SeekFrom};
+use tauri::http::{header, Request, Response, StatusCode};
+
+const LOCAL_CHUNK: u64 = 2 * 1024 * 1024;
+
+fn audio_ctype(p: &Path) -> &'static str {
+    match p.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+        Some("flac") => "audio/flac",
+        Some("m4a") | Some("mp4") => "audio/mp4",
+        Some("aac") => "audio/aac",
+        Some("ogg") | Some("opus") => "audio/ogg",
+        Some("wav") => "audio/wav",
+        _ => "audio/mpeg",
+    }
+}
+
+fn local_resp(status: StatusCode, origin: &Option<String>) -> tauri::http::response::Builder {
+    let mut b = Response::builder().status(status).header(header::CACHE_CONTROL, "no-store");
+    // запрос приходит только из главного окна (проверка в lib.rs); CORS нужен визуализатору
+    if let Some(o) = origin {
+        b = b.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, o.as_str()).header(header::VARY, "Origin");
+    }
+    b
+}
+
+fn local_err(status: StatusCode, msg: &str, origin: &Option<String>) -> Response<Vec<u8>> {
+    local_resp(status, origin)
+        .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+        .body(msg.as_bytes().to_vec())
+        .unwrap_or_default()
+}
+
+fn read_part(path: &Path, start: u64, len: u64) -> std::io::Result<Vec<u8>> {
+    let mut f = std::fs::File::open(path)?;
+    f.seek(SeekFrom::Start(start))?;
+    let mut buf = Vec::with_capacity(len as usize);
+    f.take(len).read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
+/// Обработчик ymlocal://localhost/track/<id> (регистрируется в lib.rs).
+pub fn serve_local(app: &AppHandle, req: &Request<Vec<u8>>) -> Response<Vec<u8>> {
+    let origin = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let Some(id) = req.uri().path().strip_prefix("/track/") else {
+        return local_err(StatusCode::NOT_FOUND, "not found", &origin);
+    };
+    let Some(path) = local_path(app, id) else {
+        return local_err(StatusCode::NOT_FOUND, "трек не скачан", &origin);
+    };
+    let total = match std::fs::metadata(&path) {
+        Ok(m) => m.len(),
+        Err(e) => return local_err(StatusCode::NOT_FOUND, &e.to_string(), &origin),
+    };
+    if total == 0 {
+        return local_err(StatusCode::NOT_FOUND, "пустой файл", &origin);
+    }
+    let (start, want_end) = crate::whisper::parse_range(req.headers().get(header::RANGE).and_then(|v| v.to_str().ok()));
+    if start >= total {
+        return local_resp(StatusCode::RANGE_NOT_SATISFIABLE, &origin)
+            .header(header::CONTENT_RANGE, format!("bytes */{total}"))
+            .body(Vec::new())
+            .unwrap_or_default();
+    }
+    let end = want_end.unwrap_or(u64::MAX).min(start + LOCAL_CHUNK - 1).min(total - 1);
+    let body = match read_part(&path, start, end - start + 1) {
+        Ok(b) if !b.is_empty() => b,
+        Ok(_) => return local_err(StatusCode::INTERNAL_SERVER_ERROR, "файл не читается", &origin),
+        Err(e) => return local_err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string(), &origin),
+    };
+    let end = start + body.len() as u64 - 1;
+    local_resp(StatusCode::PARTIAL_CONTENT, &origin)
+        .header(header::CONTENT_TYPE, audio_ctype(&path))
+        .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{total}"))
+        .header(header::CONTENT_LENGTH, body.len())
+        .header(header::ACCEPT_RANGES, "bytes")
+        .body(body)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -233,6 +452,19 @@ mod tests {
         assert_eq!(sanitize_name("Компот"), "Компот");
         assert_eq!(sanitize_name(&"я".repeat(300)).chars().count(), 150);
         assert!(!sanitize_name("x\u{0}y\n").contains(['\0', '\n']));
+    }
+
+    #[test]
+    fn index_compat() {
+        let idx: Index =
+            serde_json::from_str(r#"{"1":"C:\\a.mp3","2":{"path":"C:\\b.mp3","meta":{"title":"x"},"ts":5}}"#).unwrap();
+        assert_eq!(idx["1"].path(), "C:\\a.mp3");
+        assert!(idx["1"].meta().is_none());
+        assert_eq!(idx["2"].path(), "C:\\b.mp3");
+        assert_eq!(idx["2"].meta().unwrap()["title"], "x");
+        assert_eq!(idx["2"].ts(), 5);
+        assert!(clean_meta(Some(serde_json::json!("str"))).is_none());
+        assert!(clean_meta(Some(serde_json::json!({ "t": "я".repeat(20_000) }))).is_none());
     }
 
     #[test]

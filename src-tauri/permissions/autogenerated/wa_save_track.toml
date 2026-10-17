@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-save-track"
+description = "Enables the wa_save_track command without any pre-configured scope."
+commands.allow = ["wa_save_track"]
+
+[[permission]]
+identifier = "deny-wa-save-track"
+description = "Denies the wa_save_track command without any pre-configured scope."
+commands.deny = ["wa_save_track"]

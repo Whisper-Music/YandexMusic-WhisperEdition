@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-auth-request-code"
+description = "Enables the wa_auth_request_code command without any pre-configured scope."
+commands.allow = ["wa_auth_request_code"]
+
+[[permission]]
+identifier = "deny-wa-auth-request-code"
+description = "Denies the wa_auth_request_code command without any pre-configured scope."
+commands.deny = ["wa_auth_request_code"]

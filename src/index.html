@@ -7,6 +7,13 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="imgguard.js" defer></script>
     <script src="main.js" defer></script>
+  <link rel="stylesheet" href="whisper.css" />
+  <script src="whisper.js" defer></script>
+  <link rel="stylesheet" href="queue.css" />
+  <script src="queue.js" defer></script>
+  <link rel="stylesheet" href="theme.css" />
+  <script src="wmt.js" defer></script>
+  <script src="theme.js" defer></script>
 </head>
 <body>
   <div id="bg"><video id="bgVideo" muted loop playsinline disablepictureinpicture disableremoteplayback preload="auto" hidden></video></div>
@@ -136,7 +143,6 @@
             <b>Выбрать картинку, гиф или видео</b>
             <span>или перетащи сюда файл или папку обоев Wallpaper Engine</span>
             <button type="button" class="droplink" id="bgDirBtn">Выбрать папку обоев</button>
-            <input type="file" id="bgDir" webkitdirectory hidden />
           </label>
           <button class="nav palette" id="deskBtn" title="Взять обои рабочего стола и подобрать под них цвета">🖥 Обои с рабочего стола</button>
           <button class="nav palette" id="paletteBtn">✦ Подобрать цвета под фон</button>
@@ -152,6 +158,7 @@
             <label class="swatch"><input type="color" id="cAccent" /><span>Основной</span></label>
             <label class="swatch"><input type="color" id="cAccent2" /><span>Второй</span></label>
           </div>
+          <button class="nav ccopen" id="ccBtn">Тонкая настройка цветов…</button>
         </div>
         <div class="card">
           <h3 id="glassTitle">Стекло и свечение</h3>
@@ -207,12 +214,15 @@
         </div>
       </div>
 
+      <div class="pright">
       <div class="volwrap" id="volWrap">
         <button id="volBtn" title="Громкость (клик — выключить звук)"></button>
         <div class="volpop">
           <span id="volVal" class="volval">80</span>
           <div class="volbox"><input id="vol" type="range" min="0" max="100" value="80" /></div>
         </div>
+      </div>
+      <button id="pMore" class="morebtn pmore" title="Ещё" disabled></button>
       </div>
     </footer>
   </div>

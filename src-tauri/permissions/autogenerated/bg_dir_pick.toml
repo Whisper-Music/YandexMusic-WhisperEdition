@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bg-dir-pick"
+description = "Enables the bg_dir_pick command without any pre-configured scope."
+commands.allow = ["bg_dir_pick"]
+
+[[permission]]
+identifier = "deny-bg-dir-pick"
+description = "Denies the bg_dir_pick command without any pre-configured scope."
+commands.deny = ["bg_dir_pick"]

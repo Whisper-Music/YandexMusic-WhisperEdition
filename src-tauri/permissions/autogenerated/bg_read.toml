@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bg-read"
+description = "Enables the bg_read command without any pre-configured scope."
+commands.allow = ["bg_read"]
+
+[[permission]]
+identifier = "deny-bg-read"
+description = "Denies the bg_read command without any pre-configured scope."
+commands.deny = ["bg_read"]
