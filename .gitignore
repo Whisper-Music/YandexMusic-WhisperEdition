@@ -26,3 +26,12 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Backups and temporary files
+.wa-backup/
+*.bak
+*.orig
+*.old
+*.tmp
+*~

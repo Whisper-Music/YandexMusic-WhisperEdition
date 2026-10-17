@@ -17,7 +17,7 @@
         "minWidth": 780,
         "minHeight": 540,
         "decorations": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "security": {
@@ -26,8 +26,9 @@
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob: https://*.yandex.net https://*.yandex.ru",
-        "media-src": "'self' blob: https://*.yandex.net",
-        "connect-src": "ipc: http://ipc.localhost",
+        "media-src": "'self' blob: https://*.yandex.net http://wa.localhost wa://localhost http://ymlocal.localhost ymlocal://localhost",
+        "connect-src": "'self' ipc: http://ipc.localhost",
+        "font-src": "'self' data: blob:",
         "object-src": "'none'",
         "base-uri": "'none'",
         "form-action": "'none'"

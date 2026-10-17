@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-prefetch"
+description = "Enables the wa_prefetch command without any pre-configured scope."
+commands.allow = ["wa_prefetch"]
+
+[[permission]]
+identifier = "deny-wa-prefetch"
+description = "Denies the wa_prefetch command without any pre-configured scope."
+commands.deny = ["wa_prefetch"]

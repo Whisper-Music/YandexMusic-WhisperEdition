@@ -48,7 +48,7 @@ let nav = 0;
 let view = null;
 const hist = [];
 const likes = { done: false, tracks: [] };
-let likedIds = new Set();
+let likedIds = new Set(lsJSON("ym_liked_ids", [], Array.isArray).map(String));      // последний известный список — сердечки работают и без сети
 let playCtx = "other", shuffle = false, repeat = 0, order = [], ordPos = 0, orderFor = null;
 { const m = lsJSON("ym_modes", {}, (v) => typeof v === "object"); shuffle = !!m.shuffle; repeat = [0, 1, 2].includes(m.repeat) ? m.repeat : 0; }
 const LK = { ctx: "likes" };
@@ -96,9 +96,45 @@ function mkImg(src, cls) {
   const im = document.createElement("img");
   im.alt = ""; if (cls) im.className = cls;
   im.loading = "lazy"; im.decoding = "async";      // обложки вне экрана не грузятся и не держат память, пока до них не долистали
-  if (src) im.src = src;
+  im.src = src || COVER_W;
   return im;
 }
+// Заглушка «W» для обложек: нет адреса обложки, нет сети или сервер не отдал картинку.
+// Ловим ошибки всех картинок на странице (событие error не всплывает — слушаем на этапе перехвата).
+const COVER_W = "assets/cover-w.svg";
+document.addEventListener("error", (e) => {
+  const im = e.target;
+  if (!(im instanceof HTMLImageElement) || im.closest("#settingsPage")) return;
+  if ((im.getAttribute("src") || "") === COVER_W) return;          // сама заглушка не загрузилась — не зацикливаемся
+  im.src = COVER_W;
+}, true);
+
+// Офлайн-режим: нет интернета или сервера Яндекс Музыки не отвечают (5xx) — показываем скачанное.
+// Ответ 4xx — это не «нет связи», а обычная ошибка запроса. Сетевые ошибки приходят из reqwest (net.rs) текстом.
+const isNetErr = (e) => {
+  const m = String(e?.message || e);
+  return !navigator.onLine || /^HTTP 5\d\d\b/.test(m)
+    || /error sending request|connect|dns|timed? ?out|network|unreachable|failed to lookup|no route|resolve/i.test(m);
+};
+let offline = false, offlineTimer = 0;
+function setOffline(on) {
+  if (offline === on) return;
+  offline = on;
+  document.body.classList.toggle("offline", on);
+  clearInterval(offlineTimer);
+  if (on) offlineTimer = setInterval(probeOnline, 30000);
+}
+let probing = false;
+async function probeOnline() {
+  if (!offline || probing || !uid) return;
+  probing = true;
+  try { await api("/account/status"); } catch { return; } finally { probing = false; }
+  setOffline(false);
+  showToast("Связь с Яндекс Музыкой восстановлена", 3500, { kind: "ok" });
+  loadLikedIds();
+  if (document.querySelector(".main").dataset.page === "likes" && likesTab === "likes" && !likes.done) goTop(showLikes);
+}
+window.addEventListener("online", probeOnline);
 
 const HEADERS = () => ({
   "User-Agent": "Yandex-Music-API",
@@ -120,7 +156,23 @@ const STYLE_DEF = {
   lolitta: { accent: "#e2aab4", accent2: "#8c4a5c", glow: 4, panel: 94, dim: 10, bg: "" },
 };
 const STYLE_KEYS = ["accent", "accent2", "glow", "panel", "dim"];
-const freshCfg = () => ({ style: "royal", blur: 6, viz: true, vizStyle: "circle", anim: true, bg: "", s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k] }])) });
+// Свои стили из файлов .wmt (theme.js). У каждого есть «основа» — один из встроенных стилей:
+// от неё берётся поведение, которое задаётся не CSS, а кодом (цвета Lolitta, отступы визуализатора и т.п.).
+const BUILTIN = Object.keys(STYLE_DEF);
+const themeReady = new Set();         // свои стили, чьи CSS уже подключены
+const baseOf = (st = cfg.style) => (BUILTIN.includes(st) ? st : cfg.themes?.find((t) => t.id === st)?.base || "neon");
+const styleDef = (st) => STYLE_DEF[st] || STYLE_DEF[baseOf(st)];
+// Что умеет стиль — от этого зависит, какие настройки показывать. Свой стиль задаёт это в файле темы
+// (settings whisper-music → features, заполняет theme.js); не задал — как у его основы.
+//   glow — есть свечение (ползунок «Свечение»), animations — есть анимации (галочка «Анимации интерфейса»),
+//   panelOpacity — панели могут быть прозрачными (ползунок «Прозрачность панелей»).
+const themeFeatures = {};
+function feature(name, st = cfg.style) {
+  const f = themeFeatures[st]?.[name];
+  if (typeof f === "boolean") return f;
+  return name === "glow" ? baseOf(st) === "neon" : true;
+}
+const freshCfg = () => ({ style: "royal", blur: 6, viz: true, vizStyle: "circle", anim: true, bg: "", themes: [], s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k], cc: {} }])) });
 function loadCfg() {
   let saved = null, old = null;
   try { saved = JSON.parse(localStorage.getItem("ym_cfg3") || "null"); } catch {}
@@ -132,6 +184,12 @@ function loadCfg() {
       Object.assign(c.s[st], saved.s?.[st] || {});
       if (saved.s?.[st]?.dim === undefined && saved.dim !== undefined) c.s[st].dim = saved.dim;
     }
+    // свои стили: список (сами файлы лежат в IndexedDB) и их настройки
+    c.themes = (Array.isArray(saved.themes) ? saved.themes : [])
+      .filter((t) => t && /^[a-z0-9][a-z0-9-]{0,47}$/.test(t.id) && !STYLE_DEF[t.id] && typeof t.name === "string")
+      .slice(0, 50)
+      .map((t) => ({ id: t.id, name: t.name.slice(0, 60), base: STYLE_DEF[t.base] ? t.base : "neon", desc: String(t.desc || "").slice(0, 120) }));
+    for (const t of c.themes) c.s[t.id] = { ...STYLE_DEF[t.base], cc: {}, ...(saved.s?.[t.id] || {}) };
   } else if (old) {
     for (const k of ["blur", "viz", "bg"]) if (old[k] !== undefined) c[k] = old[k];
     for (const k of STYLE_KEYS) if (old[k] !== undefined) c.s.neon[k] = old[k];
@@ -154,6 +212,7 @@ function fillAll() { document.querySelectorAll("input[type=range]").forEach(fill
 
 function hexRgb(h) { const m = /^#?([0-9a-f]{6})$/i.exec(h || ""); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function relLum(rgb) { return rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0); }
+function btnHi(h) { const c = hexRgb(h); return c ? "#" + c.map((v) => Math.round(v * 0.7 + 255 * 0.3).toString(16).padStart(2, "0")).join("") : h; }      // = --btn-hi в CSS
 function onAccent(a, b) {
   const DARK = "#0b0618", ca = hexRgb(a), cb = hexRgb(b);
   if (!ca || !cb) return { color: DARK, shadow: "none" };
@@ -166,11 +225,11 @@ function onAccent(a, b) {
 }
 function loInk(st) {
   const r = document.documentElement.style;
-  const NAMES = ["--lo-on-btn", "--lo-on-tab", "--lo-on-act", "--lo-on-tabact", "--lo-ink", "--lo-on-mid"];
+  const NAMES = ["--lo-on-btn", "--lo-on-tab", "--lo-on-tabbg", "--lo-on-act", "--lo-on-tabact", "--lo-ink", "--lo-on-mid", "--lo-on-l2"];
   const A = hexRgb(st.accent), B = hexRgb(st.accent2);
-  if (cfg.style !== "lolitta" || !A || !B) {
+  if (baseOf() !== "lolitta" || !A || !B) {
     for (const n of NAMES) { r.removeProperty(n); r.removeProperty(n + "-sh"); }
-    for (const n of ["--lo-ic", "--lo-title", "--l-btn", "--l-btn2"]) r.removeProperty(n);
+    for (const n of ["--lo-ic", "--lo-title", "--l-btn", "--l-btn2", "--l-tab", "--l-tab2"]) r.removeProperty(n);
     return;
   }
   const mix = (a, b, p) => a.map((v, i) => Math.round(v * p + b[i] * (1 - p)));
@@ -186,32 +245,346 @@ function loInk(st) {
     r.setProperty(name, p.c);
     r.setProperty(name + "-sh", p.v >= 4.5 ? "none" : relLum(H(p.c)) > 0.35 ? "0 1px 2px rgba(30,8,15,.9), 0 0 6px rgba(30,8,15,.6)" : "0 0 4px rgba(255,255,255,.9), 0 1px 0 rgba(255,255,255,.7)");
   };
-  const darken = (base, p, maxLum) => { let c = mix(B, H(base), p); while (relLum(c) > maxLum && p > 0) { p = Math.max(0, p - 0.04); c = mix(B, H(base), p); } return c; };
-  const btn = [darken("#2a1218", 0.6, 0.06), darken("#1c0b10", 0.42, 0.035)];
+  const darken = (base, p, maxLum, C = B) => { let c = mix(C, H(base), p); while (relLum(c) > maxLum && p > 0) { p = Math.max(0, p - 0.04); c = mix(C, H(base), p); } return c; };
+  const btn = [darken("#2a1218", 0.6, 0.06), darken("#1c0b10", 0.42, 0.035)];          // кнопки — от вторичного
+  const tab = [darken("#2a1218", 0.45, 0.06, A), darken("#1c0b10", 0.3, 0.035, A)];    // вкладки верхней панели — от основного
   r.setProperty("--l-btn", hex(btn[0])); r.setProperty("--l-btn2", hex(btn[1]));
+  r.setProperty("--l-tab", hex(tab[0])); r.setProperty("--l-tab2", hex(tab[1]));
   if (relLum(A) < 0.18) r.setProperty("--lo-title", hex(mix(A, H("#fff8f6"), 0.4))); else r.removeProperty("--lo-title");
-  const act = [mix(A, W, 0.82), mix(A, B, 0.62)];
+  const act = [mix(B, W, 0.55), mix(B, W, 0.85)];
   const light = mix(A, H("#fbf0f0"), 0.5), lights = [mix(light, W, 0.55), light, mix(A, H("#f1d8d9"), 0.72)];
-  const hi = mix(A, H("#fff8f6"), 0.4), lo = mix(A, B, 0.5), ink = mix(B, H("#24100f"), 0.64);
+  const hi = mix(A, H("#fff8f6"), 0.4), lo = mix(A, H("#4a2430"), 0.65), ink = mix(A, H("#24100f"), 0.45);
+  const l2hi = mix(B, H("#fff3f4"), 0.5), l2lo = mix(B, H("#12060a"), 0.62);
   set("--lo-on-btn", pick(btn, ["#f9eaec", LIGHT, DARK]));
   set("--lo-on-tab", pick(btn, [hex(hi), "#f9eaec", LIGHT, DARK]));
+  set("--lo-on-tabbg", pick(tab, [hex(hi), "#f9eaec", LIGHT, DARK]));
   set("--lo-on-act", pick(act, [LIGHT, DARK]));
   set("--lo-on-tabact", pick([mix(A, W, 0.75), A], [hex(ink), DARK, LIGHT]));
   set("--lo-ink", pick(lights, [hex(ink), DARK, LIGHT]));
   set("--lo-on-mid", pick([A, lo], [LIGHT, DARK], 1.8));
+  set("--lo-on-l2", pick([l2hi, B, l2lo], [LIGHT, DARK], 1.8));
   if (Math.min(...btn.map((b) => cr(b, A))) < 2.2) r.setProperty("--lo-ic", r.getPropertyValue("--lo-on-btn"));
   else r.removeProperty("--lo-ic");
 }
+// ---------- расширенная настройка цветов ----------
+// Каждый параметр хранится отдельно для каждого стиля в cfg.s[стиль].cc. Пусто — «авто»: цвет берётся из основного/второго.
+// css: { all | neon | royal | steam | lolitta: [[селекторы, объявления с $ вместо цвета], ...] } — для стиля берётся свой список, иначе all.
+const PANEL = "color-mix(in srgb, $ calc(var(--panel-a) * 100%), transparent)";
+const BALL = "radial-gradient(circle at 35% 30%, color-mix(in srgb, $ 55%, #fff), $ 60%, color-mix(in srgb, $ 70%, #000))";
+const FRAMED = ["royal", "steam", "lolitta"];      // в этих стилях у кнопок есть настоящая рамка (border)
+const bordered = (sel, notActive) => Object.fromEntries([
+  ["all", [[notActive, "box-shadow: inset 0 0 0 1px $"]]],
+  ...FRAMED.map((st) => [st, [[sel, "border-color: $"]]]),
+]);
+const SIDE_NAV = ".side .nav:not(.active)", SIDE_ACT = ".side .nav.active";
+const BTN = ".main .nav:not(.active):not(.danger), .chip:not(.active), .pill:not(.active), .round, .modalbox .nav:not(.active):not(.danger)";
+const BTN_ALL = ".main .nav:not(.danger), .chip, .pill, .round, .modalbox .nav:not(.danger)";
+const BTN_ACT = ".main .nav.active:not(.danger), .chip.active, .pill.active, .stations .pill.active, .modalbox .nav.active:not(.danger), .login-box .nav.active:not(.danger)";
+const PLAY = ".player .playbtn, .fbtns .playbtn, .wavebtn, .best .bplay, .stalbum .stplay";
+const SEEK_TRACK = { all: "rgba(255,255,255,.16)", steam: "rgba(255,255,255,.12)", lolitta: "color-mix(in srgb, var(--accent2) 22%, transparent)" };
+const VOL_TRACK = { all: "rgba(255,255,255,.16)", steam: "rgba(255,255,255,.12)", lolitta: "color-mix(in srgb, var(--accent) 30%, transparent)" };
+const VOL_FILL = { all: "var(--accent)", lolitta: "var(--l-lo)" };
+const inkOn = (hex) => { const c = hexRgb(String(hex).slice(0, 7)); return c && relLum(c) > 0.4 ? "#2a1218" : "#fff7f7"; };
+
+const CC_GROUPS = [
+  { name: "Текст", items: [
+    { k: "text", label: "Основной текст", vars: ["--text"], probe: ["body", "color"] },
+    { k: "muted", label: "Второстепенный текст", vars: ["--muted"], probe: [".sub, .status, .muted, .swatch", "color"] },
+    { k: "heading", label: "Заголовки", css: { all: [["#title, .main h2, .main h3, .card h3", "color: $; -webkit-text-fill-color: $"]] }, probe: ["#title", "color"] },
+  ] },
+  { name: "Фон окна", items: [
+    { k: "winBg", label: "Фон окна (когда нет обоев)", css: { all: [["body", "background: $"]] }, probe: ["body", "background-color"] },
+  ] },
+  { name: "Верхняя панель", items: [
+    { k: "tabBg", label: "Фон вкладок", css: { all: [[".tab:not(.active)", "background: $"]], royal: [[".tab:not(.active)::after", "background: $"]], steam: [[".tab:not(.active)::after", "background: $"]] }, probe: [".tab:not(.active)", "background-color"] },
+    { k: "tabText", label: "Текст вкладок", css: { all: [[".tab:not(.active)", "color: $"]] }, probe: [".tab:not(.active)", "color"] },
+    { k: "tabBorder", label: "Обводка", fb: "accent2", css: {
+      all: [[".tab", "border-color: $"]],
+      royal: [[".tab::before", "background: $"], [".tabs", "background: linear-gradient($, $) top / 100% 5px no-repeat"]],
+      steam: [[".tab::before, .tab:hover::before, .tab.active::before", "background: $"],
+              [".tabs", "background: linear-gradient($, $) 0 3px / 100% 1px no-repeat, linear-gradient(color-mix(in srgb, $ 45%, transparent), color-mix(in srgb, $ 45%, transparent)) 0 7px / 100% 1px no-repeat"]],
+      lolitta: [[":root", "--l-edge-c: $"]],
+    } },
+    { k: "tabActBg", label: "Фон активной вкладки", css: { all: [[".tab.active", "background: $"]], royal: [[".tab.active::after", "background: $"]], steam: [[".tab.active::after", "background: $"]] }, probe: [".tab.active", "background-color"] },
+    { k: "tabActText", label: "Текст активной вкладки", css: { all: [[".tab.active", "color: $"]] }, probe: [".tab.active", "color"] },
+    { k: "titleBarBg", label: "Полоса заголовка окна", css: { all: [[".titlebar", "background: $"]] }, probe: [".titlebar", "background-color"] },
+  ] },
+  { name: "Боковая панель", items: [
+    { k: "sideBg", label: "Фон панели", css: { all: [[".side", "background: " + PANEL]], steam: [[".side::before", "background: " + PANEL]] } },
+    { k: "sideBorder", label: "Обводка панели", fb: "accent", css: { all: [[".side", "border-color: $"]], steam: [[".side::before", "border-color: $"]], royal: [[".side", "border-color: $"], [".side::before", "border-color: color-mix(in srgb, $ 55%, transparent)"]] } },
+    { k: "navBg", label: "Фон кнопок", css: { all: [[SIDE_NAV, "background: $"]] }, probe: [SIDE_NAV, "background-color"], extra: SIDE_NAV + ":hover { filter: brightness(1.15); }" },
+    { k: "navText", label: "Текст и значки кнопок", css: { all: [[SIDE_NAV, "color: $"]], steam: [[SIDE_NAV, "color: $"], [SIDE_NAV + "::before", "background: $"]], lolitta: [[SIDE_NAV, "color: $"], [SIDE_NAV + "::before", "background: $"]] }, probe: [SIDE_NAV, "color"] },
+    { k: "navBorder", label: "Обводка кнопок", fb: "accent", css: bordered(".side .nav", SIDE_NAV) },
+    { k: "navActBg", label: "Фон активной кнопки", fb: "accent2", css: { all: [[SIDE_ACT, "background: $"]] } },
+    { k: "navActText", label: "Текст активной кнопки", css: { all: [[SIDE_ACT, "color: $"]], steam: [[SIDE_ACT, "color: $"], [SIDE_ACT + "::before", "background: $"]], lolitta: [[SIDE_ACT, "color: $"], [SIDE_ACT + "::before", "background: $"]] }, probe: [SIDE_ACT, "color"] },
+    { k: "searchBg", label: "Фон поиска", css: { all: [[".search", "background: $"]], steam: [[".search", "background: var(--search-ic) 12px center / 16px 16px no-repeat, $"]], lolitta: [[".side .search", "background: var(--l-search) 16px center / 18px 18px no-repeat, $"]] }, probe: [".search", "background-color"] },
+    { k: "searchText", label: "Текст поиска", css: { all: [[".search", "color: $"]] }, probe: [".search", "color"] },
+  ] },
+  { name: "Кнопки в окне", note: "Чипы, «Показать ещё», «Закрепить», кнопки в окнах", items: [
+    { k: "btnBg", label: "Фон кнопок", css: { all: [[BTN, "background: $"]] }, extra: ".main .nav:not(.active):not(.danger):hover, .chip:not(.active):hover, .pill:not(.active):hover, .round:hover { filter: brightness(1.15); }" },
+    { k: "btnText", label: "Текст кнопок", css: { all: [[BTN, "color: $"]] }, probe: [".main .nav:not(.active)", "color"] },
+    { k: "btnBorder", label: "Обводка кнопок", fb: "accent", css: bordered(BTN_ALL, BTN) },
+    { k: "btnActBg", label: "Фон выбранной кнопки", fb: "accent2", css: { all: [[BTN_ACT, "background: $"]] } },
+    { k: "btnActText", label: "Текст выбранной кнопки", css: { all: [[BTN_ACT, "color: $; text-shadow: none"]] }, fb: "onAccent" },
+  ] },
+  { name: "Нижняя панель", items: [
+    { k: "plBg", label: "Фон панели", css: { all: [[".player", "background: " + PANEL]], steam: [[".player::before", "background: " + PANEL]] } },
+    { k: "plBorder", label: "Обводка панели", fb: "accent", css: { all: [[".player", "border-color: $"]], steam: [[".player::before", "border-color: $"]], royal: [[".player", "border-color: $"], [".player::before", "border-color: color-mix(in srgb, $ 55%, transparent)"]] } },
+    { k: "plTitle", label: "Название трека", css: { all: [["#pTitle", "color: $"]] }, probe: ["#pTitle", "color"] },
+    { k: "plArtist", label: "Исполнитель и время", css: { all: [["#pArtist, #pArtist a, .player .time", "color: $"]] }, probe: ["#pArtist", "color"] },
+    { k: "plIcons", label: "Значки кнопок", css: { all: [[".player .ctrls button:not(.playbtn):not(.on), #volBtn, #pMore, .player #dlBtn:not(.got):not(.busy), .pinfo .likebtn:not(.on)", "color: $"]] }, probe: ["#prev", "color"] },
+    { k: "plModeOn", label: "Включённые повтор и перемешивание", fb: "accent2", css: { all: [[".modebtn.on", "color: $"]] } },
+  ] },
+  { name: "Кнопка «Пуск» и «Моя волна»", items: [
+    { k: "playBg", label: "Фон кнопки", fb: "accent2", css: { all: [[PLAY, "background: " + BALL]] } },
+    { k: "playIcon", label: "Значок", fb: "onAccent", css: { all: [[PLAY, "color: $; text-shadow: none"]] } },
+  ] },
+  { name: "Полоса воспроизведения", items: [
+    { k: "seekFill", label: "Пройденная часть", fb: "accent2", gen: (cc, st) => !cc.seekFill && !cc.seekTrack ? "" :
+      `#seek::-webkit-slider-runnable-track, #fSeek::-webkit-slider-runnable-track { background: linear-gradient(90deg, ${cc.seekFill || "var(--accent2)"} var(--p, 0%), ${cc.seekTrack || SEEK_TRACK[st] || SEEK_TRACK.all} var(--p, 0%)) !important; }` },
+    { k: "seekTrack", label: "Оставшаяся часть", gen: () => "" },
+    { k: "seekThumb", label: "Ползунок", css: { all: [["#seek::-webkit-slider-thumb, #fSeek::-webkit-slider-thumb", "background: $"]] }, probe: ["#seek", "color"], fb: "#ffffff" },
+  ] },
+  { name: "Громкость", items: [
+    { k: "volFill", label: "Уровень громкости", fb: "accent", gen: (cc, st) => !cc.volFill ? "" :
+      `#vol::-webkit-slider-runnable-track { background: linear-gradient(90deg, ${cc.volFill} var(--p, 0%), ${VOL_TRACK[st] || VOL_TRACK.all} var(--p, 0%)) !important; }` },
+  ] },
+  { name: "Лайки", items: [
+    { k: "like", label: "Цвет лайка", fb: "accent2", css: { all: [[".likebtn.on", "color: $"]] },
+      gen: (cc, st) => st === "lolitta" && cc.like ? `.list .likebtn.on { background: ${BALL.replaceAll("$", cc.like)} !important; color: ${inkOn(cc.like)} !important; }` : "" },
+  ] },
+  { name: "Список треков", items: [
+    { k: "rowHover", label: "Подсветка строки при наведении", fb: "accent", css: { all: [[".list li:hover", "background: color-mix(in srgb, $ 18%, transparent)"]] } },
+    { k: "rowTitle", label: "Название трека", css: { all: [[".list .t", "color: $"]] }, probe: [".list .t", "color"] },
+    { k: "rowArtist", label: "Исполнитель", css: { all: [[".list .a, .list .a a", "color: $"]] }, probe: [".list .a", "color"] },
+  ] },
+  { name: "Средняя панель", note: "Основная область со списками и страницами", items: [
+    { k: "mainBg", label: "Фон средней панели", css: { all: [[".main", "background: $"]] }, probe: [".main", "background-color"] },
+    { k: "listBg", label: "Фон списка треков", css: { all: [[".main .list:not(:empty), .qbody .list", "background: $"]] }, probe: [".main .list", "background-color"] },
+    { k: "titleBg", label: "Фон заголовка страницы", css: { all: [[".head h2", "background: $; -webkit-text-fill-color: currentColor"]] } },
+  ] },
+  { name: "Меню и окна", note: "Меню трека, подсказки, окна-диалоги, панель очереди", items: [
+    { k: "menuBg", label: "Фон", css: { all: [[".tmenu, .toast, .modalbox, .login-box, .qpanel, .stations", "background: $"]] }, probe: [".tmenu", "background-color"] },
+    { k: "menuText", label: "Текст", css: { all: [[".tmenu, .tmenu button, .toast, .modalbox, .login-box, .qpanel, .stations", "color: $"]] }, probe: [".tmenu", "color"] },
+  ] },
+  { name: "Карточки и блоки", note: "Блоки настроек, статистики, альбомов", items: [
+    { k: "cardBg", label: "Фон", css: { all: [[".card, .lastAlbum, .simcard, .stylecard", "background: " + PANEL]] }, probe: [".card", "background-color"] },
+    { k: "cardBorder", label: "Обводка", css: { all: [[".card, .lastAlbum, .simcard, .stylecard", "border-color: $"]] }, probe: [".card", "border-top-color"] },
+  ] },
+  { name: "Переключатели и ползунки", note: "В настройках", items: [
+    { k: "ctl", label: "Цвет включённого", fb: "accent", css: { all: [[".switch input:checked + i", "background: $"]] },
+      gen: (cc) => cc.ctl ? `.settings input[type=range]::-webkit-slider-runnable-track { background: linear-gradient(90deg, ${cc.ctl} var(--p, 0%), rgba(255,255,255,.16) var(--p, 0%)) !important; }` : "" },
+  ] },
+  { name: "Визуализатор", items: [
+    { k: "vizA", label: "Первый цвет", fb: "accent" },
+    { k: "vizB", label: "Второй цвет", fb: "accent2" },
+  ] },
+  { name: "Свечение", only: "neon", note: "Только в неоновом стиле", items: [
+    { k: "glow", label: "Цвет свечения", fb: "accent2", css: { neon: [[":root", "--glow-c: $; --btn-glow: $"]] } },
+  ] },
+];
+const CC_ITEMS = CC_GROUPS.flatMap((g) => g.items.map((it) => ({ ...it, group: g })));
+// «Сразу для всех»: один цвет записывается во все перечисленные места (их потом можно поправить по отдельности)
+const CC_BULK = [
+  { label: "Фон всех панелей", note: "Верхняя полоса, боковая, средняя и нижняя панели, меню и окна", keys: ["titleBarBg", "sideBg", "mainBg", "plBg", "menuBg"] },
+  { label: "Обводка всех панелей", note: "Верхняя, боковая, нижняя панели и карточки", keys: ["tabBorder", "sideBorder", "plBorder", "cardBorder"] },
+  { label: "Фон всех кнопок", note: "Вкладки, кнопки боковой панели и кнопки в окне", keys: ["tabBg", "navBg", "btnBg"] },
+  { label: "Текст и значки всех кнопок", note: "Вкладки, боковая панель, кнопки в окне, значки плеера", keys: ["tabText", "navText", "btnText", "plIcons"] },
+  { label: "Обводка всех кнопок", note: "Кнопки боковой панели и кнопки в окне", keys: ["navBorder", "btnBorder"] },
+  { label: "Фон выбранных кнопок", note: "Активная вкладка, активная кнопка боковой панели, выбранная кнопка в окне", keys: ["tabActBg", "navActBg", "btnActBg"] },
+  { label: "Текст выбранных кнопок", note: "Активная вкладка, активная кнопка боковой панели, выбранная кнопка в окне", keys: ["tabActText", "navActText", "btnActText"] },
+];
+const ccOf = (st = cfg.style) => (cfg.s[st].cc ||= {});
+
+function ccCss(st) {
+  // Настройки пользователя главнее любых правил стиля, в том числе своих тем с !important:
+  // повтор :root поднимает силу селектора (специфичность), а сам блок подключается последним (applyCustom).
+  const cc = ccOf(st), pre = `:root:root:root:root[data-style="${st}"]`, out = [], base = baseOf(st);      // свой стиль настраивается как его основа
+  const scope = (sel) => sel.split(",").map((x) => x.trim()).map((x) => (x === ":root" ? pre : `${pre} ${x}`)).join(", ");
+  // Обводка, которой у стиля нет (толщина 0, как у окон Windows 98), — тогда выбранный цвет рисуется рамкой в 1px
+  const noBorder = (sel) => sel.split(",").some((x) => {
+    let el = null;
+    try { el = document.querySelector(x.trim().replace(/::?(before|after)$/, "")); } catch {}
+    return el && st === cfg.style && parseFloat(getComputedStyle(el).borderTopWidth) === 0 && !/::?(before|after)$/.test(x.trim());
+  });
+  for (const it of CC_ITEMS) {
+    if (it.group.only && it.group.only !== base) continue;
+    const v = cc[it.k];
+    if (it.gen) { const g = it.gen(cc, base); if (g) out.push(g.replace(/(^|\})\s*([^{}]+)\{/g, (m, b, sel) => `${b}\n${scope(sel)} {`)); }
+    if (!v) continue;
+    if (it.vars) out.push(`${pre} { ${it.vars.map((n) => `${n}: ${v} !important`).join("; ")}; }`);
+    const rules = it.css && (it.css[base] || it.css.all);
+    for (const [sel, decl0] of rules || []) {
+      const decl = /^border-color:/.test(decl0) && noBorder(sel) ? decl0 + "; border-style: solid; border-width: 1px" : decl0;
+      const d = decl.replaceAll("$", v).split(/;\s*/).filter(Boolean).map((x) => x + " !important").join("; ");
+      out.push(`${scope(sel)} { ${d}; }`);
+    }
+    if (it.extra) out.push(it.extra.replace(/^([^{]+)\{/, (m, sel) => scope(sel) + " {"));
+  }
+  return out.join("\n");
+}
+function applyCustom() {
+  let el = document.getElementById("ccStyle");
+  if (!el) { el = document.createElement("style"); el.id = "ccStyle"; }
+  if (el !== document.head.lastElementChild) document.head.append(el);      // всегда последним — после CSS своих тем
+  el.textContent = "";                                                      // обводки проверяем по виду стиля без старых настроек
+  el.textContent = ccCss(cfg.style);
+}
+
+// что показать в пипетке у «авто»-параметра: реальный цвет элемента, если его можно прочитать, иначе — основной/второй
+function toHex(c) {
+  const m = /rgba?\(([\d.]+),?\s*([\d.]+),?\s*([\d.]+)(?:[,/]\s*([\d.]+))?/.exec(c || "");
+  if (!m || (m[4] !== undefined && +m[4] < 0.35)) return null;
+  return "#" + [m[1], m[2], m[3]].map((x) => Math.round(+x).toString(16).padStart(2, "0")).join("");
+}
+function ccAuto(it) {
+  const st = sty();
+  if (it.probe) {
+    const [sel, prop] = it.probe, el = document.querySelector(sel);
+    if (el) { const h = toHex(getComputedStyle(el).getPropertyValue(prop)); if (h) return h; }
+  }
+  if (it.fb === "onAccent") return getComputedStyle(document.documentElement).getPropertyValue("--on-accent").trim() || "#ffffff";
+  if (it.fb && it.fb[0] === "#") return it.fb;
+  if (it.vars) { const h = getComputedStyle(document.documentElement).getPropertyValue(it.vars[0]).trim(); if (/^#[0-9a-f]{6}$/i.test(h)) return h; }
+  return it.fb === "accent" ? st.accent : st.accent2;
+}
+
+function openColorEditor() {
+  if (document.querySelector(".ccmodal")) return;
+  const wrap = document.createElement("div"); wrap.className = "login modal ccmodal";
+  const box = document.createElement("div"); box.className = "panel login-box modalbox ccbox";
+  const h = document.createElement("h2"); h.textContent = "Тонкая настройка цветов";
+  const p = document.createElement("p"); p.className = "ccnote";
+  const styleName = { neon: "Неон", royal: "Королевский", steam: "Стимпанк", lolitta: "Lolitta" }[cfg.style] || cfg.themes.find((t) => t.id === cfg.style)?.name || cfg.style;
+  p.textContent = `Для стиля «${styleName}». Блёклые кружки — «авто»: цвет берётся из основного и второго. Изменения видны сразу.`;
+  const scroll = document.createElement("div"); scroll.className = "ccscroll";
+  const cc = ccOf();
+  const rows = {};      // k -> { show(v), it, sync() } — строки отдельных мест
+  const bulks = [];     // строки раздела «Сразу для всех»
+  const alphaOf = (v) => (/^#[0-9a-f]{8}$/i.test(v || "") ? Math.round((parseInt(v.slice(7), 16) / 255) * 100) : 100);
+  const dotsOf = (dots, keys) => dots.replaceChildren(...keys.filter((k) => cc[k]).slice(0, 6).map((k) => { const i = document.createElement("i"); i.style.background = cc[k]; return i; }));
+  // одна строка: название, «авто», пипетка, непрозрачность, ✕
+  // onSet(v) — выбран цвет (#rrggbb или #rrggbbaa), onClear() — вернуть «авто»
+  const makeRow = (label, autoHex, onSet, onClear) => {
+    const row = document.createElement("label"); row.className = "ccrow";
+    const lb = document.createElement("span"); lb.textContent = label;
+    const auto = document.createElement("small");
+    const inp = document.createElement("input"); inp.type = "color";
+    const al = document.createElement("input"); al.type = "range"; al.min = "0"; al.max = "100"; al.className = "ccalpha";
+    al.title = "Непрозрачность: влево — прозрачнее";
+    const pct = document.createElement("output"); pct.className = "ccpct";
+    const compose = () => { const a = +al.value; return a >= 100 ? inp.value : inp.value + Math.round((a / 100) * 255).toString(16).padStart(2, "0"); };
+    const put = () => { pct.textContent = al.value + "%"; fill(al); row.classList.add("set"); auto.textContent = "авто"; onSet(compose()); };
+    inp.addEventListener("input", put);
+    al.addEventListener("input", put);
+    inp.addEventListener("change", () => saveCfg());
+    al.addEventListener("change", () => saveCfg());
+    const clr = document.createElement("button"); clr.type = "button"; clr.className = "ccclr"; clr.title = "Вернуть «авто»"; clr.textContent = "✕";
+    clr.onclick = (e) => { e.preventDefault(); onClear(); saveCfg(); };
+    // v — сохранённый цвет или пусто («авто»); hint — подпись вместо «авто» (например «разные»)
+    const show = (v, hint) => {
+      row.classList.toggle("set", !!v);
+      auto.textContent = hint || "авто";
+      row.classList.toggle("mixed", !!hint);
+      inp.value = (v || autoHex()).slice(0, 7);
+      al.value = alphaOf(v); pct.textContent = al.value + "%"; fill(al);
+    };
+    // пипетка — первая в строке-<label>: щелчок по названию открывает её; ползунок прозрачности — сразу за ней
+    row.append(lb, auto, inp, al, pct, clr);
+    return { row, show };
+  };
+  const refreshBulk = () => bulks.forEach((b) => b.sync());
+
+  const groups = CC_GROUPS.filter((g) => !g.only || g.only === baseOf());
+  const shown = new Set(groups.flatMap((g) => g.items.map((it) => it.k)));
+  const itemOf = (k) => CC_ITEMS.find((it) => it.k === k);
+
+  // «Сразу для всех»: один цвет — во все места своей группы (все панели, все кнопки…)
+  {
+    const d = document.createElement("details"); d.className = "ccgrp ccbulk"; d.open = true;
+    const sm = document.createElement("summary");
+    const nm = document.createElement("span"); nm.textContent = "Сразу для всех";
+    const n = document.createElement("small"); n.textContent = "Один цвет сразу во все места. Потом любое из них можно поправить отдельно ниже";
+    sm.append(nm, n);
+    const box2 = document.createElement("div"); box2.className = "ccrows";
+    for (const b of CC_BULK) {
+      const keys = b.keys.filter((k) => shown.has(k));
+      if (!keys.length) continue;
+      const first = itemOf(keys[0]);
+      const r = makeRow(b.label, () => ccAuto(first),
+        (v) => { for (const k of keys) { cc[k] = v; rows[k]?.show(v); } applyCfg(); syncAllDots(); },
+        () => { for (const k of keys) delete cc[k]; applyCfg(); for (const k of keys) rows[k]?.show(); syncAllDots(); r.show(); });
+      if (b.note) r.row.title = b.note;
+      const sync = () => {
+        const vals = keys.map((k) => cc[k] || "");
+        const same = vals.every((v) => v === vals[0]);
+        if (same) r.show(vals[0]);
+        else { const v = vals.find(Boolean) || ""; r.show(v, "разные"); }
+      };
+      bulks.push({ sync });
+      sync();
+      box2.append(r.row);
+    }
+    d.append(sm, box2); scroll.append(d);
+  }
+
+  const groupDots = [];
+  const syncAllDots = () => groupDots.forEach(([dots, keys]) => dotsOf(dots, keys));
+  for (const g of groups) {
+    const d = document.createElement("details"); d.className = "ccgrp";
+    const sm = document.createElement("summary");
+    const nm = document.createElement("span"); nm.textContent = g.name;
+    const dots = document.createElement("span"); dots.className = "ccdots";
+    sm.append(nm, dots);
+    if (g.note) { const n = document.createElement("small"); n.textContent = g.note; sm.append(n); }
+    const box2 = document.createElement("div"); box2.className = "ccrows";
+    const keys = g.items.map((it) => it.k);
+    for (const it of g.items) {
+      const r = makeRow(it.label, () => ccAuto(it),
+        (v) => { cc[it.k] = v; applyCfg(); dotsOf(dots, keys); refreshBulk(); },
+        () => { delete cc[it.k]; applyCfg(); r.show(); dotsOf(dots, keys); refreshBulk(); });
+      r.show(cc[it.k]);
+      rows[it.k] = r;
+      box2.append(r.row);
+    }
+    groupDots.push([dots, keys]);
+    dotsOf(dots, keys);
+    d.append(sm, box2); scroll.append(d);
+  }
+  const row = document.createElement("div"); row.className = "row";
+  const reset = document.createElement("button"); reset.className = "nav"; reset.textContent = "Сбросить всё";
+  const ok = document.createElement("button"); ok.className = "nav active"; ok.textContent = "Готово";
+  reset.onclick = () => {
+    for (const k of Object.keys(cc)) delete cc[k];
+    applyCfg(); saveCfg();
+    Object.values(rows).forEach((r) => r.show());
+    syncAllDots(); refreshBulk();
+  };
+  row.append(reset, ok);
+  box.append(h, p, scroll, row);
+  const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  document.addEventListener("keydown", onKey, true);
+  ok.onclick = close;
+  wrap.onpointerdown = (e) => { if (e.target === wrap) close(); };
+  wrap.append(box); document.body.append(wrap);
+  scroll.querySelector("details")?.setAttribute("open", "");
+}
+$("#ccBtn").onclick = openColorEditor;
+
 function applyCfg() {
-  const r = document.documentElement.style, st = sty();
-  document.documentElement.dataset.style = cfg.style;
-  document.documentElement.dataset.anim = cfg.anim === false ? "off" : "on";
+  const r = document.documentElement.style, st = sty(), base = baseOf();
+  // свой стиль, чей CSS ещё не подключён (идёт загрузка при старте), временно показывается как его основа
+  document.documentElement.dataset.style = BUILTIN.includes(cfg.style) || themeReady.has(cfg.style) ? cfg.style : base;
+  document.documentElement.dataset.base = base;
+  // стиль без анимаций (features.animations = false) — анимации выключены, как если бы сняли галочку
+  document.documentElement.dataset.anim = cfg.anim === false || !feature("animations") ? "off" : "on";
   r.setProperty("--accent", st.accent);
   r.setProperty("--accent2", st.accent2);
-  const oa = onAccent(st.accent, st.accent2);
+  const oa = onAccent(btnHi(st.accent2), st.accent2);      // кнопки залиты вторичным цветом — текст на них подбираем под него
   r.setProperty("--on-accent", oa.color);
-  r.setProperty("--on-accent-shadow", cfg.style === "neon" ? oa.shadow : "none");
-  r.setProperty("--glow", (cfg.style === "neon" ? st.glow : STYLE_DEF[cfg.style].glow) + "px");
+  r.setProperty("--on-accent-shadow", base === "neon" ? oa.shadow : "none");
+  r.setProperty("--glow", (base === "neon" || !BUILTIN.includes(cfg.style) ? st.glow : STYLE_DEF[cfg.style].glow) + "px");
   r.setProperty("--panel-a", st.panel / 100);
   r.setProperty("--dim", st.dim / 100);
   r.setProperty("--bgblur", cfg.blur + "px");
@@ -222,6 +595,7 @@ function applyCfg() {
   const prev = vid ? bgPosters[cfg.style] : curBg();
   $("#drop").style.setProperty("--drop-img", prev ? `url("${prev}")` : "none");
   syncBgVideo();
+  applyCustom();
   applyViz();
 }
 function saveCfg() {
@@ -236,9 +610,12 @@ function syncControls() {
   $("#cViz").checked = cfg.viz;
   syncVizStyles();
   $("#cAnim").checked = cfg.anim !== false;
-  const neon = cfg.style === "neon";
-  $("#cGlow").closest("label").style.display = neon ? "" : "none";
-  $("#glassTitle").textContent = neon ? "Стекло и свечение" : "Панели";
+  // ползунки и галочки — только для того, что у стиля есть (feature)
+  const glow = feature("glow"), panels = feature("panelOpacity"), anim = feature("animations");
+  $("#cGlow").closest("label").style.display = glow ? "" : "none";
+  $("#cPanel").closest("label").style.display = panels ? "" : "none";
+  $("#glassTitle").textContent = glow ? (panels ? "Стекло и свечение" : "Свечение") : "Панели";
+  $("#cAnim").closest("label").style.display = anim ? "" : "none";
   document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
   fillAll();
 }
@@ -368,23 +745,28 @@ async function pickBgFromFiles(files) {
   return media.find((f) => /^video\//.test(f.type) || /\.(mp4|webm|m4v|mov|mkv)$/i.test(f.name))
     || media.find((f) => /^image\//.test(f.type)) || media[0] || null;
 }
-// содержимое перетащенной папки (рекурсивно, не глубже 3 уровней)
-async function filesFromDrop(dt) {
-  const entries = [...(dt.items || [])].map((it) => it.webkitGetAsEntry?.()).filter(Boolean);
-  if (!entries.some((e) => e.isDirectory)) return [...dt.files];
-  const out = [];
-  const walk = async (e, depth) => {
-    if (e.isFile) { out.push(await new Promise((r) => e.file(r, () => r(null)))); return; }
-    if (!e.isDirectory || depth > 3) return;
-    const rd = e.createReader();
-    for (;;) {
-      const batch = await new Promise((r) => rd.readEntries(r, () => r([])));
-      if (!batch.length) break;
-      for (const x of batch) await walk(x, depth + 1);
-    }
-  };
-  for (const e of entries) await walk(e, 0);
-  return out.filter(Boolean);
+// Папку обоев (кнопка) и перетаскивание в окно принимает Rust (bg.rs): если отдать папку странице,
+// WebView2 каждый раз спрашивает «Отправить N файлов на этот сайт?». Rust присылает только список имён
+// (папка обходится не глубже 3 уровней), а содержимое нужного файла читается по номеру — лишнее не грузится.
+function nativeFiles(list) {
+  return (Array.isArray(list) ? list : []).map((e) => ({
+    name: String(e.name || ""), type: "", size: Number(e.size) || 0, _id: e.id,
+    async text() { return new TextDecoder().decode(new Uint8Array(await invoke("bg_read", { id: this._id }))); },
+  }));
+}
+const BG_MIME = {
+  mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm", mkv: "video/x-matroska",
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp",
+};
+async function loadNativeBg(list) {
+  try {
+    const pick = await pickBgFromFiles(nativeFiles(list));
+    if (!pick) return await loadBg(null);
+    bgNote("Загружаю…");
+    const buf = await invoke("bg_read", { id: pick._id });
+    const ext = (pick.name.split(".").pop() || "").toLowerCase();
+    return await loadBg(new File([buf], pick.name, { type: BG_MIME[ext] || "" }));
+  } catch (e) { bgNote(e.message || "Не удалось прочитать файлы."); return false; }
 }
 async function loadBgFiles(files) {
   try { const f = await pickBgFromFiles(files); return await loadBg(f); }
@@ -459,7 +841,7 @@ async function initBg() {
     }
   } catch {}
   cfg.bg = "";
-  for (const st of Object.keys(bgUrls)) {
+  for (const st of Object.keys(cfg.s)) {           // встроенные и свои стили
     if (cfg.s[st].bg !== "idb") continue;
     let blob = null;
     try { blob = await IDB.get(bgKey(st)); } catch {}
@@ -474,14 +856,32 @@ async function initBg() {
   applyCfg();
 }
 $("#bgFile").onchange = async (e) => { const fs = [...e.target.files]; e.target.value = ""; await loadBgFiles(fs); };
-$("#bgDir").onchange = async (e) => { const fs = [...e.target.files]; e.target.value = ""; await loadBgFiles(fs); };
-$("#bgDirBtn").onclick = (e) => { e.preventDefault(); e.stopPropagation(); $("#bgDir").click(); };
+$("#bgDirBtn").onclick = async (e) => {
+  e.preventDefault(); e.stopPropagation();
+  try { const list = await invoke("bg_dir_pick"); if (list) await loadNativeBg(list); }
+  catch (er) { bgNote("Не удалось открыть папку: " + er.message); }
+};
+// Перетаскивание файла или папки в окно: события приходят из Rust (bg.rs). Пока тащим над страницей
+// настроек — подсвечиваем зону; бросить можно в любое место настроек.
 const drop = $("#drop");
-drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = async (e) => { e.preventDefault(); drop.classList.remove("over"); loadBgFiles(await filesFromDrop(e.dataTransfer)); };
+const onSettings = () => !$("#settingsPage").hidden;
+window.__TAURI__.event?.listen("bg-drag", (e) => drop.classList.toggle("over", !!e.payload?.over && onSettings()));
+window.__TAURI__.event?.listen("bg-drop", (e) => {
+  drop.classList.remove("over");
+  if (window.wmtDrop?.(e.payload?.files)) return;          // файл темы .wmt (theme.js) — принимается на любой странице
+  if (!onSettings()) { showToast("Чтобы поставить фон, открой «Настройки» и перетащи файл туда"); return; }
+  loadNativeBg(e.payload?.files);
+});
 $("#bgReset").onclick = async () => { await clearBg(); applyCfg(); saveCfg(); };
-$("#cfgReset").onclick = async () => { const keep = cfg.style; for (const st of Object.keys(bgUrls)) await clearBg(st); cfg = freshCfg(); cfg.style = keep; applyCfg(); saveCfg(); syncControls(); };
+$("#cfgReset").onclick = async () => {
+  const keep = cfg.style, themes = cfg.themes;
+  for (const st of Object.keys(cfg.s)) await clearBg(st);
+  cfg = freshCfg(); cfg.themes = themes;
+  for (const t of themes) cfg.s[t.id] = { ...STYLE_DEF[t.base], cc: {} };
+  cfg.style = cfg.s[keep] ? keep : "royal";
+  await window.wmtRestoreDefaults?.();        // свои стили: цвета и фон — снова как в их файлах .wmt
+  applyCfg(); saveCfg(); syncControls();
+};
 $("#cViz").onchange = (e) => { cfg.viz = e.target.checked; syncVizStyles(); applyViz(); saveCfg(); };
 // список стилей визуализатора виден только когда визуализатор включён
 var VIZ_NOTE = { circle: "Неровные круги вокруг кнопки: дышат с басом и вздрагивают на каждую долю.", bars: "Столбцы разной высоты по частотам: слева и справа от кнопки, бас ближе к центру." };
@@ -676,7 +1076,7 @@ function fillArtists(el, t) {
     if (i) el.append(", ");
     const s = document.createElement("span");
     s.className = "art"; s.textContent = a.name;
-    s.onclick = (e) => { e.stopPropagation(); navigate(() => showArtist(a.id)); };
+    if (a.id) s.onclick = (e) => { e.stopPropagation(); navigate(() => showArtist(a.id)); };   // у трека, восстановленного из имени файла, номера артиста нет
     el.append(s);
   });
 }
@@ -809,9 +1209,9 @@ function resetView() {
   curPl = null; recArr.length = 0; $("#plRecList").innerHTML = "";
   document.querySelector(".main").scrollTop = 0;
 }
-function setActive(id) {
+function setActive(id, page) {        // page — имя страницы для CSS, когда в боковой панели ничего не подсвечено (артист, альбом)
   document.querySelectorAll(".side .nav").forEach((b) => b.classList.toggle("active", b.id === id));
-  document.querySelector(".main").dataset.page = id || "";
+  document.querySelector(".main").dataset.page = page || id || "";
 }
 const roman = (n) => {
   n = +n; if (!n || n < 1 || n > 3999) return "";
@@ -884,11 +1284,8 @@ async function showLikes(tab = likesTab) {
   $("#status").textContent = "Загрузка…";
   try {
     const lib = await api(`/users/${uid}/likes/tracks`);
-    likedIds = new Set(lib.library.tracks.map((t) => String(t.id)));
-    const ids = lib.library.tracks
-      .slice()
-      .sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0))
-      .map((t) => `${t.id}:${t.albumId}`);
+    setOffline(false);
+    const ids = rememberLikes(lib).map((t) => `${t.id}:${t.albumId}`);
     const acc = [];
     for (let i = 0; i < ids.length; i += 100) {
       const tracks = await api("/tracks", {
@@ -901,15 +1298,81 @@ async function showLikes(tab = likesTab) {
       renderList(tracks, i > 0, LK);
       $("#status").textContent = i + 100 < ids.length ? `Загружено ${acc.length} из ${ids.length}…` : "";
     }
-    likes.tracks = acc; likes.done = true;
-  } catch (e) { if (my === nav) $("#status").textContent = "Ошибка: " + e.message; }
+    likes.tracks = mergeLikesAdded(acc); likes.done = true;
+    if (likes.tracks !== acc) redrawLikes();
+    backfillMeta(acc);
+  } catch (e) {
+    if (my !== nav) return;
+    if (isNetErr(e)) return showOfflineLikes(my);
+    $("#status").textContent = "Ошибка: " + e.message;
+  }
+}
+
+// Новый лайк сразу появляется сверху открытой страницы «Лайки» (прокрутка не сбивается).
+// Снятый лайк строку не убирает — сердечко гаснет, и трек можно тут же лайкнуть обратно.
+const likesAdded = [];
+const likesOpen = () => document.querySelector(".main").dataset.page === "likes" && likesTab === "likes" && !$("#list").hidden;
+function redrawLikes() {
+  if (!likesOpen()) return;
+  const main = document.querySelector(".main"), top = main.scrollTop;
+  renderList(likes.tracks, false, LK);
+  main.scrollTop = top;
+}
+// Лайки, поставленные во время загрузки списка (его номера уже были получены), — в начало.
+function mergeLikesAdded(acc) {
+  const have = new Set(acc.map((x) => String(x.id)));
+  const extra = likesAdded.splice(0).filter((x) => likedIds.has(String(x.id)) && !have.has(String(x.id)));
+  return extra.length ? [...extra.reverse(), ...acc] : acc;
+}
+
+// Список лайков (новые сверху) запоминается: без сети по нему расставляются сердечки и порядок скачанных треков.
+function rememberLikes(lib) {
+  const list = lib.library.tracks
+    .slice()
+    .sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
+  likedIds = new Set(list.map((t) => String(t.id)));
+  try { localStorage.setItem("ym_liked_ids", JSON.stringify(list.map((t) => String(t.id)))); } catch {}
+  return list;
+}
+
+// ---------- офлайн: «Лайки» из скачанных треков ----------
+// Описание трека берётся из индекса скачанного (сохраняется при скачивании); у старых загрузок
+// его может не быть — тогда название и исполнители восстанавливаются из имени файла «Исполнитель — Название».
+function offlineTrack(it) {
+  const m = it.meta && typeof it.meta === "object" && it.meta.title ? it.meta : null;
+  if (m) return { ...m, id: it.id };
+  const name = String(it.name || it.id).replace(/ \(\d+\)$/, "");
+  const k = name.indexOf(" — ");
+  if (k < 0) return { id: it.id, title: name, artists: [] };
+  return { id: it.id, title: name.slice(k + 3), artists: name.slice(0, k).split(", ").filter(Boolean).map((n) => ({ name: n })) };
+}
+async function offlineLikes() {
+  let items = [];
+  try { items = await invoke("downloaded_tracks"); } catch { return []; }
+  got.clear(); for (const it of items) got.add(String(it.id));
+  const rank = new Map(lsJSON("ym_liked_ids", [], Array.isArray).map((id, i) => [String(id), i]));
+  // сначала лайкнутые — в порядке лайков, затем остальные скачанные — новые сверху
+  items.sort((a, b) => {
+    const ra = rank.get(String(a.id)), rb = rank.get(String(b.id));
+    if (ra !== undefined || rb !== undefined) return (ra ?? Infinity) - (rb ?? Infinity) || 0;
+    return (b.ts || 0) - (a.ts || 0);
+  });
+  return items.map(offlineTrack);
+}
+async function showOfflineLikes(my) {
+  const tracks = await offlineLikes();
+  if (my !== nav) return;
+  setOffline(true);
+  renderList(tracks, false, LK);
+  $("#status").textContent = tracks.length
+    ? `Нет связи с Яндекс Музыкой — показаны скачанные треки (${tracks.length}).`
+    : "Нет связи с Яндекс Музыкой, а скачанных треков пока нет.";
 }
 
 async function loadAllLikes(onProgress, stale) {
   if (likes.done) return likes.tracks;
   const lib = await api(`/users/${uid}/likes/tracks`);
-  likedIds = new Set(lib.library.tracks.map((t) => String(t.id)));
-  const ids = lib.library.tracks.map((t) => `${t.id}:${t.albumId}`);
+  const ids = rememberLikes(lib).map((t) => `${t.id}:${t.albumId}`);
   const acc = [];
   for (let i = 0; i < ids.length; i += 100) {
     const tracks = await api("/tracks", {
@@ -921,8 +1384,8 @@ async function loadAllLikes(onProgress, stale) {
     acc.push(...tracks);
     onProgress(acc.length, ids.length);
   }
-  likes.tracks = acc; likes.done = true;
-  return acc;
+  likes.tracks = mergeLikesAdded(acc); likes.done = true;
+  return likes.tracks;
 }
 const artistImg = (a) => (a?.cover?.uri ? cover({ coverUri: a.cover.uri }, "200x200") : "");
 function computeStats(tracks) {
@@ -1182,6 +1645,7 @@ async function waveMore() {
     const incoming = trackList(r).filter((t) => !have.has(String(t.id)));
     const fresh = incoming.filter((t) => !heard.has(String(t.id)));
     q.push(...(fresh.length ? fresh : incoming));
+    window.qRefresh?.();
   } catch {} finally { wave.loading = false; }
 }
 
@@ -1222,7 +1686,6 @@ $("#waveBtn").onclick = async () => {
       if (next < queue.length) { play(next); return; }
       wave.on = false;
     }
-    setHint("Запускаю…");
     await waveStart();
   } catch (e) { wave.on = false; setHint("Не удалось запустить: " + e.message); }
 };
@@ -1318,7 +1781,6 @@ async function pickStation(seed, name) {
   Object.assign(wave, { seed, name, album: null, session: null, queue: [], pos: -1, on: false });
   try { localStorage.setItem("ym_wave_seed", JSON.stringify({ seed, name })); } catch {}
   setStations(false);
-  setHint("Запускаю…");
   try { await waveStart(); } catch (e) { wave.on = false; setHint("Не удалось запустить: " + e.message); }
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { setStations(false); closeFull(); } });
@@ -1393,7 +1855,7 @@ function showLastAlbum(a) {
 
 async function showArtist(id, tab = "tracks") {
   const my = ++nav;
-  setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs(pinKey("artist", id)); resetView();
+  setHead({ title: "Загрузка…", back: true }); setActive(null, "artist"); renderTabs(pinKey("artist", id)); resetView();
   setChips([["tracks", "Треки"], ["albums", "Альбомы"]], tab, (t) => showArtist(id, t));
 
   loadArtist(id).then(({ info, albums }) => {
@@ -1430,7 +1892,7 @@ async function showArtist(id, tab = "tracks") {
 
 async function showAlbum(id) {
   const my = ++nav;
-  setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs(pinKey("album", id)); resetView();
+  setHead({ title: "Загрузка…", back: true }); setActive(null, "album"); renderTabs(pinKey("album", id)); resetView();
   try {
     const a = await api(`/albums/${id}/with-tracks`);
     if (my !== nav) return;
@@ -1483,25 +1945,191 @@ async function loadSimilar(a, my) {
   } catch {}
 }
 
-async function showSearch(q) {
-  const my = ++nav;
-  setHead({ title: "Поиск: " + q }); setActive(null); renderTabs(false); resetView();
-  setChips([["track", "Треки"], ["artist", "Артисты"], ["album", "Альбомы"]], searchType, (t) => { searchType = t; showSearch(q); });
-  try {
-    const r = await api(`/search?text=${encodeURIComponent(q)}&type=${searchType}&page=0`);
-    if (my !== nav) return;
-    const items = r[{ track: "tracks", artist: "artists", album: "albums" }[searchType]]?.results || [];
-    if (searchType === "track") renderList(items);
-    else if (searchType === "artist") renderArtists(items);
-    else renderAlbums(items, true);
-    $("#status").textContent = items.length ? "" : "Ничего не найдено";
-  } catch (e) { if (my === nav) $("#status").textContent = "Ошибка: " + e.message; }
+// ---------- поиск ----------
+// Окно поиска открывается сразу по клику в поле. Пустой запрос — вкладка «История»;
+// при вводе — сверху «Лучший результат» (поле best из ответа /search?type=all), ниже список по выбранному фильтру.
+const SEARCH_HIST_KEY = "ym_search_hist", SEARCH_HIST_MAX = 30;
+const searchHist = lsJSON(SEARCH_HIST_KEY, [], Array.isArray)
+  .filter((x) => typeof x === "string" && x.trim())
+  .map((x) => x.trim().slice(0, 200))
+  .slice(0, SEARCH_HIST_MAX);
+let searchQ = "", searchTab = "history";
+const searchInput = $("#search");
+const SEARCH_KEYS = { track: "tracks", artist: "artists", album: "albums" };
+const BEST_LABEL = { track: "Трек", artist: "Артист", album: "Альбом" };
+const CLOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
+function saveSearchHist() { try { localStorage.setItem(SEARCH_HIST_KEY, JSON.stringify(searchHist)); } catch {} }
+function pushSearchHist(q) {
+  q = String(q || "").trim().slice(0, 200);
+  if (!q) return;
+  const i = searchHist.findIndex((x) => x.toLowerCase() === q.toLowerCase());
+  if (i >= 0) searchHist.splice(i, 1);
+  searchHist.unshift(q);
+  if (searchHist.length > SEARCH_HIST_MAX) searchHist.length = SEARCH_HIST_MAX;
+  saveSearchHist();
 }
-$("#search").oninput = (e) => {
+const searchOpen = () => document.querySelector(".main").dataset.page === "search";
+
+function searchChips(active) {
+  setChips([["track", "Треки"], ["artist", "Артисты"], ["album", "Альбомы"], ["history", "История"]], active, (t) => {
+    if (t === "history") return goTop(() => showSearch(searchQ, true));
+    searchType = t;
+    if (!searchQ) { searchInput.focus(); return; }      // без запроса фильтру нечего показывать — просто ставим курсор в поле
+    goTop(() => showSearch(searchQ));
+  });
+}
+
+async function showSearch(q, historyTab = false) {
+  const my = ++nav;
+  searchQ = q;
+  const tab = (searchTab = historyTab || !q ? "history" : searchType);
+  setHead({ title: tab === "history" ? "Поиск" : "Поиск: " + q });
+  setActive("search"); renderTabs(false); resetView();
+  searchChips(tab);
+  if (tab === "history") { renderSearchHist(); return; }
+
+  $("#status").textContent = "Ищу…";
+  const enc = encodeURIComponent(q), type = searchType, key = SEARCH_KEYS[type];
+  // type=all возвращает best — лучшее совпадение, которое Яндекс ставит первым; второй запрос — полный список по фильтру
+  const [allR, listR] = await Promise.allSettled([
+    api(`/search?text=${enc}&type=all&page=0`),
+    api(`/search?text=${enc}&type=${type}&page=0`),
+  ]);
+  if (my !== nav) return;
+  const all = allR.status === "fulfilled" ? allR.value : null;
+  const list = listR.status === "fulfilled" ? listR.value : null;
+  if (!all && !list) { $("#status").textContent = "Ошибка: " + (listR.reason?.message || allR.reason?.message || "нет ответа"); return; }
+
+  let items = (list || all)?.[key]?.results || [];
+  const best = all?.best;
+  const bestOk = !!(best && BEST_LABEL[best.type] && best.result && best.result.id != null);
+  if (bestOk && best.type === type) items = items.filter((x) => String(x.id) !== String(best.result.id));   // не дублируем его в списке
+
+  if (type === "track") renderList(items);
+  else if (type === "artist") renderArtists(items);
+  else renderAlbums(items, true);
+  if (bestOk) renderBest(best.type, best.result);
+  $("#status").textContent = items.length || bestOk ? "" : "Ничего не найдено";
+}
+
+// карточка «Лучший результат» — первая строка списка, поэтому resetView убирает её вместе со списком
+function renderBest(type, x) {
+  const li = document.createElement("li");
+  li.className = "best";
+  const artUri = x.cover?.uri || x.ogImage;
+  const imgUrl = type === "artist" ? (artUri ? cover({ coverUri: artUri }, "200x200") : "") : cover(x, "200x200");
+  li.append(mkImg(imgUrl, type === "artist" ? "rnd" : ""));
+
+  const body = document.createElement("div");
+  body.className = "bbody";
+  body.innerHTML = '<small class="blabel"></small><span class="t"></span><span class="a"></span>';
+  body.querySelector(".blabel").textContent = "Лучший результат · " + BEST_LABEL[type];
+  const tt = body.querySelector(".t"), sub = body.querySelector(".a");
+  tt.textContent = type === "artist" ? x.name : x.title;
+  li.append(body);
+
+  const pb = document.createElement("button");
+  pb.className = "bplay";
+  pb.innerHTML = ICON.play;
+
+  if (type === "track") {
+    li.dataset.id = x.id;                                   // подсветка «играет» и сердечко обновляются вместе со списком
+    if (String(x.id) === String(playingId)) li.classList.add("playing");
+    fillArtists(sub, x);
+    const albumId = albumOf(x);
+    if (albumId) {
+      tt.classList.add("link");
+      tt.onclick = (e) => { e.stopPropagation(); navigate(() => showAlbum(albumId)); };
+    }
+    const start = () => {
+      const rest = shown.filter((t) => String(t.id) !== String(x.id));   // после него играют треки из списка ниже
+      wave.on = false; queue = [x, ...rest]; playCtx = "other"; playAlbum = null; play(0);
+    };
+    li.onclick = start;
+    pb.title = "Слушать";
+    pb.onclick = (e) => { e.stopPropagation(); start(); };
+    const hb = document.createElement("button");
+    hb.className = "likebtn";
+    setHeart(hb, likedIds.has(String(x.id)));
+    hb.onclick = (e) => { e.stopPropagation(); toggleLike(x); };
+    const mb = document.createElement("button");
+    mb.className = "morebtn"; mb.title = "Ещё"; mb.innerHTML = ICON.more;
+    mb.onclick = (e) => { e.stopPropagation(); openTrackMenu(x, mb, null); };
+    li.append(pb, hb, mb);
+    syncGotRow(li);
+  } else if (type === "album") {
+    fillArtists(sub, x);
+    const info = albumInfo(x);
+    if (info) sub.append(" · " + info);
+    li.onclick = () => navigate(() => showAlbum(x.id));
+    pb.title = "Слушать альбом";
+    pb.onclick = (e) => { e.stopPropagation(); playAlbumById(x); };
+    li.append(pb);
+  } else {
+    sub.textContent = "Артист";
+    li.onclick = () => navigate(() => showArtist(x.id));
+    pb.title = "Моя волна по артисту";
+    pb.onclick = (e) => { e.stopPropagation(); goTop(showWave); pickStation("artist:" + x.id, x.name); };
+    li.append(pb);
+  }
+  $("#list").prepend(li);
+}
+
+function renderSearchHist() {
+  const list = $("#list");
+  list.innerHTML = "";
+  if (!searchHist.length) {
+    $("#status").textContent = "История пуста. Сюда попадают запросы, подтверждённые Enter, и те, по которым ты что-то включил или открыл.";
+    return;
+  }
+  $("#status").textContent = "";
+  for (const q of searchHist) {
+    const li = document.createElement("li");
+    li.className = "histitem";
+    li.innerHTML = `<span class="hico">${CLOCK_SVG}</span><span class="t"></span><button class="hdel" title="Удалить из истории">✕</button>`;
+    li.querySelector(".t").textContent = q;
+    li.onclick = () => { searchInput.value = q; pushSearchHist(q); goTop(() => showSearch(q)); };
+    li.querySelector(".hdel").onclick = (e) => {
+      e.stopPropagation();
+      const i = searchHist.indexOf(q);
+      if (i >= 0) searchHist.splice(i, 1);
+      saveSearchHist(); renderSearchHist();
+    };
+    list.append(li);
+  }
+  const clr = document.createElement("li");
+  clr.className = "histclear";
+  clr.innerHTML = '<button class="nav">Очистить историю</button>';
+  clr.querySelector("button").onclick = () => { searchHist.length = 0; saveSearchHist(); renderSearchHist(); };
+  list.append(clr);
+}
+
+// поле поиска: окно открывается по клику/фокусу, а не после первой буквы
+function openSearch() {
+  if (searchOpen()) return;
+  const q = searchInput.value.trim();
+  goTop(() => showSearch(q));
+}
+searchInput.addEventListener("focus", openSearch);
+searchInput.addEventListener("click", openSearch);          // поле уже в фокусе, но открыт другой раздел
+searchInput.oninput = () => {
   clearTimeout(searchTimer);
-  const q = e.target.value.trim();
-  searchTimer = setTimeout(() => goTop(q ? () => showSearch(q) : showLikes), 400);
+  const q = searchInput.value.trim();
+  searchTimer = setTimeout(() => goTop(() => showSearch(q)), q ? 350 : 0);   // стёрли всё — сразу показываем историю
 };
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    pushSearchHist(q);
+    if (!(searchOpen() && q && q === searchQ && searchTab !== "history")) goTop(() => showSearch(q));   // те же результаты не перезапрашиваем
+  } else if (e.key === "Escape") searchInput.blur();
+});
+// любое действие с результатом (включить, открыть, лайкнуть) сохраняет запрос в историю
+$("#list").addEventListener("click", (e) => {
+  if (searchOpen() && searchQ && searchTab !== "history" && e.target.closest("li") && !e.target.closest(".histitem, .histclear")) pushSearchHist(searchQ);
+}, true);
 
 function setHeart(b, on) {
   if (b.firstChild && b.classList.contains("on") === on) return;      // уже в нужном состоянии — не перерисовываем (в лайках тысячи строк)
@@ -1522,7 +2150,7 @@ function refreshHearts() {
 async function loadLikedIds() {
   try {
     const lib = await api(`/users/${uid}/likes/tracks`);
-    likedIds = new Set(lib.library.tracks.map((t) => String(t.id)));
+    rememberLikes(lib);
     refreshHearts();
   } catch {}
 }
@@ -1538,7 +2166,8 @@ async function toggleLike(t) {
       body: "track-ids=" + encodeURIComponent(albumId ? `${id}:${albumId}` : id),
     });
     if (was) likes.tracks = likes.tracks.filter((x) => String(x.id) !== id);
-    else if (likes.done) likes.tracks.unshift(t);
+    else if (likes.done) { likes.tracks = [t, ...likes.tracks.filter((x) => String(x.id) !== id)]; redrawLikes(); }
+    else likesAdded.push(t);              // лайки ещё грузятся — трек добавится, когда загрузка закончится
   } catch (e) {
     was ? likedIds.add(id) : likedIds.delete(id);
     refreshHearts();
@@ -1852,6 +2481,7 @@ function modal({ title, text = "", input = null, check = null, ok = "Готов�
 function openTrackMenu(t, btn, ctx = null) { openMenu(btn, () => trackMenuMain(t, ctx)); }
 function trackMenuMain(t, ctx) {
   menuReset();
+  if (window.playNext && String(t.id) !== String(queue[current]?.id)) menuItem(ICON.playNext, "Играть следующим", () => window.playNext(t));
   menuItem(ICON.plAdd, "Добавить в плейлист", () => trackMenuPlaylists(t, ctx), { keep: true, arrow: true });
   if (ctx) {
     const p = PL.full.get(ctx.kind), n = p ? p.items.length : 0;
@@ -1863,6 +2493,7 @@ function trackMenuMain(t, ctx) {
   }
   menuSep();
   menuItem(got.has(String(t.id)) ? ICON.got : ICON.download, got.has(String(t.id)) ? "Уже скачан" : "Скачать трек", () => downloadTrack(t));
+  window.waTrackMenu?.(t, ctx);         // «Сохранить в архив» (whisper.js)
   placeMenu();
 }
 async function trackMenuPlaylists(t, ctx) {
@@ -2356,6 +2987,24 @@ function syncGot() {
 }
 async function loadGot() {
   try { const ids = await invoke("downloaded_ids"); got.clear(); for (const i of ids) got.add(String(i)); syncGot(); } catch {}
+  if (likes.done) backfillMeta(likes.tracks);
+}
+// Краткое описание трека — сохраняется вместе со скачанным файлом, чтобы показать его в списке без сети.
+const trackMin = (x) => ({
+  id: x.id, title: x.title, version: x.version || undefined, coverUri: x.coverUri, durationMs: x.durationMs,
+  artists: (x.artists || []).map((a) => ({ id: a.id, name: a.name })),
+  albums: (x.albums || []).slice(0, 1).map((a) => ({ id: a.id, title: a.title })),
+});
+// Трекам, скачанным до появления офлайн-режима, описание дописывается, когда их данные есть под рукой (раз за запуск).
+const metaSent = new Set();
+function backfillMeta(tracks) {
+  const items = [];
+  for (const t of tracks || []) {
+    const id = String(t?.id ?? "");
+    if (!id || !got.has(id) || metaSent.has(id) || !t.title) continue;
+    metaSent.add(id); items.push({ id, meta: trackMin(t) });
+  }
+  if (items.length) invoke("downloaded_meta", { items }).catch(() => {});
 }
 window.addEventListener("focus", loadGot);
 
@@ -2372,8 +3021,8 @@ async function downloadTrack(t, force = false) {
   showToast(`Скачиваю «${t.title}»…`, 0);
   try {
     const url = await directLink(t.id);
-    const path = await invoke("download_track", { url, name, id });
-    got.add(id); syncGot();
+    const path = await invoke("download_track", { url, name, id, meta: trackMin(t) });
+    got.add(id); metaSent.add(id); syncGot();
     showToast(`Сохранено: ${path}`, 5000, { kind: "ok" });
   } catch (e) {
     showToast("Не удалось скачать: " + e.message, 6000);
@@ -2381,9 +3030,13 @@ async function downloadTrack(t, force = false) {
 }
 
 $("#dlBtn").onclick = () => downloadTrack(queue[current]);
+// «⋯» в нижней панели: то же меню, что у треков в списках, для играющего трека
+$("#pMore").innerHTML = ICON.more;
+$("#pMore").onclick = (e) => { e.stopPropagation(); const t = queue[current]; if (t) openTrackMenu(t, e.currentTarget); };
 function refreshDlBtn() {
   const b = $("#dlBtn"), t = queue[current];
   b.disabled = !t;
+  $("#pMore").disabled = !t;
   b.classList.toggle("busy", !!t && downloading.has(String(t.id)));
   const have = !!t && got.has(String(t.id));
   b.classList.toggle("got", have);
@@ -2445,6 +3098,7 @@ function showTrack(t, pos = 0) {
   if (wave.on) showNow(t);
   refreshHearts(); updateModes();
   if (!$("#full").hidden) fillFull(t);
+  window.qRefresh?.();                    // панель очереди (queue.js), если открыта
 }
 
 function saveLast(pos = 0) {
@@ -2493,6 +3147,7 @@ async function play(i, resumeAt = 0) {
     else { const k = order.indexOf(i); if (k >= 0) ordPos = k; }
   }
   saveLast(resumeAt);
+  window.qOnPlay?.(t);                    // история прослушивания (queue.js)
   if (wave.on) {
     wave.pos = i; markHeard(t);
     waveFeedback("trackStarted", t);
@@ -2512,21 +3167,73 @@ async function play(i, resumeAt = 0) {
     }
   }
   try {
-    const url = await directLink(t.id);
+    // Скачанный трек играет с диска (ymlocal://, Rust отдаёт файл кусками) — без единого запроса в сеть.
+    // Иначе Whisper Archive (whisper.js): трек есть в архиве — играет поток оттуда (wa://, кусками), иначе версия Яндекса.
+    const local = got.has(String(t.id)) ? LOCAL_BASE + "track/" + encodeURIComponent(String(t.id)) : "";
+    if (local) backfillMeta([t]);
+    const wa = local ? null : window.waSource ? await window.waSource(t, queue[i + 1]) : null;
     if (my !== playSeq) return;
-    let src = url;
-    if (wantViz) {
-      const buf = await invoke("fetch_bytes", { url });
+    window.waBadge?.(!!wa);
+    curFromWa = !!wa; curLocal = !!local;
+    let src;
+    if (local || wa) {
+      if (curBlob) { URL.revokeObjectURL(curBlob); curBlob = null; }
+      audio.crossOrigin = "anonymous";       // свои протоколы отдают CORS — визуализатор может анализировать поток
+      src = local || wa.url;
+      if (wantViz) await actx.resume();
+    } else {
+      audio.removeAttribute("crossorigin");   // файлы Яндекса отдаются без CORS
+      src = await directLink(t.id);
       if (my !== playSeq) return;
-      if (curBlob) URL.revokeObjectURL(curBlob);
-      src = curBlob = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-      await actx.resume();
+      if (wantViz) {
+        const buf = await invoke("fetch_bytes", { url: src });
+        if (my !== playSeq) return;
+        if (curBlob) URL.revokeObjectURL(curBlob);
+        src = curBlob = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+        await actx.resume();
+      }
     }
     audio.src = src;
-    if (resumeAt) audio.addEventListener("loadedmetadata", () => { audio.currentTime = resumeAt; }, { once: true });
-    await audio.play();
-  } catch (e) { if (my === playSeq) $("#status").textContent = "Не удалось воспроизвести: " + e.message; }
+    if (!wa && !wantViz && curBlob) { URL.revokeObjectURL(curBlob); curBlob = null; }   // файл прошлого трека больше не нужен
+    const seekResume = () => { if (resumeAt) audio.addEventListener("loadedmetadata", () => { audio.currentTime = resumeAt; }, { once: true }); };
+    seekResume();
+    try { await audio.play(); }
+    catch (err) {
+      if (my !== playSeq) return;
+      // скачанный файл не открылся (удалён или не читается) — забываем его и играем трек обычным путём
+      if (local && err?.name === "NotSupportedError") {
+        curLocal = false; got.delete(String(t.id)); syncGot();
+        return play(i, resumeAt);
+      }
+      if (!wa || err?.name !== "NotSupportedError") throw err;
+      // поток из архива не заиграл — берём файл целиком, а если и это не вышло, играет версия Яндекса
+      let b = null;
+      try { b = await window.waBlob(wa.id); } catch {}
+      if (my !== playSeq) return;
+      audio.removeAttribute("crossorigin");
+      if (b) audio.src = curBlob = URL.createObjectURL(b);
+      else {
+        curFromWa = false; window.waBadge?.(false);
+        const url = await directLink(t.id);
+        if (my !== playSeq) return;
+        audio.src = url;
+      }
+      seekResume();
+      await audio.play();
+    }
+  } catch (e) {
+    if (my !== playSeq) return;
+    if (isNetErr(e) && !curLocal && !curFromWa) {
+      setOffline(true);
+      $("#status").textContent = `Нет связи с Яндекс Музыкой — «${t.title}» не скачан, сыграть его нельзя.`;
+    } else $("#status").textContent = "Не удалось воспроизвести: " + e.message;
+  }
 }
+// Адрес скачанных треков по правилам Tauri: http://ymlocal.localhost/… в Windows, ymlocal://localhost/… в Linux и macOS.
+const LOCAL_BASE = (() => {
+  try { return window.__TAURI__.core.convertFileSrc("", "ymlocal").replace(/\/?$/, "/"); } catch { return "ymlocal://localhost/"; }
+})();
+let curLocal = false;           // текущий трек играет из скачанного файла (ymlocal://)
 
 function makeAudio(useViz) {
   const a = new Audio();
@@ -2577,23 +3284,32 @@ function applyViz() {
 // Раньше анализ подключался только при старте СЛЕДУЮЩЕГО трека, поэтому сразу после включения визуализатор
 // просто переливался. Теперь уже играющий трек незаметно переводится на анализируемый плеер с той же позиции.
 let vizSwapSeq = 0;
+let curFromWa = false;          // текущий трек играет из Whisper Archive (поток wa:// или, запасной путь, файл в curBlob)
 async function ensureVizAudio() {
   if (!vizWanted() || audioViz || needLoad || !audio || !audio.src || current < 0 || !queue[current]) return;
   const my = ++vizSwapSeq, seq = playSeq, t = queue[current];
   let na = null;
   try {
-    const url = await directLink(t.id);
-    const buf = await invoke("fetch_bytes", { url });
-    if (my !== vizSwapSeq || seq !== playSeq || audioViz || !vizWanted()) return;
+    // Трек из архива: тот же поток wa:// (с CORS — его можно анализировать), ничего не качаем; если играл файл
+    // целиком (запасной путь) — берём его. Брать трек у Яндекса нельзя — заиграла бы другая версия.
+    // Скачанный трек (ymlocal://) — тот же файл с диска, тоже с CORS.
+    const stream = (curFromWa || curLocal) && !curBlob ? audio.currentSrc || audio.src : "";
+    let blob = curFromWa ? curBlob : null;
+    if (!curFromWa && !curLocal) {
+      const url = await directLink(t.id);
+      const buf = await invoke("fetch_bytes", { url });
+      if (my !== vizSwapSeq || seq !== playSeq || audioViz || !vizWanted()) return;
+      blob = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+    }
     na = makeAudio(true);
-    const blob = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-    na.src = blob;
+    if (stream) na.crossOrigin = "anonymous";
+    na.src = stream || blob;
     await new Promise((res, rej) => { na.addEventListener("loadedmetadata", res, { once: true }); na.addEventListener("error", () => rej(new Error("decode")), { once: true }); });
     if (my !== vizSwapSeq || seq !== playSeq || audioViz) throw new Error("stale");
     await actx.resume();
     const old = audio, wasPlaying = !old.paused;
     na.currentTime = old.currentTime || 0;
-    if (curBlob) URL.revokeObjectURL(curBlob);
+    if (curBlob && curBlob !== blob) URL.revokeObjectURL(curBlob);
     curBlob = blob; audio = na; audioViz = true; na = null;
     if (wasPlaying) await audio.play();
     old.pause(); old._src?.disconnect(); old.removeAttribute("src"); old.load();
@@ -2641,7 +3357,7 @@ function vizFrame(ts) {
     vz.br = ($("#waveBtn").offsetWidth || 112) / 2;          // размер кнопки меняется только вместе с размером холста
   }
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const A = sty().accent, B = sty().accent2;
+  const A = sty().cc?.vizA || sty().accent, B = sty().cc?.vizB || sty().accent2;
   const key = `${full}|${cfg.vizStyle}|${cfg.style}|${w}x${h}|${A}|${B}`;
   const fresh = key !== vz.key;
   if (fresh) { vz.key = key; vz.br = ($("#waveBtn").offsetWidth || 112) / 2; }      // стиль мог поменять размер кнопки
@@ -2682,7 +3398,7 @@ function vizFrame(ts) {
   const br = vz.br;
   if (cfg.vizStyle === "bars") { drawBars(g, w, h, t, br, live, ease, fresh, A, B); return; }
   if (!vz.cos) vzTables();
-  const inner = Math.min(br + (cfg.style === "steam" || cfg.style === "lolitta" ? 28 : 14), R * 0.5), outer = Math.max(inner + 20, R * 0.76);
+  const inner = Math.min(br + (baseOf() === "steam" || baseOf() === "lolitta" ? 28 : 14), R * 0.5), outer = Math.max(inner + 20, R * 0.76);
   if (fresh) {
     vz.grad = g.createLinearGradient(0, 0, w, h);
     vz.grad.addColorStop(0, A); vz.grad.addColorStop(1, B);

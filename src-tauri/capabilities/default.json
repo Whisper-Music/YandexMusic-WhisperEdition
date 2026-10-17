@@ -28,9 +28,23 @@
     "allow-yandex-login",
     "allow-download-track",
     "allow-downloaded-ids",
+    "allow-downloaded-tracks",
+    "allow-downloaded-meta",
     "allow-download-dir-get",
     "allow-download-dir-pick",
     "allow-download-dir-reset",
-    "allow-download-dir-open"
+    "allow-download-dir-open",
+    "allow-bg-dir-pick",
+    "allow-bg-read",
+    "allow-theme-save",
+    "allow-wa-token-exists",
+    "allow-wa-token-set",
+    "allow-wa-token-clear",
+    "allow-wa-get",
+    "allow-wa-stream",
+    "allow-wa-auth-request-code",
+    "allow-wa-auth-issue",
+    "allow-wa-save-track",
+    "allow-wa-prefetch"
   ]
 }

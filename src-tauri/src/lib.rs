@@ -1,9 +1,12 @@
 mod auth;
+mod bg;
 mod desktop;
 mod download;
 mod net;
 mod power;
 mod secret;
+mod theme;
+mod whisper;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -131,6 +134,40 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Whisper Archive: потоковое воспроизведение треков архива (wa://localhost/track/<id>,
+        // на Windows — http://wa.localhost/...). Только для главного окна: окно входа Яндекса
+        // и любые внешние страницы получить треки архива этим путём не могут.
+        .register_asynchronous_uri_scheme_protocol("wa", |ctx, request, responder| {
+            if ctx.webview_label() != "main" {
+                responder.respond(
+                    tauri::http::Response::builder()
+                        .status(tauri::http::StatusCode::FORBIDDEN)
+                        .body(Vec::new())
+                        .unwrap_or_default(),
+                );
+                return;
+            }
+            tauri::async_runtime::spawn(async move {
+                responder.respond(whisper::serve_stream(request).await);
+            });
+        })
+        // Скачанные треки играют прямо с диска (ymlocal://localhost/track/<id>, на Windows —
+        // http://ymlocal.localhost/...), без запросов к Яндексу. Тоже только для главного окна.
+        .register_asynchronous_uri_scheme_protocol("ymlocal", |ctx, request, responder| {
+            if ctx.webview_label() != "main" {
+                responder.respond(
+                    tauri::http::Response::builder()
+                        .status(tauri::http::StatusCode::FORBIDDEN)
+                        .body(Vec::new())
+                        .unwrap_or_default(),
+                );
+                return;
+            }
+            let app = ctx.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(download::serve_local(&app, &request));
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             md5_hex,
             win_minimize,
@@ -149,10 +186,24 @@ pub fn run() {
             auth::yandex_login,
             download::download_track,
             download::downloaded_ids,
+            download::downloaded_tracks,
+            download::downloaded_meta,
             download::download_dir_get,
             download::download_dir_pick,
             download::download_dir_reset,
-            download::download_dir_open
+            download::download_dir_open,
+            bg::bg_dir_pick,
+            bg::bg_read,
+            theme::theme_save,
+            whisper::wa_token_exists,
+            whisper::wa_token_set,
+            whisper::wa_token_clear,
+            whisper::wa_get,
+            whisper::wa_stream,
+            whisper::wa_auth_request_code,
+            whisper::wa_auth_issue,
+            whisper::wa_save_track,
+            whisper::wa_prefetch
         ])
         .setup(|app| {
             secret::init(app.handle());
@@ -169,6 +220,7 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&prev, &toggle, &next, &sep, &show, &quit])?;
             app.manage(TrayToggle(toggle));
             app.manage(FsSaved::default());
+            app.manage(bg::Picked::default());
             // Трей одинаково создаётся в Windows и Linux, но ведёт себя по-разному:
             // * Windows — левый клик открывает окно, правый показывает меню;
             // * Linux (libayatana-appindicator / StatusNotifierItem) — щелчки по значку приложению
@@ -211,6 +263,8 @@ pub fn run() {
                         power::enter(window.app_handle());
                     }
                     WindowEvent::Resized(_) => power::on_resized(window),
+                    // перетаскивание файлов/папок в окно принимает Rust (bg.rs), а не веб-страница
+                    WindowEvent::DragDrop(ev) => bg::on_drag(window.app_handle(), ev),
                     _ => {}
                 }
             }
