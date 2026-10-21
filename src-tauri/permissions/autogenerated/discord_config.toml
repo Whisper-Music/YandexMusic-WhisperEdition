@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discord-config"
+description = "Enables the discord_config command without any pre-configured scope."
+commands.allow = ["discord_config"]
+
+[[permission]]
+identifier = "deny-discord-config"
+description = "Denies the discord_config command without any pre-configured scope."
+commands.deny = ["discord_config"]

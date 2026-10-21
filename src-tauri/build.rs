@@ -34,6 +34,18 @@ const COMMANDS: &[&str] = &[
     "wa_auth_issue",
     "wa_save_track",
     "wa_prefetch",
+    "discord_config",
+    "discord_status",
+    "discord_retry",
+    "discord_update",
+    "tray_mode",
+    "mini_state",
+    "mini_state_get",
+    "mini_ctl",
+    "hotkeys_set",
+    "sleep_start",
+    "sleep_cancel",
+    "sleep_status",
 ];
 
 fn main() {

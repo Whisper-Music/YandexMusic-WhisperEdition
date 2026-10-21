@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sleep-start"
+description = "Enables the sleep_start command without any pre-configured scope."
+commands.allow = ["sleep_start"]
+
+[[permission]]
+identifier = "deny-sleep-start"
+description = "Denies the sleep_start command without any pre-configured scope."
+commands.deny = ["sleep_start"]

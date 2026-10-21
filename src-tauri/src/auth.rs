@@ -26,9 +26,39 @@ pub fn token_store(token: String) -> Result<(), String> {
     secret::set(t)
 }
 
+/// Выход: токен удаляется из системного хранилища, а заодно стираются cookies Яндекса.
+/// Окно входа в прошлых версиях делило профиль с главным окном, и вход в Яндекс (cookies passport.yandex.ru)
+/// оставался в нём после выхода — при следующем входе Яндекс сразу отдавал токен, не спрашивая пароль.
+/// Теперь окно входа открывается в режиме инкогнито (ничего не сохраняет), а эта чистка убирает то, что осталось.
 #[tauri::command]
-pub fn token_clear() -> Result<(), String> {
-    secret::clear()
+pub async fn token_clear(app: AppHandle) -> Result<(), String> {
+    secret::clear()?;
+    if let Err(e) = forget_yandex_cookies(&app).await {
+        eprintln!("Не удалось стереть cookies Яндекса: {e}");      // токена уже нет — выход всё равно выполнен
+    }
+    Ok(())
+}
+
+/// Домен cookie относится к Яндексу: yandex.ru, passport.yandex.ru, yandex.com, ya.ru и т. п.
+fn yandex_domain(d: &str) -> bool {
+    let d = d.trim_start_matches('.').to_ascii_lowercase();
+    d == "ya.ru" || d.ends_with(".ya.ru") || d.split('.').any(|label| label == "yandex")
+}
+
+async fn forget_yandex_cookies(app: &AppHandle) -> Result<usize, String> {
+    let Some(w) = app.get_webview_window("main") else { return Ok(0) };
+    // с cookies WebView2 работаем не из главного потока (иначе возможна взаимоблокировка, см. документацию Tauri)
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut n = 0;
+        for c in w.cookies().map_err(|e| e.to_string())? {
+            if c.domain().is_some_and(yandex_domain) && w.delete_cookie(c).is_ok() {
+                n += 1;
+            }
+        }
+        Ok(n)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn random_state() -> Result<String, String> {
@@ -88,6 +118,8 @@ pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
 
     let win = WebviewWindowBuilder::new(&app, "yandex-auth", WebviewUrl::External(url))
         .title("Вход через Яндекс")
+        // ничего не сохраняет (cookies, кэш): после выхода из аккаунта в нём придётся войти заново
+        .incognito(true)
         .inner_size(520.0, 720.0)
         .center()
         .on_new_window(|_, _| NewWindowResponse::Deny)

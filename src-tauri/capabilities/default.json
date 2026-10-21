@@ -9,7 +9,7 @@
     "core:event:allow-unlisten",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://oauth.yandex.ru/*" }]
+      "allow": [{ "url": "https://oauth.yandex.ru/*" }, { "url": "https://plus.yandex.ru/*" }]
     },
     "allow-md5-hex",
     "allow-win-minimize",
@@ -45,6 +45,16 @@
     "allow-wa-auth-request-code",
     "allow-wa-auth-issue",
     "allow-wa-save-track",
-    "allow-wa-prefetch"
+    "allow-wa-prefetch",
+    "allow-discord-config",
+    "allow-discord-status",
+    "allow-discord-retry",
+    "allow-discord-update",
+    "allow-tray-mode",
+    "allow-mini-state",
+    "allow-hotkeys-set",
+    "allow-sleep-start",
+    "allow-sleep-cancel",
+    "allow-sleep-status"
   ]
 }

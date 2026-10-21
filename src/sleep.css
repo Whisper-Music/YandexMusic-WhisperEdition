@@ -1,0 +1,23 @@
+/* Режим сна: кнопка с луной в нижней панели и карточка в настройках */
+.player .sleepbtn { position: relative; color: var(--muted); opacity: .8; transition: opacity .15s, color .15s, background .15s; }
+.sleepbtn svg { width: 20px; height: 20px; }
+.player .sleepbtn:hover { opacity: 1; color: var(--text); }
+.player .sleepbtn.on { opacity: 1; color: var(--accent); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--btn-glow, var(--accent)) 60%, transparent)); }
+.sleepleft {
+  position: absolute; right: 1px; bottom: 2px; min-width: 16px; height: 14px; padding: 0 3px; border-radius: 7px;
+  font-size: 9.5px; line-height: 14px; font-weight: 700; text-align: center; pointer-events: none;
+  color: var(--on-accent, #0b0618); background: var(--accent);
+}
+:root[data-style="royal"] .sleepleft, :root[data-style="steam"] .sleepleft { border-radius: 2px; }
+:root[data-style="steam"] .player .sleepbtn.on { color: var(--a2-hi, var(--accent)); filter: none; }
+:root[data-style="lolitta"] .player .sleepbtn { color: var(--l-lo, var(--muted)); }
+:root[data-style="lolitta"] .player .sleepbtn.on { color: var(--accent2); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+:root[data-anim="off"] .player .sleepbtn { transition: none; }
+
+.sleepcard { display: flex; flex-direction: column; gap: 12px; }
+.sleepcard .slhint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.slwave { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.slwave b { font-weight: 600; }
+.slstations { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.18); }
+.slstations .stgrid { max-height: 220px; min-height: 0; color: var(--muted); font-size: 13px; }
+:root[data-style="royal"] .slstations, :root[data-style="steam"] .slstations { border-radius: 4px; }

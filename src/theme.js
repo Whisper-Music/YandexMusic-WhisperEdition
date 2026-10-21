@@ -79,27 +79,146 @@
     }
     return nodes;
   }
-  const GROUPING = /^@(media|supports|container|layer|scope|document|starting-style)\b/i;
   const ruleText = (sel, body) => `${sel} {${/\n/.test(body) ? body.replace(/\s+$/, "") + "\n" : " " + body.trim() + " "}}`;
 
   // при загрузке: селектор из файла -> селектор своего стиля
-  function scopeSel(sel, id) {
-    const pre = `:root[data-style="${id}"]`;
+  function scopeSel(sel, id, gate = "") {
+    const pre = `:root[data-style="${id}"]${gate}`;
     return splitTop(sel).map((s) => {
       const m = /^(:root|html)(?![\w-])/i.exec(s);
       return m ? pre + s.slice(m[0].length) : `${pre} ${s}`;
     }).join(", ");
   }
-  function scopeCss(src, id) {
-    const out = [];
-    for (const { prelude, body } of cssParse(src)) {
+  // ---------- безопасность CSS темы ----------
+  // Тема — чужой файл. Её CSS не должен ни ходить в сеть, ни подменять общие анимации и шрифты приложения.
+  // Все проверки делаются по ТЕКСТУ ПОСЛЕ РАСКРЫТИЯ ЭКРАНИРОВАНИЯ и без комментариев: «@\69mport», «u\72l(» и «u/**/rl(»
+  // браузер читает так же, как «@import» и «url(», а обычное регулярное выражение их не видит.
+  const unesc = (s) => String(s)
+    .replace(/\/\*[\s\S]*?(\*\/|$)/g, "")
+    .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?|\\([\s\S])/gi, (m, h, c) => {
+      if (!h) return c;
+      const n = parseInt(h, 16);
+      return !n || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff) ? "�" : String.fromCodePoint(n);
+    });
+  // top-level разбор по «;» (внутри строк, скобок и вложенных {} не режем)
+  function splitDecls(body) {
+    const out = []; let cur = "", depth = 0, q = "";
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i];
+      if (q) { cur += c; if (c === "\\") cur += body[++i] ?? ""; else if (c === q) q = ""; continue; }
+      if (c === '"' || c === "'") { q = c; cur += c; continue; }
+      if (c === "/" && body[i + 1] === "*") { const e = body.indexOf("*/", i + 2), j = e < 0 ? body.length : e + 2; cur += body.slice(i, j); i = j - 1; continue; }
+      if (c === "(" || c === "[" || c === "{") depth++;
+      else if (c === ")" || c === "]" || c === "}") depth = Math.max(0, depth - 1);
+      if (c === ";" && depth === 0) { out.push(cur); cur = ""; continue; }
+      cur += c;
+    }
+    if (cur.trim()) out.push(cur);
+    return out;
+  }
+  // Можно ли оставить фрагмент CSS: из внешнего мира в нём разрешены только blob:-ссылки на ресурсы этой темы
+  // (их ставит inject()), data: и #якоря. Функции, которые принимают адрес строкой (image-set, src…), не допускаются совсем.
+  function cssSafe(text, allowed) {
+    const t = unesc(text);
+    if (/@\s*import\b/i.test(t) || /expression\s*\(|javascript\s*:|behavior\s*:|-moz-binding/i.test(t)) return false;
+    if (/(^|[^\w-])(?:-webkit-)?(image-set|cross-fade|element|paint|src)\s*\(/i.test(t)) return false;
+    const re = /url\s*\(\s*(?:"([^"]*)"|'([^']*)'|([^)"'\s]*))\s*\)/gi;
+    let m;
+    while ((m = re.exec(t))) {
+      const u = (m[1] ?? m[2] ?? m[3] ?? "").trim();
+      if (!(allowed.has(u) || /^data:/i.test(u) || u.startsWith("#"))) return false;
+    }
+    // «url» без закрывающей скобки или с неразобранным содержимым
+    if (/url\s*\(/i.test(t.replace(re, ""))) return false;
+    return true;
+  }
+  const cleanBody = (body, allowed) => splitDecls(body).filter((d) => cssSafe(d, allowed)).join(";");
+
+  // @keyframes и @font-face темы получают имена с её id: тема не может ни подменить общую анимацию или шрифт приложения,
+  // ни повлиять на них, пока выбран другой стиль. Переименовываются только имена, которые тема определяет сама.
+  const GROUPING = /^@(media|supports|container|layer|scope|starting-style)\b/i;
+  const KEYFRAMES = /^@(-webkit-)?keyframes\s+/i;
+  function collectNames(nodes, ctx) {
+    for (const { prelude, body } of nodes) {
+      if (body === null || prelude[0] !== "@") continue;
+      const p = unesc(prelude);
+      let m;
+      if ((m = KEYFRAMES.exec(p))) ctx.kf.add(p.slice(m[0].length).trim().replace(/^["']|["']$/g, ""));
+      else if (/^@font-face\b/i.test(p)) {
+        const f = /font-family\s*:\s*([^;}]+)/i.exec(unesc(body));
+        if (f) ctx.ff.add(f[1].trim().replace(/^["']|["']$/g, ""));
+      } else if (GROUPING.test(p)) collectNames(cssParse(body), ctx);
+    }
+  }
+  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  function renameIn(text, names, pre) {
+    if (!names.size) return text;
+    const re = new RegExp(`(?<![\\w-])(${[...names].map(escRe).join("|")})(?![\\w-])`, "g");
+    return text.replace(re, pre + "$1");
+  }
+  const ANIM_PROP = /(^|[\s;{])(-webkit-)?animation(-name)?\s*:/i;
+  // сдвиг, поворот и увеличение при наведении/нажатии — тоже анимация интерфейса: такие свойства из правил
+  // с :hover/:active выносятся в отдельное правило, которое действует только при включённых анимациях
+  const MOVE_PROP = /^\s*(-webkit-)?(transform|translate|scale|rotate)\s*:/i;
+  const MOTION_ON = '[data-anim="on"]';
+  const FONT_PROP = /(^|[\s;{])(--[\w-]*font[\w-]*|font(-family)?)\s*:/i;
+  function renameDecls(body, ctx, pre) {
+    return splitDecls(body).map((d) => {
+      const u = unesc(d);
+      if (ANIM_PROP.test(u)) return renameIn(d, ctx.kf, pre);
+      if (FONT_PROP.test(u)) return renameIn(d, ctx.ff, pre);
+      return d;
+    }).join(";");
+  }
+
+  function emitCss(nodes, id, ctx, allowed) {
+    const out = [], pre = `wmt-${id}-`;
+    for (const { prelude, body } of nodes) {
       if (prelude[0] === "@") {
-        if (/^@(import|charset|namespace)\b/i.test(prelude)) continue;                 // внешние файлы не подключаем
-        if (body !== null && GROUPING.test(prelude)) out.push(`${prelude} {\n${scopeCss(body, id)}\n}`);
-        else out.push(body === null ? prelude + ";" : `${prelude} {${body}}`);           // @keyframes, @font-face, @property…
-      } else if (prelude && body !== null) out.push(ruleText(scopeSel(prelude, id), body));
+        const p = unesc(prelude);
+        if (body === null) continue;                                                      // @import, @charset, @namespace и любые «@что-то;» без блока
+        if (/^@layer\b/i.test(p)) {
+          // слои темы получают имена с её id: тема не может ни попасть в слой приложения (app-motion-off в styles.css,
+          // им выключаются анимации), ни встать в порядке слоёв перед ним
+          const names = p.replace(/^@layer\b/i, "").trim();
+          if (names && !/^[\w-]+(\.[\w-]+)*$/.test(names)) continue;
+          out.push(`@layer${names ? " " + pre + names : ""} {\n${emitCss(cssParse(body), id, ctx, allowed)}\n}`);
+          continue;
+        }
+        if (GROUPING.test(p)) { out.push(`${prelude} {\n${emitCss(cssParse(body), id, ctx, allowed)}\n}`); continue; }
+        if (KEYFRAMES.test(p)) {
+          const name = p.replace(KEYFRAMES, "").trim().replace(/^["']|["']$/g, "");
+          if (!/^[\w-]+$/.test(name)) continue;
+          const frames = cssParse(body).map((f) => ruleText(f.prelude, cleanBody(f.body ?? "", allowed))).join("\n");
+          out.push(`@keyframes ${pre}${name} {\n${frames}\n}`);
+          continue;
+        }
+        if (/^@font-face\b/i.test(p)) {
+          const clean = cleanBody(body, allowed).replace(/font-family\s*:\s*([^;]+)/i, (m, v) => {
+            const n = v.trim().replace(/^["']|["']$/g, "");
+            return `font-family: "${pre}${n}"`;
+          });
+          if (/(^|[;\s])src\s*:/i.test(clean)) out.push(`@font-face {${clean}}`);        // без разрешённого источника шрифта правило бесполезно
+          continue;
+        }
+        continue;                                                                        // @property, @page, @counter-style и прочее — не поддерживаются
+      }
+      if (prelude && body !== null) {
+        const clean = renameDecls(cleanBody(body, allowed), ctx, pre);
+        if (!clean.trim()) continue;
+        if (/:(hover|active)\b/i.test(unesc(prelude))) {
+          const ds = splitDecls(clean), move = ds.filter((d) => MOVE_PROP.test(unesc(d))), rest = ds.filter((d) => !MOVE_PROP.test(unesc(d)));
+          if (rest.some((d) => d.trim())) out.push(ruleText(scopeSel(prelude, id), rest.join(";")));
+          if (move.length) out.push(ruleText(scopeSel(prelude, id, MOTION_ON), move.join(";")));
+        } else out.push(ruleText(scopeSel(prelude, id), clean));
+      }
     }
     return out.join("\n");
+  }
+  function scopeCss(src, id, allowed = new Set()) {
+    const nodes = cssParse(src), ctx = { kf: new Set(), ff: new Set() };
+    collectNames(nodes, ctx);
+    return emitCss(nodes, id, ctx, allowed);
   }
   // При сохранении встроенного стиля: все его правила из CSS приложения, уже без привязки к стилю.
   // Вместе с ними — общие правила «:root[data-style] …» (для любого стиля): в CSS приложения они стоят между
@@ -198,7 +317,7 @@
     blobUrls.set(id, urls);
     let el = document.getElementById("wmt-" + id);
     if (!el) { el = document.createElement("style"); el.id = "wmt-" + id; document.head.append(el); }
-    el.textContent = scopeCss(css, id);           // ошибочные правила браузер просто пропустит; @import не подключается
+    el.textContent = scopeCss(css, id, new Set(urls));           // наружу CSS темы не ходит: разрешены только blob:-ресурсы этой же темы
     themeReady.add(id);
   }
   function uninject(id) {
@@ -222,11 +341,36 @@
     let blob = new Blob([a.bytes], { type: a.mime });
     try {
       const vt = sniffVideo(a.bytes.subarray(0, 16));
-      if (vt) blob = new Blob([a.bytes], { type: vt });
+      if (vt) {
+        // видео из чужой темы: тот же лимит и проверка декодером, что у видеообоев, плюс потолок длительности и разрешения
+        if (a.bytes.length > THEME_VIDEO_MAX) throw new Error(`видео весит больше ${THEME_VIDEO_MAX / 1048576} МБ`);
+        const f = new File([a.bytes], a.name, { type: vt });
+        await probeVideo(f);
+        await prepareVideo(f, vt);
+        blob = f;
+      }
       else { const g = imageGuard(a.bytes); blob = new Blob([a.bytes], { type: g.type }); }
     } catch (e) { note(`Фон из темы пропущен: ${e.message}`); await clearBg(id); return; }
     try { await IDB.set(bgKey(id), blob); cfg.s[id].bg = "idb"; } catch { cfg.s[id].bg = ""; }
     setBgBlob(blob, id);
+  }
+
+  // Лимиты видео-фона из темы. Размер файла темы и так не больше WMT.MAX_FILE, но видео декодируется отдельно и жрёт память.
+  const THEME_VIDEO_MAX = 150 * 1048576, THEME_VIDEO_SECONDS = 600, THEME_VIDEO_SIDE = 4096;
+  function probeVideo(file) {
+    return new Promise((res, rej) => {
+      const v = document.createElement("video"), url = URL.createObjectURL(file);
+      const done = (fn, x) => { clearTimeout(tm); v.removeAttribute("src"); v.load(); URL.revokeObjectURL(url); fn(x); };
+      const tm = setTimeout(() => done(rej, new Error("видео не открывается (таймаут)")), 15000);
+      v.preload = "metadata"; v.muted = true;
+      v.onerror = () => done(rej, new Error("видео не открывается"));
+      v.onloadedmetadata = () => {
+        if (!isFinite(v.duration) || v.duration > THEME_VIDEO_SECONDS) return done(rej, new Error(`видео длиннее ${THEME_VIDEO_SECONDS / 60} минут`));
+        if (Math.max(v.videoWidth, v.videoHeight) > THEME_VIDEO_SIDE) return done(rej, new Error(`разрешение видео больше ${THEME_VIDEO_SIDE} пикселей по стороне`));
+        done(res, null);
+      };
+      v.src = url;
+    });
   }
 
   // ---------- загрузка .wmt (текст или архив) ----------
@@ -375,11 +519,39 @@
       b.onclick = () => { cfg.style = t.id; applyCfg(); saveCfg(); syncControls(); };
       pick.append(b);
     }
+    applyView();
     syncControls();
+  }
+
+  // ---------- вид списка стилей: обычные карточки или компактно (кружочки) ----------
+  // Выбор пользователя запоминается; пока он не выбирал — компактный вид включается сам, когда карточек много.
+  const VIEW_KEY = "styleView", AUTO_COMPACT_FROM = 6;
+  const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  function applyView() {
+    const pick = document.querySelector(".stylepick");
+    if (!pick) return;
+    const saved = lsGet(VIEW_KEY);
+    const compact = saved ? saved === "compact" : pick.querySelectorAll(".stylecard").length >= AUTO_COMPACT_FROM;
+    pick.classList.toggle("compact", compact);
+    const btn = document.getElementById("styleView");
+    if (btn) {
+      btn.setAttribute("aria-pressed", String(compact));
+      btn.classList.toggle("on", compact);
+      btn.title = compact ? "Обычный вид: карточки с описанием" : "Компактный вид: стили кружочками";
+    }
+    // в компактном виде описание прячется — оставляем его во всплывающей подсказке
+    pick.querySelectorAll(".stylecard").forEach((c) => {
+      if (!c.title) c.title = c.querySelector("small")?.textContent || "";
+    });
   }
 
   // ---------- кнопки в настройках ----------
   function mountUi() {
+    document.getElementById("styleView")?.addEventListener("click", () => {
+      lsSet(VIEW_KEY, document.querySelector(".stylepick")?.classList.contains("compact") ? "full" : "compact");
+      applyView();
+    });
     const pick = document.querySelector(".stylepick");
     if (!pick || document.getElementById("wmtBar")) return;
     const bar = document.createElement("div");
@@ -397,7 +569,7 @@
     file.onchange = async () => {
       const f = file.files[0]; file.value = "";
       if (!f) return;
-      if (f.size > 300 * 1048576) { note("Файл темы больше 300 МБ"); return; }
+      if (f.size > WMT.MAX_FILE) { note(`Файл темы больше ${WMT.MAX_FILE / 1048576} МБ`); return; }
       note("Загружаю тему…");
       await importSafe(new Uint8Array(await f.arrayBuffer()));         // текст или архив — разберётся WMT.open
     };
@@ -413,7 +585,8 @@
     if (!f) return false;
     (async () => {
       try {
-        const buf = await invoke("bg_read", { id: f.id });
+        if (Number(f.size) > WMT.MAX_FILE) { note(`Файл темы больше ${WMT.MAX_FILE / 1048576} МБ`); return; }
+        const buf = await invoke("bg_read", { id: f.id, maxBytes: WMT.MAX_FILE });      // лимит соблюдает и сама команда в Rust
         await importSafe(new Uint8Array(buf));
       } catch (e) { note("Не удалось прочитать тему: " + (e?.message || e)); }
     })();

@@ -595,6 +595,7 @@
     $w("waForget").onclick = async () => {
       try { await invoke("wa_token_clear"); }
       catch (e) { note("Не удалось выйти: " + msg(e)); return; }
+      try { localStorage.removeItem(EMAIL_KEY); } catch {}       // и почту, которую подставляли в окно входа
       st.hasToken = false; st.nick = ""; saveCfg(); clearIndex(); badge(false); render(); note("Выход выполнен.");
     };
   }

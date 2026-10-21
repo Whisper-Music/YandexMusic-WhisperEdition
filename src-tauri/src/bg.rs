@@ -6,6 +6,7 @@
 // так что прочитать можно лишь то, что пользователь сам выбрал или перетащил.
 
 use serde::Serialize;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -79,7 +80,7 @@ pub async fn bg_dir_pick(app: AppHandle) -> Result<Option<Vec<Entry>>, String> {
 
 /// Содержимое файла из последнего выбора/перетаскивания — по номеру в списке.
 #[tauri::command]
-pub fn bg_read(state: tauri::State<Picked>, id: usize) -> Result<tauri::ipc::Response, String> {
+pub fn bg_read(state: tauri::State<Picked>, id: usize, max_bytes: Option<u64>) -> Result<tauri::ipc::Response, String> {
     let path = state
         .0
         .lock()
@@ -87,11 +88,21 @@ pub fn bg_read(state: tauri::State<Picked>, id: usize) -> Result<tauri::ipc::Res
         .get(id)
         .cloned()
         .ok_or("Файл больше недоступен — выбери папку ещё раз")?;
-    let len = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
-    if len > MAX_READ {
-        return Err(format!("Файл «{}» больше 1 ГБ", path.file_name().unwrap_or_default().to_string_lossy()));
+    // Лимит задаёт вызывающий (тема, картинка, видео, project.json), но не выше общего потолка.
+    // Читаем не больше лимита + 1 байт: файл мог вырасти между проверкой размера и чтением.
+    let limit = max_bytes.unwrap_or(MAX_READ).min(MAX_READ);
+    let name = || path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let too_big = || format!("Файл «{}» больше {}", name(), if limit >= 1048576 { format!("{} МБ", limit / 1048576) } else { format!("{} КБ", limit / 1024) });
+    let file = std::fs::File::open(&path).map_err(|e| format!("Не удалось прочитать файл: {e}"))?;
+    let len = file.metadata().map_err(|e| e.to_string())?.len();
+    if len > limit {
+        return Err(too_big());
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("Не удалось прочитать файл: {e}"))?;
+    let mut bytes = Vec::with_capacity(len as usize);
+    file.take(limit + 1).read_to_end(&mut bytes).map_err(|e| format!("Не удалось прочитать файл: {e}"))?;
+    if bytes.len() as u64 > limit {
+        return Err(too_big());
+    }
     Ok(tauri::ipc::Response::new(bytes))
 }
 

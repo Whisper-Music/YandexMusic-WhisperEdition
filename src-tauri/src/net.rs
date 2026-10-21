@@ -54,6 +54,10 @@ fn read_token() -> Option<String> {
 fn build_client(total_secs: u64, same_host: bool) -> Client {
     Client::builder()
         .connect_timeout(Duration::from_secs(10))
+        // за многочасовое прослушивание соединения из пула успевают «протухнуть» на стороне сервера/роутера —
+        // держим их недолго и поддерживаем keepalive, чтобы запрос не уходил в мёртвый сокет
+        .pool_idle_timeout(Duration::from_secs(20))
+        .tcp_keepalive(Duration::from_secs(30))
         .timeout(Duration::from_secs(total_secs))
         .redirect(redirect::Policy::custom(move |attempt| {
             if attempt.previous().len() >= 5 {
@@ -94,6 +98,9 @@ const API_ROUTES: &[(&str, &str)] = &[
     ("GET", "/users/*/likes/tracks"),
     ("POST", "/users/*/likes/tracks/add-multiple"),
     ("POST", "/users/*/likes/tracks/remove"),
+    ("GET", "/users/*/dislikes/tracks"),
+    ("POST", "/users/*/dislikes/tracks/add-multiple"),
+    ("POST", "/users/*/dislikes/tracks/remove"),
     ("POST", "/tracks"),
     ("GET", "/tracks/*/download-info"),
     ("GET", "/get-mp3/**"),
@@ -255,6 +262,10 @@ mod tests {
         assert!(a(Method::GET, "/account/status"));
         assert!(a(Method::GET, "/users/123/likes/tracks?if-modified-since-revision=0"));
         assert!(a(Method::POST, "/users/123/likes/tracks/add-multiple"));
+        assert!(a(Method::GET, "/users/123/dislikes/tracks"));
+        assert!(a(Method::POST, "/users/123/dislikes/tracks/add-multiple"));
+        assert!(a(Method::POST, "/users/123/dislikes/tracks/remove"));
+        assert!(!a(Method::GET, "/users/123/dislikes/tracks/add-multiple"));
         assert!(a(Method::GET, "/tracks/123:456/lyrics?format=LRC&timeStamp=1&sign=x"));
         assert!(a(Method::POST, "/rotor/session/abc-DEF_1/feedback"));
         assert!(a(Method::GET, "/search?text=a&type=all&page=0"));

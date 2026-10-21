@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мини-плеер</title>
+  <link rel="stylesheet" href="mini.css" />
+  <script src="mini.js" defer></script>
+</head>
+<body>
+  <div class="mp" id="mp">
+    <div class="cvwrap"><img id="cv" class="cv" alt="" /></div>
+    <div class="top">
+      <div class="tx">
+        <b id="t">Ничего не играет</b>
+        <span id="a"></span>
+      </div>
+      <div class="tools">
+        <button data-a="open" title="Открыть плеер"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M14 4h6v6M20 4l-8 8M10 5H5v14h14v-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button data-a="quit" title="Выход"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v8M7.1 6.4a7 7 0 1 0 9.8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      </div>
+    </div>
+    <div class="ctl">
+      <button data-a="shuffle" id="sh" class="mode" title="Случайный порядок"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 7h3.5c2 0 3.2 1 4.3 2.6l2.4 4.8C14.3 16 15.5 17 17.5 17H21M3 17h3.5c1.5 0 2.5-.6 3.3-1.6M14.2 8.6C15 7.6 16 7 17.5 7H21M18 4l3 3-3 3M18 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button data-a="prev" title="Предыдущий"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+      <button data-a="toggle" id="pp" class="play" title="Пуск/пауза"></button>
+      <button data-a="next" title="Следующий"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+      <button data-a="repeat" id="rp" class="mode" title="Повтор"></button>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+  </div>
+</body>
+</html>

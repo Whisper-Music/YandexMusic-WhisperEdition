@@ -26,7 +26,11 @@
 // В JSON-секциях можно оставлять комментарии // и /* */, а также лишние запятые — как в настройках VS Code.
 (function (root) {
   const VERSION = 1;
-  const MAX_BYTES = 256 * 1048576;
+  const MAX_BYTES = 256 * 1048576;           // все ресурсы темы после распаковки
+  const MAX_FILE = 300 * 1048576;            // сам файл темы (текст или архив) — единый лимит для всех способов импорта
+  const MAX_TEXT_PART = 4 * 1048576;         // одна несекционная часть: manifest, tokens, settings, css
+  const MAX_ASSETS = 200;
+  const MAX_ZIP_FILES = 200;
   const NAME_RE = /^[\w.-]{1,100}$/;
   const ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
   const HEADER_RE = /^@@[ \t]+([a-z][\w-]*)(?:[ \t]+(\S+))?(?:[ \t]+(\S+))?[ \t]*$/;
@@ -108,7 +112,7 @@
    */
   function parse(text) {
     if (typeof text !== "string") throw new WmtError("Нет текста темы");
-    if (text.length > MAX_BYTES * 1.4) throw new WmtError("Файл темы слишком большой");
+    if (text.length > MAX_FILE * 1.4) throw new WmtError("Файл темы слишком большой");
     const lines = text.replace(/^﻿/, "").split(/\r?\n/);
     let k = 0;
     while (k < lines.length && !lines[k].trim()) k++;
@@ -133,7 +137,9 @@
       while (s.body.length && !s.body[s.body.length - 1].trim()) s.body.pop();
       s.text = s.body.join("\n");
       delete s.body;
+      if (s.type !== "asset" && s.text.length > MAX_TEXT_PART) throw new WmtError(`Секция «${s.type}» слишком большая (больше ${MAX_TEXT_PART / 1048576} МБ текста)`, s.line);
     }
+    if (sections.length > MAX_ASSETS + 20) throw new WmtError("В теме слишком много секций");
 
     const one = (type) => {
       const list = sections.filter((s) => s.type === type);
@@ -157,6 +163,8 @@
       if (JSON_TYPES.has(s.type) && s.type !== "manifest" && s.type !== "tokens") s.json = parseJson(s.text, `${s.type} ${s.name}`.trim(), s.line);
       if (s.type !== "asset") continue;
       if (!NAME_RE.test(s.name)) throw new WmtError("Имя ресурса: буквы, цифры, точка, дефис, подчёркивание", s.line);
+      if (assets.size >= MAX_ASSETS) throw new WmtError(`В теме больше ${MAX_ASSETS} ресурсов`, s.line);
+      if (s.encoding === "base64" && s.text.length > (MAX_BYTES - total) * 1.4 + 16) throw new WmtError("Ресурсы темы больше 256 МБ", s.line);   // до декодирования
       if (assets.has(s.name)) throw new WmtError(`Ресурс «${s.name}» встречается дважды`, s.line);
       let bytes;
       if (s.encoding === "base64") {
@@ -193,32 +201,68 @@
   async function streamThrough(bytes, ts) {
     return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ts)).arrayBuffer());
   }
+  // Распаковка deflate с жёстким потолком прямо во время чтения потока: как только набралось больше заявленного
+  // размера (а заявленное в оглавлении zip злоумышленник может подделать), поток обрывается, не дожидаясь конца.
+  async function inflateLimited(raw, size, name) {
+    const reader = new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+    const chunks = [];
+    let n = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        n += value.length;
+        if (n > size) {
+          reader.cancel().catch(() => {});
+          throw new WmtError(`Архив темы повреждён: файл «${name}» распаковывается в больший размер, чем заявлено`);
+        }
+        chunks.push(value);
+      }
+    } catch (e) {
+      if (e instanceof WmtError) throw e;
+      throw new WmtError(`Архив темы повреждён (не распаковывается «${name}»)`);
+    }
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out;
+  }
   async function unzip(b) {
+    if (b.length > MAX_FILE) throw new WmtError(`Файл темы больше ${MAX_FILE / 1048576} МБ`);
     let e = -1;
     for (let p = b.length - 22; p >= Math.max(0, b.length - 65557); p--) if (u32(b, p) === 0x06054b50) { e = p; break; }
     if (e < 0) throw new WmtError("Архив темы повреждён (не найдено оглавление zip)");
-    const count = u16(b, e + 10);
+    const count = u16(b, e + 10), cdSize = u32(b, e + 12);
     let p = u32(b, e + 16), total = 0;
-    if (count > 1000) throw new WmtError("В архиве темы слишком много файлов");
+    const cdStart = p;
+    if (count > MAX_ZIP_FILES) throw new WmtError("В архиве темы слишком много файлов");
+    if (p + cdSize > e || p > b.length) throw new WmtError("Архив темы повреждён (оглавление за пределами файла)");
     const files = new Map(), dec = new TextDecoder();
     for (let k = 0; k < count; k++) {
-      if (u32(b, p) !== 0x02014b50) throw new WmtError("Архив темы повреждён (оглавление)");
-      const method = u16(b, p + 10), csize = u32(b, p + 20), size = u32(b, p + 24);
+      if (p + 46 > b.length || u32(b, p) !== 0x02014b50) throw new WmtError("Архив темы повреждён (оглавление)");
+      const flags = u16(b, p + 8), method = u16(b, p + 10), crc = u32(b, p + 16), csize = u32(b, p + 20), size = u32(b, p + 24);
       const nl = u16(b, p + 28), xl = u16(b, p + 30), cl = u16(b, p + 32), off = u32(b, p + 42);
+      if (p + 46 + nl + xl + cl > b.length) throw new WmtError("Архив темы повреждён (запись оглавления обрезана)");
       const name = dec.decode(b.subarray(p + 46, p + 46 + nl)).replace(/\\/g, "/");
       p += 46 + nl + xl + cl;
       if (name.endsWith("/") || /(^|\/)(__MACOSX|\.DS_Store)/.test(name)) continue;
+      if (flags & 1) throw new WmtError(`Файл «${name}» в архиве зашифрован — такие темы не поддерживаются`);
       if (csize === 0xffffffff || size === 0xffffffff) throw new WmtError("Архивы больше 4 ГБ (zip64) не поддерживаются");
+      if (files.has(name)) throw new WmtError(`В архиве темы два файла с именем «${name}»`);
       total += size;
       if (total > MAX_BYTES) throw new WmtError("Файлы в архиве темы больше 256 МБ");
-      if (u32(b, off) !== 0x04034b50) throw new WmtError(`Архив темы повреждён (файл «${name}»)`);
-      const start = off + 30 + u16(b, off + 26) + u16(b, off + 28), raw = b.subarray(start, start + csize);
+      if (off + 30 > b.length || u32(b, off) !== 0x04034b50) throw new WmtError(`Архив темы повреждён (файл «${name}»)`);
+      const start = off + 30 + u16(b, off + 26) + u16(b, off + 28), end = start + csize;
+      if (end > b.length || end > cdStart) throw new WmtError(`Архив темы повреждён (данные «${name}» за пределами файла)`);
+      const raw = b.subarray(start, end);
       let data;
-      if (method === 0) data = raw.slice();
-      else if (method === 8) {
-        try { data = await streamThrough(raw, new DecompressionStream("deflate-raw")); }
-        catch { throw new WmtError(`Архив темы повреждён (не распаковывается «${name}»)`); }
-      } else throw new WmtError(`Файл «${name}» сжат неподдерживаемым способом — сохрани архив как обычный zip`);
+      if (method === 0) {
+        if (csize !== size) throw new WmtError(`Архив темы повреждён (размер «${name}» не сходится)`);
+        data = raw.slice();
+      } else if (method === 8) data = await inflateLimited(raw, size, name);
+      else throw new WmtError(`Файл «${name}» сжат неподдерживаемым способом — сохрани архив как обычный zip`);
+      if (data.length !== size) throw new WmtError(`Архив темы повреждён: размер «${name}» не совпадает с заявленным`);
+      if (crc32(data) !== crc) throw new WmtError(`Архив темы повреждён: контрольная сумма «${name}» не сходится`);
       files.set(name, data);
     }
     return files;
@@ -272,12 +316,14 @@
   async function open(input) {
     if (typeof input === "string") return parse(input);
     const b = input instanceof Uint8Array ? input : new Uint8Array(input);
+    if (b.length > MAX_FILE) throw new WmtError(`Файл темы больше ${MAX_FILE / 1048576} МБ`);      // до распаковки и декодирования
     if (!isZip(b)) return parse(new TextDecoder().decode(b));
     const files = await unzip(b);
     // архив могли собрать из папки целиком — тогда всё лежит в подпапке; берём папку, где лежит theme.wmt
     const main = [...files.keys()].find((n) => /(^|\/)theme\.wmt$/i.test(n)) || [...files.keys()].find((n) => /\.wmt$/i.test(n));
     if (!main) throw new WmtError("В архиве нет файла theme.wmt");
     const dir = main.slice(0, main.lastIndexOf("/") + 1);
+    if (files.get(main).length > MAX_FILE) throw new WmtError("Текст темы в архиве слишком большой");
     const th = parse(new TextDecoder().decode(files.get(main)));
     th.archive = true;
     for (const [n, bytes] of files) {
@@ -330,7 +376,7 @@
     return out.join("\n");
   }
 
-  const api = { VERSION, parse, serialize, open, pack, isZip, unzip, zip, BG_EXT, mimeOf, stripJsonc, WmtError, ID_RE, NAME_RE };
+  const api = { VERSION, MAX_FILE, parse, serialize, open, pack, isZip, unzip, zip, BG_EXT, mimeOf, stripJsonc, WmtError, ID_RE, NAME_RE };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.WMT = api;
 })(typeof window !== "undefined" ? window : globalThis);

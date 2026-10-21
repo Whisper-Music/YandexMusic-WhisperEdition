@@ -3,8 +3,8 @@ const IMG_LIMITS = Object.freeze({
   maxBytes: 50 * 1048576,
   maxSide: 16384,
   maxPixels: 50e6,
-  maxFrames: 1000,
-  maxTotalPixels: 2e9,
+  maxFrames: 300,
+  maxTotalPixels: 4e8,
 });
 
 function imageGuard(b, limits = IMG_LIMITS) {

@@ -1407,8 +1407,24 @@ a { color: var(--accent); }
 }
 @media (max-height: 680px) { :root[data-style] .player { padding-top: 16px; } }
 
-:root[data-anim="off"] *, :root[data-anim="off"] *::before, :root[data-anim="off"] *::after {
-  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+/* «Анимации интерфейса» выключены. Правила лежат в слое: важное (!important) правило из слоя сильнее любого
+   важного правила вне слоёв, какой бы ни была специфичность. Поэтому выключатель перебивает и CSS приложения,
+   и CSS своих тем (.wmt) — даже «:root[data-style="…"] .tab { transition: … !important }».
+   Слой объявлен здесь, раньше CSS тем, а слои тем переименовываются (theme.js) — тема не может попасть в этот слой. */
+@layer app-motion-off {
+  :root[data-anim="off"] *, :root[data-anim="off"] *::before, :root[data-anim="off"] *::after {
+    animation: none !important; transition: none !important; scroll-behavior: auto !important;
+  }
+  /* при наведении и нажатии ничего не сдвигается, не качается и не увеличивается (подсветка и цвет остаются).
+     Сдвиги из CSS своих тем отключает theme.js: в теме они срабатывают только при data-anim="on". */
+  :root[data-anim="off"] .wavebtn:hover,
+  :root[data-anim="off"] .tab:hover, :root[data-anim="off"] .tab:active,
+  :root[data-anim="off"] .nav:hover, :root[data-anim="off"] .nav:active,
+  :root[data-anim="off"] .list li:hover, :root[data-anim="off"] .list li:hover img, :root[data-anim="off"] .list .likebtn:hover,
+  :root[data-anim="off"] .stalbum:hover img, :root[data-anim="off"] .stperson:hover img, :root[data-anim="off"] .stpic:hover img,
+  :root[data-anim="off"] .recadd:hover, :root[data-anim="off"] .vizfsbtn:hover, :root[data-anim="off"] .best .bplay:hover {
+    transform: none !important;
+  }
 }
 
 :root[data-style="lolitta"] .settings > .card, :root[data-style="lolitta"] .stats .card { background: var(--page-tint); }
@@ -1488,19 +1504,19 @@ a { color: var(--accent); }
   .pinfo, :root[data-style] .player .pinfo { gap: 8px; }
 }
 
-:root[data-style="royal"] .player #dlBtn { color: var(--muted); border-radius: 2px; }
-:root[data-style="royal"] .player #dlBtn:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+:root[data-style="royal"] .player #disBtn { color: var(--muted); border-radius: 2px; }
+:root[data-style="royal"] .player #disBtn:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
-:root[data-style="steam"] .player #dlBtn { color: var(--muted); opacity: 1; }
-:root[data-style="steam"] .player #dlBtn:hover:not(:disabled) { color: var(--m-hi); }
-:root[data-style="steam"] .player #dlBtn:disabled { opacity: .35; }
-:root[data-style="steam"] .player #dlBtn.busy { color: var(--a2-hi); }
+:root[data-style="steam"] .player #disBtn { color: var(--muted); opacity: 1; }
+:root[data-style="steam"] .player #disBtn:hover:not(:disabled) { color: var(--m-hi); }
+:root[data-style="steam"] .player #disBtn:disabled { opacity: .35; }
+:root[data-style="steam"] .player #disBtn.busy { color: var(--a2-hi); }
 
-:root[data-style="lolitta"] .player #dlBtn { color: var(--l-lo); opacity: 1; }
-:root[data-style="lolitta"] .player #dlBtn:hover:not(:disabled) { color: var(--l-ink); background: rgba(255,255,255,.4); }
-:root[data-style="lolitta"] .player #dlBtn:disabled { opacity: .4; }
-:root[data-style="lolitta"] .player #dlBtn.busy { color: var(--accent2); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
-:root[data-style="royal"] .player #dlBtn.busy { color: var(--accent); }
+:root[data-style="lolitta"] .player #disBtn { color: var(--l-lo); opacity: 1; }
+:root[data-style="lolitta"] .player #disBtn:hover:not(:disabled) { color: var(--l-ink); background: rgba(255,255,255,.4); }
+:root[data-style="lolitta"] .player #disBtn:disabled { opacity: .4; }
+:root[data-style="lolitta"] .player #disBtn.busy { color: var(--accent2); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+:root[data-style="royal"] .player #disBtn.busy { color: var(--accent); }
 
 .tmenu { max-width: min(320px, calc(100vw - 16px)); }
 .tmenu .mi .mt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1604,22 +1620,22 @@ body.pl-drag, body.pl-drag * { cursor: grabbing !important; -webkit-user-select:
 .gotmark svg { width: 24px; height: 24px; }
 .gotmark + .likebtn, .gotmark + .recadd { margin-left: 0; }
 .list li.got .a { color: color-mix(in srgb, var(--accent) 55%, var(--muted)); }
-.dlbtn.got { color: var(--accent); opacity: 1; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--btn-glow) 60%, transparent)); }
+.dlbtn.on { color: var(--accent); opacity: 1; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--btn-glow) 60%, transparent)); }
 
 :root[data-style="royal"] .gotmark { color: var(--accent); filter: none; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 2px; width: 26px; height: 26px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
 :root[data-style="royal"] .gotmark svg { width: 20px; height: 20px; }
 :root[data-style="royal"] .list li.got .a { color: color-mix(in srgb, var(--accent) 65%, var(--muted)); }
-:root[data-style="royal"] .player #dlBtn.got { color: var(--accent); filter: none; }
+:root[data-style="royal"] .player #disBtn.on { color: var(--accent); filter: none; }
 
 :root[data-style="steam"] .gotmark { color: var(--m-hi); filter: none; border: 1px solid var(--ln); border-radius: 50%; width: 26px; height: 26px; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--accent) 35%, transparent), rgba(0,0,0,.35)); box-shadow: inset 0 1px 2px rgba(255,255,255,.15), 0 1px 2px rgba(0,0,0,.6); }
 :root[data-style="steam"] .gotmark svg { width: 20px; height: 20px; }
 :root[data-style="steam"] .list li.got .a { color: color-mix(in srgb, var(--m-hi) 55%, var(--muted)); }
-:root[data-style="steam"] .player #dlBtn.got { color: var(--a2-hi); filter: none; }
+:root[data-style="steam"] .player #disBtn.on { color: var(--a2-hi); filter: none; }
 
 :root[data-style="lolitta"] .gotmark { color: var(--lo-on-mid, #fff7f7); filter: none; border-radius: 50%; width: 26px; height: 26px; background: radial-gradient(circle at 50% 30%, var(--l-hi), var(--l-mid) 58%, var(--l-lo)); box-shadow: 0 0 0 1px var(--l-lo), 0 0 0 2px color-mix(in srgb, var(--l-pearl) 55%, transparent), 0 1px 3px rgba(0,0,0,.4); }
 :root[data-style="lolitta"] .gotmark svg { width: 20px; height: 20px; }
 :root[data-style="lolitta"] .list li.got .a { color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
-:root[data-style="lolitta"] .player #dlBtn.got { color: var(--accent2); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+:root[data-style="lolitta"] .player #disBtn.on { color: var(--accent2); filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
 
 /* ---------- настройки: стили аудиовизуализатора (видны только когда он включён) ---------- */
 .vizstyles { display: flex; flex-direction: column; gap: 10px; animation: vizIn .22s ease-out; }
@@ -1816,3 +1832,25 @@ body.vizfull-on #dim { opacity: .4; }
 .ccgrp.ccbulk > summary small { flex-basis: 100%; order: 3; }
 .ccrow.mixed > small { display: inline; font-style: italic; }
 .ccrow.mixed input[type=color] { opacity: .8; }
+
+/* ---------- маленькое окно: верхняя, боковая и нижняя панели видны целиком в любом стиле ---------- */
+/* средняя строка сетки сжимается (minmax(0, …)), поэтому боковая панель больше не выталкивает нижнюю за край окна
+   и не сплющивает верхнюю; верхняя и нижняя всегда получают свою полную высоту */
+:root[data-style] .app { grid-template-rows: auto minmax(0, 1fr) auto; }
+:root[data-style] .tabs, :root[data-style] .player { min-height: max-content; }
+/* невысокое окно (до минимальных 540px): панели компактнее, чтобы все кнопки боковой панели помещались в ней */
+@media (max-height: 640px) {
+  :root[data-style] .app { gap: 10px; padding-left: 10px; padding-right: 10px; padding-bottom: 10px; }
+  :root[data-style] .side { gap: 6px; }
+  :root[data-style] .side .nav { flex-shrink: 0; padding-top: 7px; padding-bottom: 7px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root[data-style] .side .search { flex-shrink: 0; padding-top: 8px; padding-bottom: 8px; }
+  :root[data-style="royal"] .side { padding: 22px 18px; gap: 6px; --fs: 60px; }      /* узоры в углах меньше — не заходят на «Поиск» и «Профиль» */
+  :root[data-style="royal"] .tabs { padding: 8px 0 10px; }
+  :root[data-style="royal"] .tab { height: 74px; padding-top: 12px; --notch: 18px; }
+  :root[data-style="steam"] .side { padding: 16px 14px; gap: 6px; }
+  :root[data-style="steam"] .side .nav { gap: 10px; padding: 7px 12px; }
+  :root[data-style="lolitta"] .side { padding: 16px 12px 26px; gap: 6px; }
+  :root[data-style="lolitta"] .side .search { padding-top: 8px; padding-bottom: 8px; }
+  :root[data-style="lolitta"] .side .search + .nav { margin-top: 2px; }
+  :root[data-style="lolitta"] .side .nav { min-height: 36px; padding: 6px 12px; }
+}
