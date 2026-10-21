@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mini-ctl"
+description = "Enables the mini_ctl command without any pre-configured scope."
+commands.allow = ["mini_ctl"]
+
+[[permission]]
+identifier = "deny-mini-ctl"
+description = "Denies the mini_ctl command without any pre-configured scope."
+commands.deny = ["mini_ctl"]

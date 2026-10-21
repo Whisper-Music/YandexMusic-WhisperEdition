@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sleep-cancel"
+description = "Enables the sleep_cancel command without any pre-configured scope."
+commands.allow = ["sleep_cancel"]
+
+[[permission]]
+identifier = "deny-sleep-cancel"
+description = "Denies the sleep_cancel command without any pre-configured scope."
+commands.deny = ["sleep_cancel"]

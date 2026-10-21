@@ -1,12 +1,17 @@
 mod auth;
 mod bg;
 mod desktop;
+mod discord;
 mod download;
+mod hotkeys;
+mod mini;
 mod net;
 mod power;
 mod secret;
+mod sleep;
 mod theme;
 mod whisper;
+mod winstate;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -14,6 +19,18 @@ use tauri::{
 };
 
 struct TrayToggle(MenuItem<tauri::Wry>);
+
+// значок в трее и его меню: в режиме мини-плеера (Windows) меню снимается, правый клик открывает мини-плеер
+struct TrayHandle {
+    tray: tauri::tray::TrayIcon,
+    menu: Menu<tauri::Wry>,
+}
+
+pub(crate) fn tray_menu(app: &tauri::AppHandle, on: bool) {
+    if let Some(h) = app.try_state::<TrayHandle>() {
+        let _ = h.tray.set_menu(if on { Some(h.menu.clone()) } else { None });
+    }
+}
 
 #[tauri::command]
 fn tray_playing(app: tauri::AppHandle, state: tauri::State<TrayToggle>, playing: bool) {
@@ -95,7 +112,27 @@ fn win_drag(window: tauri::WebviewWindow) {
     let _ = window.start_dragging();
 }
 
-fn show_main(app: &tauri::AppHandle) {
+// Без системного автозаполнения: иначе WebView2 при щелчке в поле поиска показывает своё окно
+// «Сохранённые сведения» (прошлые запросы, адреса и т.п.). autocomplete="off" в HTML он слушает не всегда.
+#[cfg(windows)]
+fn no_autofill(w: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings4;
+    use windows::core::Interface;
+    let _ = w.with_webview(|wv| unsafe {
+        if let Ok(core) = wv.controller().CoreWebView2() {
+            if let Ok(s) = core.Settings() {
+                if let Ok(s4) = s.cast::<ICoreWebView2Settings4>() {
+                    let _ = s4.SetIsGeneralAutofillEnabled(false);
+                    let _ = s4.SetIsPasswordAutosaveEnabled(false);
+                }
+            }
+        }
+    });
+}
+#[cfg(not(windows))]
+fn no_autofill(_: &tauri::WebviewWindow) {}
+
+pub(crate) fn show_main(app: &tauri::AppHandle) {
     power::leave(app);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -106,7 +143,7 @@ fn show_main(app: &tauri::AppHandle) {
 
 fn nav_allowed(label: &str, url: &tauri::Url) -> bool {
     match label {
-        "main" => {
+        "main" | "mini" => {
             let host = url.host_str().unwrap_or("");
             (url.scheme() == "tauri" && host == "localhost")
                 || (matches!(url.scheme(), "http" | "https") && host == "tauri.localhost" && url.port().is_none())
@@ -134,6 +171,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(hotkeys::plugin())
         // Whisper Archive: потоковое воспроизведение треков архива (wa://localhost/track/<id>,
         // на Windows — http://wa.localhost/...). Только для главного окна: окно входа Яндекса
         // и любые внешние страницы получить треки архива этим путём не могут.
@@ -203,13 +241,27 @@ pub fn run() {
             whisper::wa_auth_request_code,
             whisper::wa_auth_issue,
             whisper::wa_save_track,
-            whisper::wa_prefetch
+            whisper::wa_prefetch,
+            discord::discord_config,
+            discord::discord_status,
+            discord::discord_retry,
+            discord::discord_update,
+            mini::tray_mode,
+            mini::mini_state,
+            mini::mini_state_get,
+            mini::mini_ctl,
+            hotkeys::hotkeys_set,
+            sleep::sleep_start,
+            sleep::sleep_cancel,
+            sleep::sleep_status
         ])
         .setup(|app| {
             secret::init(app.handle());
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_min_size(Some(tauri::LogicalSize::new(780.0, 540.0)));
                 let _ = w.set_decorations(false);
+                winstate::restore(&w); // размер и место с прошлого запуска; окно создано скрытым и показывается здесь
+                no_autofill(&w);
             }
             let prev = MenuItem::with_id(app, "prev", "Предыдущий", true, None::<&str>)?;
             let toggle = MenuItem::with_id(app, "toggle", "Пауза / Играть", true, None::<&str>)?;
@@ -217,24 +269,37 @@ pub fn run() {
             let sep = PredefinedMenuItem::separator(app)?;
             let show = MenuItem::with_id(app, "show", "Открыть", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&prev, &toggle, &next, &sep, &show, &quit])?;
+            // Linux: щелчков по значку нет — мини-плеер открывается пунктом меню
+            let mini_item = MenuItem::with_id(app, "mini", "Мини-плеер", true, None::<&str>)?;
+            let menu = if cfg!(windows) {
+                Menu::with_items(app, &[&prev, &toggle, &next, &sep, &show, &quit])?
+            } else {
+                Menu::with_items(app, &[&show, &mini_item, &prev, &toggle, &next, &sep, &quit])?
+            };
             app.manage(TrayToggle(toggle));
             app.manage(FsSaved::default());
             app.manage(bg::Picked::default());
+            app.manage(mini::Shared::default());
             // Трей одинаково создаётся в Windows и Linux, но ведёт себя по-разному:
             // * Windows — левый клик открывает окно, правый показывает меню;
             // * Linux (libayatana-appindicator / StatusNotifierItem) — щелчки по значку приложению
             //   не приходят вообще, по любому клику оболочка сама показывает меню. Поэтому всё,
             //   что умеет значок, продублировано пунктами меню («Открыть» первым делом).
             //   Всплывающая подсказка (tooltip) в Linux не поддерживается и просто игнорируется.
-            TrayIconBuilder::new()
+            // * Windows, режим «Мини-плеер» (настройка) — меню у значка снимается (mini::tray_mode),
+            //   и правый клик открывает мини-плеер.
+            let tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Моя Музыка")
                 .menu(&menu)
                 .show_menu_on_left_click(cfg!(not(windows))) // в Linux флаг не действует, меню есть всегда
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show_main(app),
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        winstate::save(app);
+                        app.exit(0);
+                    }
+                    "mini" => mini::toggle(app, None),
                     id @ ("prev" | "toggle" | "next") => {
                         power::wake(app);
                         let _ = app.emit("tray-ctl", id);
@@ -242,16 +307,16 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        show_main(tray.app_handle());
+                    if let TrayIconEvent::Click { button, button_state: MouseButtonState::Up, position, .. } = event {
+                        match button {
+                            MouseButton::Left => show_main(tray.app_handle()),
+                            MouseButton::Right if mini::enabled() => mini::toggle(tray.app_handle(), Some(position)),
+                            _ => {}
+                        }
                     }
                 })
                 .build(app)?;
+            app.manage(TrayHandle { tray, menu });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -259,13 +324,22 @@ pub fn run() {
                 match event {
                     WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
+                        winstate::save(window.app_handle()); // до скрытия: у скрытого окна размеры могут не читаться
                         let _ = window.hide();
                         power::enter(window.app_handle());
                     }
-                    WindowEvent::Resized(_) => power::on_resized(window),
+                    WindowEvent::Resized(_) => {
+                        power::on_resized(window);
+                        winstate::changed(window.app_handle());
+                    }
+                    WindowEvent::Moved(_) => winstate::changed(window.app_handle()),
                     // перетаскивание файлов/папок в окно принимает Rust (bg.rs), а не веб-страница
                     WindowEvent::DragDrop(ev) => bg::on_drag(window.app_handle(), ev),
                     _ => {}
+                }
+            } else if window.label() == "mini" {
+                if let WindowEvent::Focused(false) = event {
+                    mini::on_blur(window.app_handle());
                 }
             }
         })

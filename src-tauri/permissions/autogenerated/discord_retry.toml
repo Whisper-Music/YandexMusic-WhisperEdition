@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discord-retry"
+description = "Enables the discord_retry command without any pre-configured scope."
+commands.allow = ["discord_retry"]
+
+[[permission]]
+identifier = "deny-discord-retry"
+description = "Denies the discord_retry command without any pre-configured scope."
+commands.deny = ["discord_retry"]

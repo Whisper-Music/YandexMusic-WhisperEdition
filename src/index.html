@@ -14,6 +14,17 @@
   <link rel="stylesheet" href="theme.css" />
   <script src="wmt.js" defer></script>
   <script src="theme.js" defer></script>
+  <link rel="stylesheet" href="discord.css" />
+  <script src="discord.js" defer></script>
+  <script src="traymini.js" defer></script>
+  <link rel="stylesheet" href="hotkeys.css" />
+  <script src="hotkeys.js" defer></script>
+  <link rel="stylesheet" href="sleep.css" />
+  <script src="sleep.js" defer></script>
+  <link rel="stylesheet" href="eq.css" />
+  <script src="eq.js" defer></script>
+  <link rel="stylesheet" href="layout.css" />
+  <script src="layout.js"></script>
 </head>
 <body>
   <div id="bg"><video id="bgVideo" muted loop playsinline disablepictureinpicture disableremoteplayback preload="auto" hidden></video></div>
@@ -26,6 +37,10 @@
         <span class="tbsubtitle">Whisper Edition</span>
       </span>
     </div>
+    <button id="plusNotice" class="tbnotice" type="button" hidden>
+      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 2L1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z"/></svg>
+      <span id="plusNoticeText"></span>
+    </button>
     <div class="tbctl">
       <button id="wMin" title="Свернуть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 6h8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
       <button id="wMax" title="Развернуть"></button>
@@ -37,7 +52,7 @@
     <header class="tabs" id="tabs"></header>
 
     <aside class="panel side">
-      <input id="search" class="search" type="search" placeholder="Поиск" />
+      <input id="search" class="search" type="search" placeholder="Поиск" autocomplete="off" spellcheck="false" />
       <button class="nav" id="wave">Моя волна</button>
       <button class="nav active" id="likes">Лайки</button>
       <button class="nav" id="statsBtn">Статистика</button>
@@ -126,7 +141,12 @@
       </section>
       <section id="settingsPage" class="settings" hidden>
         <div class="card">
-          <h3>Стиль оформления</h3>
+          <div class="stylehead">
+            <h3>Стиль оформления</h3>
+            <button type="button" class="stview" id="styleView" title="Компактный вид: стили кружочками" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="6" cy="6" r="3" fill="currentColor"/><circle cx="18" cy="6" r="3" fill="currentColor"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="18" r="3" fill="currentColor"/></svg>
+            </button>
+          </div>
           <div class="stylepick">
             <button class="stylecard" data-style="neon"><span class="sprev sp-neon"></span><b>Неон</b><small>Свечение, стекло, прозрачные панели</small></button>
             <button class="stylecard" data-style="royal"><span class="sprev sp-royal"></span><b>Королевский</b><small>Золото, готика, знамёна</small></button>
@@ -166,6 +186,13 @@
           <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
           <label class="slide"><span>Затемнение фона</span><input type="range" id="cDim" min="0" max="85" /></label>
         </div>
+        <div class="card" id="layoutCard">
+          <h3>Расположение</h3>
+          <div class="lyrow"><span>Боковая панель</span><div class="lyseg" data-k="side"><button class="chip" data-v="left">Слева</button><button class="chip" data-v="right" title="Закреплённые альбомы и артисты тоже переедут вправо">Справа</button></div></div>
+          <div class="lyrow"><span>Вид боковой панели</span><div class="lyseg" data-k="sb"><button class="chip" data-v="full">Обычный</button><button class="chip" data-v="mini" title="Узкая полоса со значками, подписи — при наведении">Свёрнутый</button></div></div>
+          <div class="lyrow"><span>Нижняя панель</span><div class="lyseg" data-k="pl"><button class="chip" data-v="full">Обычная</button><button class="chip" data-v="mini" title="Кнопки и линия воспроизведения в одну строку">Свёрнутая</button></div></div>
+          <div class="lyrow"><span>Время трека</span><div class="lyseg" data-k="time"><button class="chip" data-v="always">Всегда</button><button class="chip" data-v="hover" title="Время появляется при наведении на линию воспроизведения">При наведении</button></div></div>
+        </div>
         <div class="card">
           <h3>Моя волна</h3>
           <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
@@ -177,6 +204,38 @@
             </div>
             <p id="vizNote" class="status"></p>
           </div>
+        </div>
+        <div class="card">
+          <h3>Трей</h3>
+          <div class="lyrow"><span>Щелчок по значку</span><div class="lyseg trseg"><button class="chip" data-v="menu" title="Правый щелчок — меню с кнопками">Кнопки</button><button class="chip" data-v="mini" title="Правый щелчок — мини-плеер с обложкой, кнопками, повтором и перемешиванием">Мини-плеер</button></div></div>
+          <p id="trayNote" class="status"></p>
+        </div>
+        <div class="card">
+          <h3>Горячие клавиши</h3>
+          <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
+          <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
+        </div>
+        <div class="card">
+          <h3>Discord</h3>
+          <label class="switch" title="Показывает в профиле Discord, что сейчас играет. Подключается само, когда Discord запущен"><input type="checkbox" id="dcOn" /><i></i><span>Использовать Discord RPC</span></label>
+          <div class="dcline">
+            <span class="dcdot" id="dcDot"></span>
+            <span class="dcnote" id="dcNote">Выключено</span>
+            <button class="nav" id="dcSetup">Настроить…</button>
+          </div>
+        </div>
+        <div class="card sleepcard">
+          <h3>Режим сна</h3>
+          <p class="slhint">Включается кнопкой с луной в нижней панели: играет Моя волна под выбранное настроение, последние 3 минуты музыка плавно затихает.</p>
+          <div class="lyrow"><span>Выключить через</span><div class="lyseg" id="slTime"></div></div>
+          <div class="lyrow"><span>Когда время выйдет</span><div class="lyseg" id="slAct"><button class="chip" data-v="off">Выключить компьютер</button><button class="chip" data-v="stop">Только остановить музыку</button></div></div>
+          <div class="lyrow"><span>Моя волна для сна</span><div class="slwave"><b id="slWaveName">Спокойное</b><button class="nav" id="slWavePick">Выбрать…</button></div></div>
+          <div id="slStations" class="slstations" hidden>
+            <div id="slChips" class="chips"></div>
+            <div id="slGrid" class="stgrid"></div>
+          </div>
+          <div class="row"><button class="nav active" id="slStart">Включить режим сна</button></div>
+          <p class="status" id="slNote"></p>
         </div>
         <div class="card">
           <h3>Скачивание треков</h3>
@@ -196,7 +255,7 @@
         <img id="cover" class="cover" alt="" />
         <div class="meta"><b id="pTitle">Загрузка…</b><span id="pArtist"></span></div>
         <button id="likeBtn" class="likebtn" title="В лайки"></button>
-        <button id="dlBtn" class="dlbtn" title="Скачать трек" disabled></button>
+        <button id="disBtn" class="dlbtn disbtn" title="Не нравится" disabled></button>
       </div>
 
       <div class="pcenter">
@@ -215,6 +274,7 @@
       </div>
 
       <div class="pright">
+      <button id="sleepBtn" class="sleepbtn" title="Режим сна"><span id="sleepLeft" class="sleepleft" hidden></span></button>
       <div class="volwrap" id="volWrap">
         <button id="volBtn" title="Громкость (клик — выключить звук)"></button>
         <div class="volpop">
