@@ -170,6 +170,10 @@ const styleDef = (st) => STYLE_DEF[st] || STYLE_DEF[baseOf(st)];
 //   glow — есть свечение (ползунок «Свечение»), animations — есть анимации (галочка «Анимации интерфейса»),
 //   panelOpacity — панели могут быть прозрачными (ползунок «Прозрачность панелей»).
 const themeFeatures = {};
+// Возможности своих тем сверх CSS (settings whisper-music, разбирает theme.js → setFeatures):
+// volKnob — громкость ручкой, layoutFixed — тема сама задаёт расположение, buttons — [[имя, действие], …].
+const themeHooks = {};
+const hook = (k, st = cfg.style) => themeHooks[st]?.[k];
 function feature(name, st = cfg.style) {
   const f = themeFeatures[st]?.[name];
   if (typeof f === "boolean") return f;
@@ -600,6 +604,75 @@ function applyCfg() {
   syncBgVideo();
   applyCustom();
   applyViz();
+  applyHooks();
+}
+// ---------- возможности своих тем: ручка громкости, своя раскладка, кнопки-действия ----------
+// Кнопки темы: settings whisper-music → "buttons": { "power": "wave", … }. Приложение создаёт их всегда
+// (#thBtns > button.thbtn[data-th="power"]), а где они стоят и как выглядят — решает CSS темы.
+// Действие нажимает обычную кнопку приложения, поэтому работает так же и так же отключается.
+const TH_ACTIONS = {
+  wave: ["#waveBtn", "Моя волна"], play: ["#play", "Пуск/пауза"], next: ["#next", "Следующий"], prev: ["#prev", "Предыдущий"],
+  like: ["#likeBtn", "В лайки"], dislike: ["#disBtn", "Не нравится"], mute: ["#volBtn", "Выключить звук"],
+  shuffle: ["#shuffleBtn", "Случайный порядок"], repeat: ["#repeatBtn", "Повтор"], full: ["#cover", "Обложка на весь экран"],
+  sleep: ["#sleepBtn", "Режим сна"], more: ["#pMore", "Ещё"],
+  "page:wave": ["#wave", "Моя волна"], "page:likes": ["#likes", "Лайки"], "page:stats": ["#statsBtn", "Статистика"],
+  "page:settings": ["#settingsBtn", "Настройки"], "page:profile": ["#profile", "Профиль"],
+  "vol-up": [null, "Громче"], "vol-down": [null, "Тише"],
+};
+const thState = {
+  wave: () => $("#waveBtn").classList.contains("playing"),
+  play: () => document.body.classList.contains("is-playing"),
+  like: () => $("#likeBtn").classList.contains("on"),
+  dislike: () => $("#disBtn").classList.contains("on"),
+  mute: () => volume === 0,
+  shuffle: () => $("#shuffleBtn").classList.contains("on"),
+  repeat: () => $("#repeatBtn").classList.contains("on"),
+};
+let thKey = "", thObs = null;
+function renderThemeButtons(list) {
+  const key = JSON.stringify(list);
+  if (key === thKey) return;
+  thKey = key;
+  let box = $("#thBtns");
+  if (!list.length) { box?.remove(); thObs?.disconnect(); thObs = null; return; }
+  if (!box) { box = document.createElement("div"); box.id = "thBtns"; box.className = "thbtns"; document.body.append(box); }
+  box.replaceChildren(...list.map(([name, act]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "thbtn"; b.dataset.th = name; b.dataset.act = act;
+    b.title = TH_ACTIONS[act][1]; b.setAttribute("aria-label", TH_ACTIONS[act][1]);
+    b.onclick = () => {
+      if (act === "vol-up") return setVol(volume + 0.05);
+      if (act === "vol-down") return setVol(volume - 0.05);
+      const el = $(TH_ACTIONS[act][0]);
+      if (el && !el.disabled) el.click();
+    };
+    return b;
+  }));
+  // состояние кнопок (.on): следим за классами тех элементов, по которым оно видно
+  if (!thObs) {
+    thObs = new MutationObserver(thSync);
+    for (const el of [document.body, $("#waveBtn"), $("#likeBtn"), $("#disBtn"), $("#shuffleBtn"), $("#repeatBtn"), ...document.querySelectorAll(".side .nav")])
+      if (el) thObs.observe(el, { attributes: true, attributeFilter: ["class", "disabled"] });
+  }
+  thSync();
+}
+function thSync() {
+  const box = document.getElementById("thBtns");
+  if (!box) return;
+  for (const b of box.children) {
+    const act = b.dataset.act, src = TH_ACTIONS[act]?.[0] && $(TH_ACTIONS[act][0]);
+    const on = act.startsWith("page:") ? !!src?.classList.contains("active") : !!thState[act]?.();
+    b.classList.toggle("on", on);
+    b.disabled = !!src?.disabled;
+  }
+}
+function applyHooks() {
+  const de = document.documentElement, kn = !!hook("volKnob"), vb = $("#volBtn");
+  de.toggleAttribute("data-vol-knob", kn);
+  if (kn) { vb.setAttribute("role", "slider"); vb.setAttribute("aria-valuemin", "0"); vb.setAttribute("aria-valuemax", "100"); vb.setAttribute("aria-valuenow", String(Math.round(volume * 100))); }
+  else ["role", "aria-valuemin", "aria-valuemax", "aria-valuenow"].forEach((a) => vb.removeAttribute(a));
+  window.layoutLock?.(!!hook("layoutFixed"));
+  renderThemeButtons(hook("buttons") || []);
 }
 function saveCfg() {
   try { localStorage.setItem("ym_cfg3", JSON.stringify(cfg)); $("#setNote").textContent = ""; return true; }
@@ -620,6 +693,9 @@ function syncControls() {
   $("#glassTitle").textContent = glow ? (panels ? "Стекло и свечение" : "Свечение") : "Панели";
   $("#cAnim").closest("label").style.display = anim ? "" : "none";
   document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
+  // под списком стилей (в компактном виде): «Автор · Название» выбранного стиля
+  const sel = document.querySelector(".stylecard.on"), cap = $("#styleCap");
+  if (cap) cap.textContent = sel ? [sel.querySelector(".scauth")?.textContent, sel.querySelector(".scname")?.textContent].filter(Boolean).join(" · ") : "";
   fillAll();
 }
 for (const [id, key, num] of SLIDERS) {
@@ -1327,6 +1403,7 @@ function syncIcons() {
   $("#fPlay").innerHTML = playing ? ICON.pause : ICON.play;
   $("#waveBtn").innerHTML = wave.on && playing ? ICON.pause : ICON.play;
   $("#waveBtn").classList.toggle("playing", wave.on && playing);
+  waveOrbitsSync();
   window.discordPush?.();                 // Discord RPC (discord.js), если включён
   window.miniPush?.();                    // мини-плеер у значка в трее (traymini.js)
   if (active !== trayPlaying) { trayPlaying = active; Promise.resolve(invoke("tray_playing", { playing: active })).catch(() => {}); }   // в трей — только при смене
@@ -3231,13 +3308,48 @@ function markPlaying() {
   document.querySelectorAll(".list li").forEach((li) => li.classList.toggle("playing", li.dataset.id === String(playingId)));
 }
 
+// Смена обложки в плеере. Если стиль задаёт анимации .cover.flip-out / .flip-in (Королевский — «монета»),
+// старая обложка уходит на ребро, подменяется (новая к этому моменту уже загружена) и выходит с ребра.
+// Анимаций нет (другой стиль, выключены «Анимации интерфейса») — картинка меняется сразу.
+let coverSeq = 0;
+const newAnims = (el, before) => el.getAnimations?.().filter((a) => !before.includes(a)) || [];
+async function swapCover(src) {
+  const el = $("#cover"), my = ++coverSeq;
+  el.classList.remove("flip-out", "flip-in");
+  if (!el.getAttribute("src") || el.getAttribute("src") === src || document.hidden || !el.getAnimations) { el.src = src; return; }
+  const before = el.getAnimations();
+  el.classList.add("flip-out");
+  const out = newAnims(el, before);
+  if (!out.length) { el.classList.remove("flip-out"); el.src = src; return; }
+  const pre = new Image(); pre.src = src;
+  await Promise.all([
+    Promise.all(out.map((a) => a.finished)).catch(() => {}),
+    Promise.race([pre.decode().catch(() => {}), new Promise((r) => setTimeout(r, 600))]),
+  ]);
+  if (my !== coverSeq) return;
+  el.src = src;
+  el.classList.remove("flip-out");
+  const b2 = el.getAnimations();
+  el.classList.add("flip-in");
+  const inn = newAnims(el, b2);
+  await Promise.all(inn.map((a) => a.finished)).catch(() => {});
+  if (my === coverSeq) el.classList.remove("flip-in");
+}
+// клик по «Моей волне» — анимация «оттиска», если стиль её задаёт (Королевский: .wavebtn.stamp)
+$("#waveBtn").addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  const b = e.currentTarget;
+  b.classList.remove("stamp"); void b.offsetWidth; b.classList.add("stamp");
+});
+$("#waveBtn").addEventListener("animationend", (e) => { if (e.target === e.currentTarget && e.animationName.endsWith("royalStamp")) e.currentTarget.classList.remove("stamp"); });
+
 function showTrack(t, pos = 0) {
   playingId = t.id; markPlaying();
   const pt = $("#pTitle");
   pt.textContent = t.title;
   pt.classList.toggle("link", !!albumOf(t));
   fillArtists($("#pArtist"), t);
-  $("#cover").src = cover(t);
+  swapCover(cover(t));
   const dur = (t.durationMs || 0) / 1000;
   $("#tCur").textContent = fmtTime(pos); $("#tDur").textContent = fmtTime(dur);
   $("#seek").value = dur ? (pos / dur) * 1000 : 0; fill($("#seek"));
@@ -3517,6 +3629,7 @@ const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.s
 // и с выключенным эквалайзером граф не создаётся вовсе — звук играет напрямую, без лишней работы.
 function vizWanted() { return (cfg.viz && (wave.on || !$("#wavePage").hidden)) || !!window.eqActive?.(); }
 function applyViz() {
+  waveOrbitsSync();
   $("#viz").hidden = !cfg.viz;
   $("#vizFsBtn").hidden = !cfg.viz;
   if (!cfg.viz && vizFullOn) setVizFull(false);
@@ -3569,7 +3682,43 @@ document.addEventListener("visibilitychange", () => {
   if (!$("#wavePage").hidden || vizFullOn) applyViz();
   if (!$("#full").hidden && !fullRun) { fullRun = true; fLast.cur = -1; requestAnimationFrame(fullFrame); }
 });
-function vizStop() { viz.run = false; }
+function vizStop() { viz.run = false; orbReset(); }
+
+// Орбиты вокруг кнопки «Моя волна» (#waveOrbits, их рисует CSS стиля — например, Неон).
+// Пока волна играет — у слоя класс .on, а вращения (@keyframes neonSpin) ускоряются через playbackRate:
+// так скорость меняется плавно, без скачка фазы, как было бы при смене animation-duration.
+function waveOrbitsSync() {
+  const o = $("#waveOrbits");
+  if (!o) return;
+  const on = $("#waveBtn").classList.contains("playing");
+  o.classList.toggle("on", on);
+  if ($("#wavePage").hidden || getComputedStyle(o).display === "none") return;
+  const rate = on ? 2.4 : 1;
+  for (const a of o.getAnimations?.({ subtree: true }) || []) {
+    if (/(^|-)neonSpin$/.test(a.animationName || "") && a.playbackRate !== rate) {
+      if (a.updatePlaybackRate) a.updatePlaybackRate(rate); else a.playbackRate = rate;
+    }
+  }
+}
+// (состояние — в viz: vizStop может сработать раньше, чем объявлен кэш vz)
+// такт для орбит: --kick (0…1) на .stage и ударная волна на каждый удар бочки (только при живом анализаторе)
+function orbReset() {
+  if (viz.orbKick !== undefined) { $(".stage")?.style.removeProperty("--kick"); viz.orbKick = undefined; }
+  if (viz.orbLive) { $("#waveOrbits")?.classList.remove("beats"); viz.orbLive = false; }
+}
+function orbBeat(live) {
+  const k = live ? Math.round(viz.kick * 40) / 40 : 0;
+  if (k !== viz.orbKick) { viz.orbKick = k; vz.stage.style.setProperty("--kick", k); }
+  if (live !== viz.orbLive) { viz.orbLive = live; vz.orb.classList.toggle("beats", live); }
+  if (live && viz.beatNow) {
+    viz.orbN = (viz.orbN + 1) % 2 || 0;
+    const r = vz.orb.children[3 + viz.orbN];
+    r?.animate?.([
+      { opacity: 0.95, scale: 1, borderWidth: "3px" },
+      { opacity: 0, scale: 1.85 + viz.kick * 0.25, borderWidth: "0.5px" },
+    ], { duration: 950, easing: "cubic-bezier(.1, .6, .3, 1)" });
+  }
+}
 
 // Кэш визуализатора: холсты, контексты, градиенты и таблицы синусов создаются один раз,
 // а не 60 раз в секунду — меньше работы процессору и сборщику мусора.
@@ -3602,9 +3751,16 @@ function vizFrame(ts) {
   }
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
   const A = sty().cc?.vizA || sty().accent, B = sty().cc?.vizB || sty().accent2;
-  const key = `${full}|${cfg.vizStyle}|${cfg.style}|${w}x${h}|${A}|${B}`;
+  const key = `${full}|${cfg.vizStyle}|${cfg.style}|${document.documentElement.dataset.anim}|${w}x${h}|${A}|${B}`;
   const fresh = key !== vz.key;
-  if (fresh) { vz.key = key; vz.br = ($("#waveBtn").offsetWidth || 112) / 2; }      // стиль мог поменять размер кнопки
+  if (fresh) {
+    vz.key = key; vz.br = ($("#waveBtn").offsetWidth || 112) / 2;      // стиль мог поменять размер кнопки
+    // отступ визуализатора от кнопки: стиль или тема может задать его переменной --viz-gap на .stage (Неону нужно место под орбиты)
+    vz.stage = $(".stage"); vz.orb = $("#waveOrbits");
+    vz.gapCss = parseFloat(getComputedStyle(vz.stage).getPropertyValue("--viz-gap"));
+    vz.orbOn = !!vz.orb && document.documentElement.dataset.anim === "on" && getComputedStyle(vz.orb).display !== "none";
+    if (!vz.orbOn) orbReset();
+  }
 
   let bass = 0, mid = 0;
   if (live) {
@@ -3633,6 +3789,7 @@ function vizFrame(ts) {
     viz.sm[k] = ease(viz.sm[k], target, 0.6, 0.14);
   }
 
+  if (!full && vz.orbOn) orbBeat(live);                          // орбиты Неона дышат в такт
   const t = ts / 1000, cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2, N = vz.N, RINGS = 5;
   if (full) {                                        // на весь экран — свои, более лёгкие варианты, чтобы фон было видно
     if (cfg.vizStyle === "bars") drawBarsBottom(g, w, h, t, live, ease, fresh, A, B); else drawOrbit(g, w, h, t, live, A, B);
@@ -3642,7 +3799,8 @@ function vizFrame(ts) {
   const br = vz.br;
   if (cfg.vizStyle === "bars") { drawBars(g, w, h, t, br, live, ease, fresh, A, B); return; }
   if (!vz.cos) vzTables();
-  const inner = Math.min(br + (baseOf() === "steam" || baseOf() === "lolitta" ? 28 : 14), R * 0.5), outer = Math.max(inner + 20, R * 0.76);
+  const gap = Number.isFinite(vz.gapCss) ? vz.gapCss : baseOf() === "steam" || baseOf() === "lolitta" ? 28 : 14;
+  const inner = Math.min(br + gap, R * 0.5), outer = Math.max(inner + 20, R * 0.76);
   if (fresh) {
     vz.grad = g.createLinearGradient(0, 0, w, h);
     vz.grad.addColorStop(0, A); vz.grad.addColorStop(1, B);
@@ -3771,7 +3929,7 @@ function drawOrbit(g, w, h, t, live, A, B) {
 
 // столбцы разной высоты: зеркально слева и справа от кнопки и вверх-вниз от средней линии; бас — у кнопки
 function drawBars(g, w, h, t, br, live, ease, fresh, A, B) {
-  const cy = h / 2, gapC = br + 14, side = w / 2 - gapC - 6;
+  const cy = h / 2, gapC = br + (Number.isFinite(vz.gapCss) ? vz.gapCss : 14), side = w / 2 - gapC - 6;
   if (side < 30) return;
   const n = Math.max(8, Math.min(64, Math.floor(side / 10))), step = side / n, bw = Math.max(2, step * 0.6);
   const maxH = Math.max(10, Math.min(h / 2 - 10, side * 0.9));            // никогда не выходит за холст
@@ -3862,9 +4020,35 @@ function setVol(v) {
   $("#vol").value = pct; fill($("#vol"));
   $("#volVal").textContent = pct;
   $("#volBtn").innerHTML = ICON[volume === 0 ? "mute" : volume < 0.5 ? "low" : "high"];
+  document.documentElement.style.setProperty("--vol", String(volume));      // громкость числом 0…1 — для CSS тем (ручка громкости)
+  if (hook("volKnob")) $("#volBtn").setAttribute("aria-valuenow", String(pct));
+  thSync();
 }
 $("#vol").addEventListener("input", (e) => setVol(e.target.value / 100));
-$("#volBtn").onclick = () => { if (volume > 0) { lastVol = volume; try { localStorage.setItem("ym_lastvol", String(lastVol)); } catch {} setVol(0); } else setVol(lastVol || 0.5); };
+$("#volBtn").onclick = () => { if (knob.moved) { knob.moved = false; return; } if (volume > 0) { lastVol = volume; try { localStorage.setItem("ym_lastvol", String(lastVol)); } catch {} setVol(0); } else setVol(lastVol || 0.5); };
+// Громкость ручкой (тема с controls.volume = "knob"): тянуть вверх/вправо — громче, вниз/влево — тише;
+// короткий щелчок без движения — как раньше, выключить/вернуть звук. Стрелки — по 5 %.
+const knob = { y: 0, x: 0, v: 0, id: null, moved: false };
+$("#volBtn").addEventListener("pointerdown", (e) => {
+  if (!hook("volKnob") || e.button !== 0) return;
+  Object.assign(knob, { y: e.clientY, x: e.clientX, v: volume, id: e.pointerId, moved: false });
+  e.currentTarget.setPointerCapture(e.pointerId);
+});
+$("#volBtn").addEventListener("pointermove", (e) => {
+  if (knob.id !== e.pointerId) return;
+  const d = knob.y - e.clientY + (e.clientX - knob.x);
+  if (!knob.moved && Math.abs(d) < 4) return;
+  knob.moved = true;
+  setVol(knob.v + d / 160);
+});
+const knobEnd = (e) => { if (knob.id === e.pointerId) knob.id = null; };
+$("#volBtn").addEventListener("pointerup", knobEnd);
+$("#volBtn").addEventListener("pointercancel", (e) => { knobEnd(e); knob.moved = false; });
+$("#volBtn").addEventListener("keydown", (e) => {
+  if (!hook("volKnob")) return;
+  const d = { ArrowUp: 0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowLeft: -0.05 }[e.key];
+  if (d) { e.preventDefault(); e.stopPropagation(); setVol(volume + d); }
+});
 $("#volWrap").addEventListener("wheel", (e) => { e.preventDefault(); setVol(volume + (e.deltaY < 0 ? 0.05 : -0.05)); }, { passive: false });
 $("#seek").addEventListener("input", (e) => { if (audio.duration) audio.currentTime = (e.target.value / 1000) * audio.duration; });
 

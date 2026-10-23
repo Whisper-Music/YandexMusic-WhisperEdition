@@ -5,6 +5,7 @@
 {
   "id": "night-sky",
   "name": "Ночное небо",
+  "author": "Whisper Music",
   "description": "Синий акцент и звёздный фон — пример темы",
   "base": "neon",
   "preview": "asset:preview.png"

@@ -199,6 +199,7 @@ a { color: var(--accent); }
 
 .stage { position: relative; flex: 1 1 0; min-height: 0; width: 100%; max-width: 640px; display: grid; place-items: center; }
 #viz { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.waveorbits { display: none; }      /* слой орбит вокруг кнопки «Моя волна»: его включают стили (Неон) и свои темы */
 .stage.viz .wavebtn.playing { animation: none; }
 .switch { position: relative; display: flex; align-items: center; gap: 12px; cursor: pointer; }
 .switch input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
@@ -548,6 +549,112 @@ a { color: var(--accent); }
   :root[data-style="neon"] *, :root[data-style="neon"] *::before, :root[data-style="neon"] *::after { animation: none !important; transition-duration: .01ms !important; }
 }
 
+/* ---------- Неон: рамки панелей вторым цветом ----------
+   Рамка всегда цвета --accent2. Свечение целиком считается от ползунка «Свечение» (--glow):
+   при 0 все тени нулевого размера — остаётся просто цветная рамка. */
+:root[data-style="neon"] {
+  --neon-edge: color-mix(in srgb, var(--accent2) 88%, transparent);
+  --neon-halo:
+    0 0 calc(var(--glow) * .3) color-mix(in srgb, var(--accent2) 75%, transparent),
+    0 0 var(--glow) color-mix(in srgb, var(--accent2) 42%, transparent),
+    inset 0 0 calc(var(--glow) * .45) color-mix(in srgb, var(--accent2) 18%, transparent);
+}
+:root[data-style="neon"] .panel { border-color: var(--neon-edge); box-shadow: var(--neon-halo); }
+:root[data-style="neon"] .volpop, :root[data-style="neon"] .stations,
+:root[data-style="neon"] .tmenu, :root[data-style="neon"] .toast { border-color: var(--neon-edge); }
+
+/* при включении стиля (и при запуске) рамки «зажигаются», как неоновая трубка — пара миганий */
+:root[data-style="neon"] .side, :root[data-style="neon"] .player { animation: neonPowerOn 1.3s steps(1, end) backwards; }
+:root[data-style="neon"] .player { animation-delay: .18s; }
+@keyframes neonPowerOn {
+  0%       { border-color: transparent; box-shadow: none; }
+  8%       { border-color: var(--neon-edge); box-shadow: var(--neon-halo); }
+  13%      { border-color: transparent; box-shadow: none; }
+  25%      { border-color: var(--neon-edge); box-shadow: var(--neon-halo); }
+  29%      { border-color: color-mix(in srgb, var(--accent2) 30%, transparent); box-shadow: none; }
+  42%, 100% { border-color: var(--neon-edge); box-shadow: var(--neon-halo); }
+}
+
+/* пока играет музыка, по рамке нижней панели бегут два огонька (второй и основной цвет) */
+@property --neon-run { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+:root[data-style="neon"] .player { position: relative; }
+:root[data-style="neon"] .player::before {
+  content: ""; position: absolute; inset: -2px; padding: 3px; border-radius: 24px; pointer-events: none;
+  background: conic-gradient(from var(--neon-run),
+    transparent 0deg 18deg, color-mix(in srgb, var(--accent2) 65%, #fff) 52deg, transparent 80deg 198deg,
+    color-mix(in srgb, var(--accent) 55%, #fff) 232deg, transparent 260deg 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  filter: blur(1px); opacity: 0; transition: opacity .9s ease;
+}
+:root[data-style="neon"] body.is-playing .player::before { opacity: .9; animation: neonRun 9s linear infinite; }
+@keyframes neonRun { to { --neon-run: 360deg; } }
+
+/* ---------- Неон: орбиты вокруг кнопки «Моя волна» ----------
+   .waveorbits — отдельный слой между визуализатором и кнопкой (в index.html), на раскладку не влияет.
+   1 — «комета» второго цвета, 2 — пунктирное кольцо, 3 — встречная комета основного цвета,
+   4–5 — ударные волны. Пока волна играет, кольца крутятся быстрее (main.js, playbackRate),
+   а при включённом визуализаторе всё дышит в такт: --kick (0…1) приходит из анализатора на каждый удар бочки,
+   и волны 4–5 запускаются ровно на удар, а не по таймеру. */
+@property --orb-h { syntax: "<number>"; inherits: true; initial-value: 0; }
+:root[data-style="neon"] .stage { --viz-gap: 46px; }      /* визуализатор начинается снаружи орбит */
+:root[data-style="neon"] .waveorbits {
+  display: block; position: absolute; left: 50%; top: 50%; z-index: 0; width: 112px; height: 112px; pointer-events: none;
+  translate: -50% -50%;
+  scale: calc(1 + var(--kick, 0) * .08 + var(--orb-h) * .06);
+  opacity: .62;
+  transition: --orb-h .4s cubic-bezier(.2, .8, .2, 1), opacity .6s ease;
+  filter: drop-shadow(0 0 calc(var(--glow) * .4) color-mix(in srgb, var(--accent2) 80%, transparent));
+}
+:root[data-style="neon"] .waveorbits.on { opacity: 1; }
+:root[data-style="neon"][data-anim="on"] .stage:has(.wavebtn:hover) .waveorbits { --orb-h: 1; opacity: 1; }
+@media (max-height: 680px) { :root[data-style="neon"] .waveorbits { width: 92px; height: 92px; } }
+:root[data-style="neon"] .waveorbits i { position: absolute; inset: 0; border-radius: 50%; }
+:root[data-style="neon"] .waveorbits i::before { content: ""; position: absolute; border-radius: 50%; }
+
+/* кольцо 1: дуга второго цвета, яркий край и тающий хвост */
+:root[data-style="neon"] .waveorbits i:nth-child(1) { inset: -11px; animation: neonSpin 7s linear infinite; }
+:root[data-style="neon"] .waveorbits i:nth-child(1)::before {
+  inset: 0;
+  background: conic-gradient(transparent 0 30%, color-mix(in srgb, var(--accent2) 30%, transparent) 66%, var(--accent2) 95%, color-mix(in srgb, var(--accent2) 35%, #fff) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+}
+/* кольцо 2: тонкий пунктир, медленно крутится навстречу */
+:root[data-style="neon"] .waveorbits i:nth-child(2) {
+  inset: -21px; opacity: .55;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--accent) 80%, #fff) 0 4deg, transparent 4deg 12deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 1.2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 1.2px));
+  animation: neonSpin 32s linear infinite reverse;
+}
+/* кольцо 3: встречная дуга основного цвета */
+:root[data-style="neon"] .waveorbits i:nth-child(3) { inset: -31px; animation: neonSpin 11s linear infinite reverse; }
+:root[data-style="neon"] .waveorbits i:nth-child(3)::before {
+  inset: 0;
+  background: conic-gradient(color-mix(in srgb, var(--accent) 35%, #fff) 0, var(--accent) 4%, color-mix(in srgb, var(--accent) 28%, transparent) 30%, transparent 58%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.6px), #000 calc(100% - 2.2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.6px), #000 calc(100% - 2.2px));
+}
+/* 4–5: ударные волны от края кнопки */
+:root[data-style="neon"] .waveorbits i:nth-child(n+4) { border: 2px solid var(--accent2); opacity: 0; }
+:root[data-style="neon"] .waveorbits.on:not(.beats) i:nth-child(4) { animation: neonShock 2.6s cubic-bezier(.1, .6, .3, 1) infinite; }
+:root[data-style="neon"] .waveorbits.on:not(.beats) i:nth-child(5) { animation: neonShock 2.6s cubic-bezier(.1, .6, .3, 1) 1.3s infinite; }
+@keyframes neonSpin { to { rotate: 360deg; } }
+@keyframes neonShock {
+  0%   { opacity: .9; scale: 1; border-width: 3px; }
+  100% { opacity: 0; scale: 1.85; border-width: .5px; }
+}
+/* сама кнопка: вместо общего «кольца» — дыхание свечения; с визуализатором — вспышка на каждый удар */
+:root[data-style="neon"] .stage:not(.viz) .wavebtn.playing { animation: neonCore 2.6s ease-in-out infinite; }
+@keyframes neonCore {
+  0%, 100% { box-shadow: 0 0 calc(var(--glow) * 2) color-mix(in srgb, var(--btn-glow) 60%, transparent); }
+  50%      { box-shadow: 0 0 calc(var(--glow) * 3) color-mix(in srgb, var(--btn-glow) 85%, transparent); }
+}
+:root[data-style="neon"] .stage.viz .wavebtn {
+  box-shadow: 0 0 calc(var(--glow) * (2 + var(--kick, 0) * 1.6)) color-mix(in srgb, var(--btn-glow) 65%, transparent);
+}
+
 .stats { display: flex; flex-direction: column; gap: 16px; padding-bottom: 20px; }
 .stats > div { display: flex; flex-direction: column; gap: 16px; }
 .statcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -677,6 +784,54 @@ a { color: var(--accent); }
 :root[data-style="royal"] .list li.playing img { outline-color: var(--accent); }
 :root[data-style="royal"] body.is-playing .list li.playing::before { animation: royalPulse 2.4s ease-in-out infinite; }
 @keyframes royalPulse { 50% { opacity: .45; } }
+
+/* ---------- Королевский: кнопка «Моя волна» — сургучная печать ----------
+   Ободок оттиска внутри кнопки; по нажатию она вдавливается, как печать в сургуч,
+   и от неё расходятся два золотых кольца (класс .stamp ставит main.js на каждый клик). */
+:root[data-style="royal"] .wavebtn::before {
+  content: ""; position: absolute; inset: 8px; border-radius: 50%; pointer-events: none;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.12);
+}
+:root[data-style="royal"] .wavebtn::after {
+  content: ""; position: absolute; inset: -7px; border-radius: 50%; pointer-events: none; opacity: 0;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 calc(var(--glow) * 2 + 8px) color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:root[data-style="royal"] .wavebtn:active { transform: scale(.93); filter: brightness(.9); }
+:root[data-style="royal"] .wavebtn.stamp { animation: royalStamp .6s cubic-bezier(.3, .7, .3, 1); }
+:root[data-style="royal"] .wavebtn.stamp::after { animation: royalSeal .9s cubic-bezier(.15, .7, .3, 1); }
+@keyframes royalStamp {
+  0%   { transform: scale(1); }
+  22%  { transform: scale(.86); filter: brightness(.82); box-shadow: 0 0 0 5px #0e0b09, 0 0 0 6px var(--accent), 0 2px 6px rgba(0,0,0,.7); }
+  55%  { transform: scale(1.06); filter: brightness(1.12); }
+  100% { transform: scale(1); }
+}
+@keyframes royalSeal {
+  0%, 18% { opacity: 0; scale: .9; }
+  30%     { opacity: 1; scale: 1; }
+  100%    { opacity: 0; scale: 1.75; }
+}
+
+/* ---------- Королевский: смена трека — обложка переворачивается, как монета ----------
+   main.js: класс .flip-out (старая обложка уходит на ребро) → новая картинка → .flip-in (новая выходит с ребра).
+   Если у стиля нет этих анимаций, обложка меняется сразу. */
+:root[data-style="royal"] .player .cover { backface-visibility: hidden; }
+:root[data-style="royal"] .player .cover.flip-out { animation: royalCoinOut .2s cubic-bezier(.5, 0, .9, .6) forwards; }
+:root[data-style="royal"] .player .cover.flip-in { animation: royalCoinIn .55s cubic-bezier(.2, 1.3, .4, 1); }
+@keyframes royalCoinOut {
+  from { transform: perspective(300px) rotateY(0); }
+  to   { transform: perspective(300px) rotateY(90deg) scale(1.08); filter: brightness(1.5); }
+}
+@keyframes royalCoinIn {
+  0%   { transform: perspective(300px) rotateY(-90deg) scale(1.08); filter: brightness(1.6); box-shadow: 0 0 calc(var(--glow) * 2 + 10px) var(--accent); }
+  60%  { filter: brightness(1.15); }
+  100% { transform: perspective(300px) rotateY(0) scale(1); filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style="royal"] .wavebtn.stamp, :root[data-style="royal"] .wavebtn.stamp::after,
+  :root[data-style="royal"] .player .cover.flip-out, :root[data-style="royal"] .player .cover.flip-in { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) { :root[data-style="royal"] body.is-playing .list li.playing::before { animation: none; } }
 
 :root[data-style="royal"] .similar h3 { display: flex; align-items: center; gap: 14px; font-family: var(--font-display); letter-spacing: .06em; color: #efe3c0; }
@@ -1417,7 +1572,7 @@ a { color: var(--accent); }
   }
   /* при наведении и нажатии ничего не сдвигается, не качается и не увеличивается (подсветка и цвет остаются).
      Сдвиги из CSS своих тем отключает theme.js: в теме они срабатывают только при data-anim="on". */
-  :root[data-anim="off"] .wavebtn:hover,
+  :root[data-anim="off"] .wavebtn:hover, :root[data-anim="off"] .wavebtn:active,
   :root[data-anim="off"] .tab:hover, :root[data-anim="off"] .tab:active,
   :root[data-anim="off"] .nav:hover, :root[data-anim="off"] .nav:active,
   :root[data-anim="off"] .list li:hover, :root[data-anim="off"] .list li:hover img, :root[data-anim="off"] .list .likebtn:hover,
@@ -1854,3 +2009,14 @@ body.vizfull-on #dim { opacity: .4; }
   :root[data-style="lolitta"] .side .search + .nav { margin-top: 2px; }
   :root[data-style="lolitta"] .side .nav { min-height: 36px; padding: 6px 12px; }
 }
+
+/* ---------- возможности своих тем (main.js → applyHooks) ----------
+   Кнопки-действия темы: слой поверх окна, кнопки без вида — где они стоят и как выглядят, решает CSS темы
+   (#thBtns .thbtn[data-th="имя"], .thbtn.on — действие сейчас «включено»). Ниже очереди, окон и полноэкранных режимов. */
+.thbtns { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+.thbtn { position: absolute; pointer-events: auto; }
+.thbtn:disabled { cursor: default; }
+body.vizfull-on .thbtns { visibility: hidden; }
+/* тема задаёт расположение сама — режимы расположения в настройках не действуют */
+#layoutCard.lylock .lyrow { display: none; }
+#layoutCard.lylock::after { content: "Расположение задаёт текущий стиль оформления."; color: var(--muted); font-size: 13px; }
