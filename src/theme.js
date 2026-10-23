@@ -13,6 +13,8 @@
   const APP = "whisper-music";
   const KEY = (id) => "theme:" + id;
   const NAMES = { neon: "Неон", royal: "Королевский", steam: "Стимпанк", lolitta: "Lolitta" };
+  const AUTHOR = "Whisper Music";                       // автор встроенных стилей (в настройках: «Автор · Название»)
+  const authorOf = (m) => String(m?.author || "").trim().slice(0, 40);
   const meta = new Map();          // id -> { manifest, tokens, settings } (без тяжёлых ресурсов)
   const blobUrls = new Map();      // id -> [blob: URL ресурсов, на которые ссылается CSS]
   const previews = new Map();      // id -> blob: URL картинки для карточки (manifest.preview)
@@ -261,6 +263,22 @@
     const f = settings?.features, out = {};
     if (f && typeof f === "object") for (const k of FEATURES) if (typeof f[k] === "boolean") out[k] = f[k];
     themeFeatures[id] = out;
+    setHooks(id, settings);
+  }
+  // ---------- возможности сверх CSS: controls, layout, buttons (main.js → applyHooks) ----------
+  // { "controls": { "volume": "knob" }, "layout": "fixed", "buttons": { "power": "wave", "ch-up": "next" } }
+  // Действия кнопок — только из списка приложения (TH_ACTIONS): тема может нажать кнопку приложения, но не больше.
+  const BTN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
+  function setHooks(id, settings) {
+    const h = {};
+    if (settings?.controls?.volume === "knob") h.volKnob = true;
+    if (settings?.layout === "fixed") h.layoutFixed = true;
+    const b = settings?.buttons;
+    if (b && typeof b === "object" && !Array.isArray(b)) {
+      const list = Object.entries(b).filter(([k, v]) => BTN_NAME.test(k) && typeof v === "string" && Object.hasOwn(TH_ACTIONS, v)).slice(0, 16);
+      if (list.length) h.buttons = list;
+    }
+    themeHooks[id] = h;
   }
 
   // ---------- значения из tokens ----------
@@ -323,7 +341,7 @@
   function uninject(id) {
     document.getElementById("wmt-" + id)?.remove();
     for (const u of blobUrls.get(id) || []) URL.revokeObjectURL(u);
-    blobUrls.delete(id); previews.delete(id); themeReady.delete(id); meta.delete(id); delete themeFeatures[id];
+    blobUrls.delete(id); previews.delete(id); themeReady.delete(id); meta.delete(id); delete themeFeatures[id]; delete themeHooks[id];
   }
 
   // Сохранённая тема: текст (строка) или архив (Blob) — как её загрузили.
@@ -383,7 +401,7 @@
     const known = cfg.themes.findIndex((t) => t.id === id);
     if (known < 0 && cfg.themes.length >= 50) throw new Error("Своих стилей уже 50 — удали ненужные");
     await IDB.set(KEY(id), typeof data === "string" ? data : new Blob([data]));      // храним как есть: текст или архив
-    const entry = { id, name: m.name.trim().slice(0, 60), base, desc: String(m.description || "").trim().slice(0, 120) };
+    const entry = { id, name: m.name.trim().slice(0, 60), author: authorOf(m), base, desc: String(m.description || "").trim().slice(0, 120) };
     if (known >= 0) cfg.themes[known] = entry; else cfg.themes.push(entry);
     const settings = th.settings(APP);
     meta.set(id, { manifest: m, tokens: th.tokens, settings });
@@ -416,7 +434,7 @@
     const manifest = {
       id: builtin ? `${st}-copy` : st,
       name: builtin ? `${NAMES[st]} (копия)` : m0.name || nameOf(st),
-      author: m0.author || "",
+      author: builtin ? AUTHOR : m0.author || "",
       description: builtin ? `Копия стиля «${NAMES[st]}». Поправь и загрузи обратно` : m0.description || "",
       version: m0.version || "1.0",
       base: baseOf(st),
@@ -510,7 +528,11 @@
         ? `center / cover no-repeat url("${img}")`
         : `linear-gradient(135deg, color-mix(in srgb, ${a2} 55%, #0d0a12), #0d0a12 75%)`;
       pv.style.boxShadow = `inset 0 0 0 1px ${a1}, inset 0 0 0 5px rgba(13,10,18,.85), inset 0 0 0 6px color-mix(in srgb, ${a1} 55%, transparent)`;
-      const nm = document.createElement("b"); nm.textContent = t.name;
+      // «Автор · Название»: автор — отдельным элементом, чтобы в компактном виде остаться только с названием
+      const nm = document.createElement("b"), sn = document.createElement("span");
+      sn.className = "scname"; sn.textContent = t.name;
+      if (t.author) { const sa = document.createElement("span"); sa.className = "scauth"; sa.textContent = t.author; nm.append(sa); }
+      nm.append(sn);
       const sm = document.createElement("small"); sm.textContent = t.desc || `Свой стиль на основе «${NAMES[t.base]}»`;
       const del = document.createElement("span");
       del.className = "scdel"; del.setAttribute("role", "button"); del.title = "Удалить стиль"; del.textContent = "✕";
@@ -563,7 +585,7 @@
       </div>
       <p class="status" id="wmtNote"></p>
       <input type="file" id="wmtFile" accept=".wmt,.zip" hidden />`;
-    pick.after(bar);
+    (document.getElementById("styleCap") || pick).after(bar);      // подпись «Автор · Название» остаётся сразу под списком
     const file = document.getElementById("wmtFile");
     document.getElementById("wmtLoad").onclick = () => file.click();
     file.onchange = async () => {
@@ -623,6 +645,8 @@
         const th = await loadStored(t.id);
         if (!th) throw new Error("нет файла");
         meta.set(t.id, { manifest: th.manifest, tokens: th.tokens, settings: th.settings(APP) });
+        const au = authorOf(th.manifest);                 // темы, загруженные до появления подписи автора
+        if ((t.author || "") !== au) { t.author = au; changed = true; }
         setFeatures(t.id, th.settings(APP));
         inject(t.id, th);
       } catch (e) {

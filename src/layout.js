@@ -16,10 +16,21 @@
   } catch {}
 
   const root = document.documentElement;
+  // стиль оформления задаёт расположение сам (settings → "layout": "fixed"): режимы не применяются,
+  // но выбор пользователя сохраняется и вернётся вместе с другим стилем
+  const DEF = { side: "left", sb: "full", pl: "full", time: "always" };
+  let locked = false;
+  window.layoutLock = (on) => {
+    if (locked === !!on) return;
+    locked = !!on; apply();
+    window.dispatchEvent(new Event("resize"));
+  };
   function apply() {
-    for (const k of Object.keys(OPTS)) root.setAttribute("data-ly-" + k, ly[k]);
+    for (const k of Object.keys(OPTS)) root.setAttribute("data-ly-" + k, locked ? DEF[k] : ly[k]);
+    document.getElementById("layoutCard")?.classList.toggle("lylock", locked);
     // в свёрнутой панели подписей не видно — показываем их подсказкой
     const fold = document.getElementById("sideFold");
+    if (fold) fold.hidden = locked;
     if (fold) {
       fold.textContent = "Свернуть";
       fold.title = ly.sb === "mini" ? "Развернуть панель" : "Свернуть панель";

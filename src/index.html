@@ -119,6 +119,7 @@
       <section id="wavePage" class="wavepage" hidden>
         <div class="stage viz">
           <canvas id="viz"></canvas>
+          <div id="waveOrbits" class="waveorbits" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           <button id="waveBtn" class="wavebtn" title="Моя волна"></button>
         </div>
         <button id="vizFsBtn" class="vizfsbtn" title="Визуализатор на весь экран (F)" aria-label="Визуализатор на весь экран"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -148,11 +149,12 @@
             </button>
           </div>
           <div class="stylepick">
-            <button class="stylecard" data-style="neon"><span class="sprev sp-neon"></span><b>Неон</b><small>Свечение, стекло, прозрачные панели</small></button>
-            <button class="stylecard" data-style="royal"><span class="sprev sp-royal"></span><b>Королевский</b><small>Золото, готика, знамёна</small></button>
-            <button class="stylecard" data-style="steam"><span class="sprev sp-steam"></span><b>Стимпанк</b><small>Латунь, заклёпки, шестерёнки</small></button>
-            <button class="stylecard" data-style="lolitta"><span class="sprev sp-lolitta"></span><b>Lolitta</b><small>Пудровый розовый, банты, жемчуг, камея</small></button>
+            <button class="stylecard" data-style="neon"><span class="sprev sp-neon"></span><b><span class="scauth">Whisper Music</span><span class="scname">Неон</span></b><small>Свечение, стекло, прозрачные панели</small></button>
+            <button class="stylecard" data-style="royal"><span class="sprev sp-royal"></span><b><span class="scauth">Whisper Music</span><span class="scname">Королевский</span></b><small>Золото, готика, знамёна</small></button>
+            <button class="stylecard" data-style="steam"><span class="sprev sp-steam"></span><b><span class="scauth">Whisper Music</span><span class="scname">Стимпанк</span></b><small>Латунь, заклёпки, шестерёнки</small></button>
+            <button class="stylecard" data-style="lolitta"><span class="sprev sp-lolitta"></span><b><span class="scauth">Whisper Music</span><span class="scname">Lolitta</span></b><small>Пудровый розовый, банты, жемчуг, камея</small></button>
           </div>
+          <p id="styleCap" class="stylecap" aria-live="polite"></p>
         </div>
         <div class="card">
           <h3>Фон</h3>
