@@ -31,8 +31,11 @@ getrandom = "0.3"
 # (в Linux это единственный способ вернуть окно из трея, если в оболочке нет значков трея)
 tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"
-# обновления из GitHub Releases (update.rs): проверка подписи minisign, установка новой версии
-tauri-plugin-updater = "2"
+# обновления из GitHub Releases (update.rs): проверка подписи minisign, установка новой версии.
+# Без функции «zip»: она нужна только для старого формата обновлений в архивах (.nsis.zip, .AppImage.tar.gz),
+# а выпуски собираются в новом формате (createUpdaterArtifacts: true) — сам .exe/.msi/.AppImage.
+# Заодно уходит crate zip 4.x с уязвимостями распаковки (RUSTSEC-2026-0367/0368/0369).
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 
 
 # режим экономии в трее: доступ к движку окна WebView2 (версии те же, что уже тянет Tauri — ничего нового не скачивается)

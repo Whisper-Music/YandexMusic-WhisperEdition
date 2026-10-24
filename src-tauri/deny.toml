@@ -7,4 +7,12 @@ targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+# Только предупреждения без исправления в зависимостях (тот же список — в .cargo/audit.toml для cargo audit).
+# Пересмотр: 2026-11-24.
+ignore = [
+  { id = "RUSTSEC-2024-0370", reason = "unmaintained proc-macro-error: макросы сборки GTK3 (glib-macros, gtk3-macros), только компиляция, Linux" },
+  { id = "RUSTSEC-2024-0429", reason = "unsound glib 0.18 VariantStrIter: GTK3-стек Tauri/WebKitGTK в Linux, приложение VariantStrIter не использует" },
+  { id = "RUSTSEC-2026-0370", reason = "unmaintained zvariant: D-Bus через zbus 4 (keyring/secret-service) и zbus 5 (tauri-plugin-opener), Linux; zbus 5.19 — последняя" },
+  { id = "RUSTSEC-2026-0371", reason = "unmaintained zbus_names: то же, что zvariant" },
+  { id = "RUSTSEC-2026-0372", reason = "unmaintained zvariant_derive: то же, что zvariant" },
+]

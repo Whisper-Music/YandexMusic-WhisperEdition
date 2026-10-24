@@ -1,0 +1,15 @@
+# cargo audit (CI: .github/workflows/security.yml, запускается из корня репозитория).
+# Исключения — только предупреждения без исправления в зависимостях; уязвимости (vulnerability) не исключаются.
+# Тот же список с причинами — в src-tauri/deny.toml (cargo deny). Пересмотр: 2026-11-24.
+[advisories]
+ignore = [
+  # unmaintained: proc-macro-error — макросы сборки GTK3 (glib-macros, gtk3-macros), только на этапе компиляции, Linux
+  "RUSTSEC-2024-0370",
+  # unsound: glib 0.18 VariantStrIter — GTK3-стек Tauri/WebKitGTK в Linux; приложение VariantStrIter не использует
+  "RUSTSEC-2024-0429",
+  # unmaintained: zvariant / zbus_names / zvariant_derive — D-Bus (zbus 4 из keyring/secret-service, zbus 5 из
+  # tauri-plugin-opener), Linux; zbus 5.19 — последняя версия, замены пока нет
+  "RUSTSEC-2026-0370",
+  "RUSTSEC-2026-0371",
+  "RUSTSEC-2026-0372",
+]
