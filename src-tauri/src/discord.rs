@@ -176,20 +176,55 @@ fn open() -> Option<Conn> {
     })
 }
 
+/// Сокет Discord можно открыть, только если он принадлежит текущему пользователю и не доступен на запись
+/// всем подряд (аудит F-10). Иначе другой пользователь системы мог бы заранее положить в /tmp свой
+/// «discord-ipc-0» и подменить ответы Discord или получать статус «Слушает».
+#[cfg(unix)]
+fn socket_trusted(meta: &std::fs::Metadata, uid: u32) -> bool {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    meta.file_type().is_socket() && meta.uid() == uid && meta.mode() & 0o002 == 0
+}
+
+/// Каталог, где ищем сокет: свой (владелец — текущий пользователь, не доступен на запись остальным)
+/// или общий системный /tmp (владелец root, «липкий» бит: чужие файлы в нём не подменить).
+#[cfg(unix)]
+fn base_trusted(meta: &std::fs::Metadata, uid: u32) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    if !meta.is_dir() {
+        return false;
+    }
+    let mode = meta.mode();
+    (meta.uid() == uid && mode & 0o022 == 0) || (meta.uid() == 0 && mode & 0o1000 != 0)
+}
+
 #[cfg(unix)]
 fn open() -> Option<Conn> {
     use std::path::PathBuf;
+    let uid = unsafe { libc::getuid() };
+    // XDG_RUNTIME_DIR — личный каталог пользователя (обычно /run/user/<uid>, права 0700) — первым делом
     let mut bases: Vec<PathBuf> = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"]
         .iter()
         .filter_map(|k| std::env::var_os(k).map(PathBuf::from))
+        .filter(|p| p.is_absolute())
         .collect();
     bases.push(PathBuf::from("/tmp"));
+    bases.dedup();
     // обычный Discord, Flatpak, Snap и Vesktop кладут сокет в разные места
     let subs = ["", "app/com.discordapp.Discord", "snap.discord", ".flatpak/dev.vencord.Vesktop/xdg-run", "app/dev.vencord.Vesktop"];
     for b in &bases {
+        // каталоги из переменных окружения принимаем, только если ими не может управлять кто-то другой
+        if !std::fs::metadata(b).is_ok_and(|m| base_trusted(&m, uid)) {
+            continue;
+        }
         for sub in subs {
             for i in 0..10 {
-                if let Ok(c) = Conn::connect(b.join(sub).join(format!("discord-ipc-{i}"))) {
+                let path = b.join(sub).join(format!("discord-ipc-{i}"));
+                // symlink_metadata: ссылка на чужой сокет не считается своим сокетом
+                let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+                if !socket_trusted(&meta, uid) {
+                    continue;
+                }
+                if let Ok(c) = Conn::connect(&path) {
                     let _ = c.set_read_timeout(Some(Duration::from_secs(10)));
                     let _ = c.set_write_timeout(Some(Duration::from_secs(10)));
                     return Some(c);
@@ -198,6 +233,35 @@ fn open() -> Option<Conn> {
         }
     }
     None
+}
+
+#[cfg(all(test, unix))]
+mod sock_tests {
+    use super::*;
+
+    #[test]
+    fn own_socket_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let uid = unsafe { libc::getuid() };
+        let d = std::env::temp_dir().join(format!("yd-sock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("discord-ipc-0");
+        let _l = std::os::unix::net::UnixListener::bind(&p).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(socket_trusted(&std::fs::symlink_metadata(&p).unwrap(), uid));
+        assert!(!socket_trusted(&std::fs::symlink_metadata(&p).unwrap(), uid.wrapping_add(1))); // чужой владелец
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(!socket_trusted(&std::fs::symlink_metadata(&p).unwrap(), uid)); // пишут все
+        let f = d.join("plain");
+        std::fs::write(&f, b"x").unwrap();
+        assert!(!socket_trusted(&std::fs::symlink_metadata(&f).unwrap(), uid)); // не сокет
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(base_trusted(&std::fs::metadata(&d).unwrap(), uid));
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(!base_trusted(&std::fs::metadata(&d).unwrap(), uid));
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }
 
 fn send(c: &mut Conn, op: u32, body: &Value) -> std::io::Result<()> {

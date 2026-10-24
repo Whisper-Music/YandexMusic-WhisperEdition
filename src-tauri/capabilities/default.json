@@ -1,17 +1,29 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Права только для главного окна с локальным интерфейсом. Окно входа Яндекса и любые внешние страницы прав не получают (remote-адресов здесь нет).",
-  "windows": ["main"],
+  "description": "Главное окно, интерфейс и система: окно, трей, горячие клавиши, сон, темы, фон, скачанные треки, OBS, Discord. Окно входа Яндекса и любые внешние страницы прав не получают (remote-адресов нет ни в одном файле capabilities).",
+  "windows": [
+    "main"
+  ],
   "local": true,
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:app:allow-version",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://oauth.yandex.ru/*" }, { "url": "https://plus.yandex.ru/*" }]
+      "allow": [
+        {
+          "url": "https://oauth.yandex.ru/*"
+        },
+        {
+          "url": "https://plus.yandex.ru/*"
+        },
+        {
+          "url": "https://github.com/Whisper-Music/YandexMusic-WhisperEdition/releases/*"
+        }
+      ]
     },
-    "allow-md5-hex",
     "allow-win-minimize",
     "allow-win-toggle-max",
     "allow-win-is-max",
@@ -19,13 +31,9 @@
     "allow-win-drag",
     "allow-win-set-fullscreen",
     "allow-tray-playing",
-    "allow-http-request",
-    "allow-fetch-bytes",
+    "allow-tray-mode",
+    "allow-mini-state",
     "allow-desktop-wallpaper",
-    "allow-token-exists",
-    "allow-token-store",
-    "allow-token-clear",
-    "allow-yandex-login",
     "allow-download-track",
     "allow-downloaded-ids",
     "allow-downloaded-tracks",
@@ -37,24 +45,20 @@
     "allow-bg-dir-pick",
     "allow-bg-read",
     "allow-theme-save",
-    "allow-wa-token-exists",
-    "allow-wa-token-set",
-    "allow-wa-token-clear",
-    "allow-wa-get",
-    "allow-wa-stream",
-    "allow-wa-auth-request-code",
-    "allow-wa-auth-issue",
-    "allow-wa-save-track",
-    "allow-wa-prefetch",
     "allow-discord-config",
     "allow-discord-status",
     "allow-discord-retry",
     "allow-discord-update",
-    "allow-tray-mode",
-    "allow-mini-state",
     "allow-hotkeys-set",
     "allow-sleep-start",
     "allow-sleep-cancel",
-    "allow-sleep-status"
+    "allow-sleep-status",
+    "allow-lyrics-lrclib",
+    "allow-thumbbar-state",
+    "allow-obs-config",
+    "allow-obs-state",
+    "allow-obs-theme",
+    "allow-update-check",
+    "allow-update-install"
   ]
 }

@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "yandex-read",
+  "description": "Яндекс Музыка, только чтение: именованные операции ym_read (список в net.rs), ссылка на трек, текст песни, обложки. Произвольного адреса или метода передать нельзя.",
+  "windows": [
+    "main"
+  ],
+  "local": true,
+  "permissions": [
+    "allow-ym-read",
+    "allow-ym-track-url",
+    "allow-ym-lyrics",
+    "allow-fetch-bytes"
+  ]
+}

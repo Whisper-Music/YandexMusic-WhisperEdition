@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ym-track-url"
+description = "Enables the ym_track_url command without any pre-configured scope."
+commands.allow = ["ym_track_url"]
+
+[[permission]]
+identifier = "deny-ym-track-url"
+description = "Denies the ym_track_url command without any pre-configured scope."
+commands.deny = ["ym_track_url"]

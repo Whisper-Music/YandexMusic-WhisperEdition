@@ -11,11 +11,12 @@
 //   Lolitta есть банты и жемчуг на панелях и подбор контрастного текста под цвета.
 (() => {
   const APP = "whisper-music";
+  const OBS = "whisper-obs";        // виджет для OBS (obs.js): своя секция css/settings в том же файле темы
   const KEY = (id) => "theme:" + id;
   const NAMES = { neon: "Неон", royal: "Королевский", steam: "Стимпанк", lolitta: "Lolitta" };
   const AUTHOR = "Whisper Music";                       // автор встроенных стилей (в настройках: «Автор · Название»)
   const authorOf = (m) => String(m?.author || "").trim().slice(0, 40);
-  const meta = new Map();          // id -> { manifest, tokens, settings } (без тяжёлых ресурсов)
+  const meta = new Map();          // id -> { manifest, tokens, settings, obs } (без тяжёлых ресурсов)
   const blobUrls = new Map();      // id -> [blob: URL ресурсов, на которые ссылается CSS]
   const previews = new Map();      // id -> blob: URL картинки для карточки (manifest.preview)
   const note = (t, ok) => { const n = document.getElementById("wmtNote"); if (n) { n.textContent = t || ""; n.classList.toggle("ok", !!ok); } };
@@ -266,13 +267,19 @@
     setHooks(id, settings);
   }
   // ---------- возможности сверх CSS: controls, layout, buttons (main.js → applyHooks) ----------
-  // { "controls": { "volume": "knob" }, "layout": "fixed", "buttons": { "power": "wave", "ch-up": "next" } }
+  // { "controls": { "volume": "knob" }, "layout": "fixed", "buttons": { "power": "wave", "ch-up": "next" }, "console": true }
   // Действия кнопок — только из списка приложения (TH_ACTIONS): тема может нажать кнопку приложения, но не больше.
   const BTN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
   function setHooks(id, settings) {
     const h = {};
     if (settings?.controls?.volume === "knob") h.volKnob = true;
     if (settings?.layout === "fixed") h.layoutFixed = true;
+    // консоль вместо обычного интерфейса (cli.js): команды — приложения, тема задаёт только приглашение и приветствие
+    const c = settings?.console;
+    if (c === true || (c && typeof c === "object" && !Array.isArray(c) && c.enabled !== false)) {
+      const str = (v, n) => (typeof v === "string" ? v.replace(/[\u0000-\u0009\u000b-\u001f]/g, "").slice(0, n) : "");
+      h.console = { prompt: str(c?.prompt, 40), banner: str(c?.banner, 1200) };
+    }
     const b = settings?.buttons;
     if (b && typeof b === "object" && !Array.isArray(b)) {
       const list = Object.entries(b).filter(([k, v]) => BTN_NAME.test(k) && typeof v === "string" && Object.hasOwn(TH_ACTIONS, v)).slice(0, 16);
@@ -333,13 +340,36 @@
     previews.delete(id);
     if (pv && /^image\//.test(pv.mime)) { const u = URL.createObjectURL(new Blob([pv.bytes], { type: pv.mime })); urls.push(u); previews.set(id, u); }
     blobUrls.set(id, urls);
-    let el = document.getElementById("wmt-" + id);
-    if (!el) { el = document.createElement("style"); el.id = "wmt-" + id; document.head.append(el); }
-    el.textContent = scopeCss(css, id, new Set(urls));           // наружу CSS темы не ходит: разрешены только blob:-ресурсы этой же темы
+    DynCss.set("wmt-" + id, scopeCss(css, id, new Set(urls)));   // наружу CSS темы не ходит: разрешены только blob:-ресурсы этой же темы
     themeReady.add(id);
   }
+  // ---------- виджет для OBS: «@@ css whisper-obs» и «@@ settings whisper-obs» ----------
+  // Виджет — отдельная страница в OBS, поэтому ресурсы темы вставляются прямо в CSS (data:), а всё, что ведёт
+  // наружу (@import, url(http…), image-set…), вырезается: виджет ничего не загружает из сети, кроме обложки.
+  function b64(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function obsOf(th) {
+    let css = th.css(OBS) || "";
+    css = css.replace(/url\(\s*(['"]?)asset:([\w.-]+)\1\s*\)/gi, (m, q, name) => {
+      const a = th.assets.get(name);
+      if (!a || a.bytes.length > 1.5 * 1024 * 1024) return "none";
+      return `url("data:${a.mime};base64,${b64(a.bytes)}")`;
+    });
+    css = css
+      .replace(/@\s*import\b[^;]*;?/gi, "")
+      .replace(/(?:-webkit-)?(image-set|cross-fade|element|paint|src)\s*\(/gi, "x-blocked(")
+      .replace(/url\(\s*(?!["']?data:)[^)]*\)/gi, "none")
+      .replace(/expression\s*\(|javascript\s*:|behavior\s*:|-moz-binding/gi, "x-blocked:");
+    const s = th.settings(OBS);
+    return { css: css.length > 1024 * 1024 ? "" : css, settings: s && typeof s === "object" ? s : {} };
+  }
+  window.wmtObs = (id) => meta.get(id)?.obs || null;
+
   function uninject(id) {
-    document.getElementById("wmt-" + id)?.remove();
+    DynCss.remove("wmt-" + id);
     for (const u of blobUrls.get(id) || []) URL.revokeObjectURL(u);
     blobUrls.delete(id); previews.delete(id); themeReady.delete(id); meta.delete(id); delete themeFeatures[id]; delete themeHooks[id];
   }
@@ -356,7 +386,7 @@
   async function applyThemeBg(th, id) {
     const a = th.background;
     if (!a) { await clearBg(id); return; }
-    let blob = new Blob([a.bytes], { type: a.mime });
+    let blob;
     try {
       const vt = sniffVideo(a.bytes.subarray(0, 16));
       if (vt) {
@@ -374,7 +404,8 @@
   }
 
   // Лимиты видео-фона из темы. Размер файла темы и так не больше WMT.MAX_FILE, но видео декодируется отдельно и жрёт память.
-  const THEME_VIDEO_MAX = 150 * 1048576, THEME_VIDEO_SECONDS = 600, THEME_VIDEO_SIDE = 4096;
+  // Аудит F-07: 48 МБ вместо 150 — видео в теме лишь фон, а декодер держит ещё несколько копий кадров.
+  const THEME_VIDEO_MAX = 48 * 1048576, THEME_VIDEO_SECONDS = 600, THEME_VIDEO_SIDE = 4096;
   function probeVideo(file) {
     return new Promise((res, rej) => {
       const v = document.createElement("video"), url = URL.createObjectURL(file);
@@ -404,7 +435,7 @@
     const entry = { id, name: m.name.trim().slice(0, 60), author: authorOf(m), base, desc: String(m.description || "").trim().slice(0, 120) };
     if (known >= 0) cfg.themes[known] = entry; else cfg.themes.push(entry);
     const settings = th.settings(APP);
-    meta.set(id, { manifest: m, tokens: th.tokens, settings });
+    meta.set(id, { manifest: m, tokens: th.tokens, settings, obs: obsOf(th) });
     setFeatures(id, settings);
     cfg.s[id] = defaultsFrom({ tokens: th.tokens, settings }, base);
     inject(id, th);
@@ -479,7 +510,10 @@
       "Тема с фоном — это zip, переименованный в .wmt: внутри этот текст (theme.wmt) и картинка background.jpg/png/mp4…",
       "Если стиль сломал вид окна: Ctrl+Shift+Backspace вернёт встроенный «Королевский».",
     ].join("\n");
-    const theme = { comment, manifest, tokens, settings: { [APP]: settings }, css: { [APP]: css } };
+    // виджет для OBS: у своего стиля — секции из его файла как были; у копии встроенного — заготовка-подсказка
+    const obsCss = orig?.css(OBS) || "/* Виджет «Сейчас играет» для OBS (Настройки → Виджет для OBS).\n   Разметка, классы и переменные — docs/WMT-FORMAT.md, раздел «Виджет для OBS». Например:\n   .w-bg { border-radius: 0; }\n   .w-title { letter-spacing: .04em; } */";
+    const obsSettings = orig?.settings(OBS) || {};
+    const theme = { comment, manifest, tokens, settings: { [APP]: settings, [OBS]: obsSettings }, css: { [APP]: css, [OBS]: obsCss } };
     const data = await WMT.pack({ ...theme, background, files });
     return { manifest, data, archive: !!background || files.length > 0, text: WMT.serialize(theme) };
   }
@@ -608,7 +642,7 @@
     (async () => {
       try {
         if (Number(f.size) > WMT.MAX_FILE) { note(`Файл темы больше ${WMT.MAX_FILE / 1048576} МБ`); return; }
-        const buf = await invoke("bg_read", { id: f.id, maxBytes: WMT.MAX_FILE });      // лимит соблюдает и сама команда в Rust
+        const buf = await invoke("bg_read", { id: f.id, kind: "theme" });      // лимит соблюдает и сама команда в Rust
         await importSafe(new Uint8Array(buf));
       } catch (e) { note("Не удалось прочитать тему: " + (e?.message || e)); }
     })();
@@ -644,7 +678,7 @@
       try {
         const th = await loadStored(t.id);
         if (!th) throw new Error("нет файла");
-        meta.set(t.id, { manifest: th.manifest, tokens: th.tokens, settings: th.settings(APP) });
+        meta.set(t.id, { manifest: th.manifest, tokens: th.tokens, settings: th.settings(APP), obs: obsOf(th) });
         const au = authorOf(th.manifest);                 // темы, загруженные до появления подписи автора
         if ((t.author || "") !== au) { t.author = au; changed = true; }
         setFeatures(t.id, th.settings(APP));

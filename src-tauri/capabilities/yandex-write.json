@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "yandex-write",
+  "description": "Яндекс Музыка, изменение данных аккаунта: лайки/«не нравится», плейлисты, отзывы «Моей волне» (операции ym_write из net.rs). Отдельный файл — чтобы права на запись было видно и при необходимости легко отозвать.",
+  "windows": [
+    "main"
+  ],
+  "local": true,
+  "permissions": [
+    "allow-ym-write"
+  ]
+}

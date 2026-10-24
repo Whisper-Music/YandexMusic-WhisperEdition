@@ -21,6 +21,7 @@
       cover: t ? cover(t, "200x200") || "" : "",
       playing: !!(audio && !audio.paused),
       pos: audio?.currentTime || 0,
+      rate: audio?.playbackRate > 0 ? audio.playbackRate : 1,         // скорость: полоска в мини-плеере идёт с ней
       dur: audio && isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (t?.durationMs || 0) / 1000,
       at: Date.now(),
       shuffleOk: false, shuffle: false, repeat: 0,

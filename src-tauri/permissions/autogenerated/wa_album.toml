@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-album"
+description = "Enables the wa_album command without any pre-configured scope."
+commands.allow = ["wa_album"]
+
+[[permission]]
+identifier = "deny-wa-album"
+description = "Denies the wa_album command without any pre-configured scope."
+commands.deny = ["wa_album"]

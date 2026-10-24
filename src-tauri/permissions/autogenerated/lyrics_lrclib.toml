@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lyrics-lrclib"
+description = "Enables the lyrics_lrclib command without any pre-configured scope."
+commands.allow = ["lyrics_lrclib"]
+
+[[permission]]
+identifier = "deny-lyrics-lrclib"
+description = "Denies the lyrics_lrclib command without any pre-configured scope."
+commands.deny = ["lyrics_lrclib"]

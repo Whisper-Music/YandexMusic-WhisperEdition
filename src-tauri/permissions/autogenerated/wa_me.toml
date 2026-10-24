@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-me"
+description = "Enables the wa_me command without any pre-configured scope."
+commands.allow = ["wa_me"]
+
+[[permission]]
+identifier = "deny-wa-me"
+description = "Denies the wa_me command without any pre-configured scope."
+commands.deny = ["wa_me"]

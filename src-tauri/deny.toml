@@ -1,0 +1,10 @@
+# cargo deny (CI: .github/workflows/security.yml). Проверяются известные уязвимости (RustSec).
+# Политика обновлений: advisory в зависимостях исправляется обновлением в течение недели;
+# если исправления ещё нет — исключение добавляется сюда с причиной и датой пересмотра.
+[graph]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []
