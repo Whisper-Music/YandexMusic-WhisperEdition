@@ -102,8 +102,9 @@
   }
 
   // ---------- список треков архива ----------
-  async function waGet(path) {
-    const r = await invoke("wa_get", { path });
+  // У каждого запроса к архиву своя команда Rust (whisper.rs): путь к API интерфейс не задаёт.
+  async function waGet(cmd, args) {
+    const r = await invoke(cmd, args);
     if (r.status === 401 || r.status === 403) throw Object.assign(new Error(`сервер не принял токен (HTTP ${r.status})`), { status: r.status });
     if (r.status < 200 || r.status >= 300) throw Object.assign(new Error("HTTP " + r.status), { status: r.status });
     try { return r.body ? JSON.parse(r.body) : null; } catch { throw new Error("сервер вернул не JSON"); }
@@ -116,7 +117,7 @@
   }
   async function buildIndex() {
     // только альбомы владельца токена: публичные альбомы других пользователей в поиск не попадают
-    const mine = await waGet("/api/albums/mine");
+    const mine = await waGet("wa_albums_mine");
     const albums = new Map();                                                 // id -> { a, own }
     for (const a of listOf(mine)) {
       const id = String(pick(a, "id") ?? "");
@@ -129,7 +130,7 @@
       let full = a, tr = tracksOf(a);
       if (!tr) {
         try {
-          const r = await waGet(`/api/albums/${id}`);
+          const r = await waGet("wa_album", { id });
           const inner = pick(r, "album");
           const src = inner && typeof inner === "object" && !Array.isArray(inner) ? inner : r;
           full = { ...a, ...(src && typeof src === "object" ? src : {}) };
@@ -367,6 +368,7 @@
         err.textContent = ""; setBusy(true, "Проверка…");
         try {
           const r = await invoke("wa_auth_issue", { email: sentTo, code: c });
+          if (r?.ok) window.warnPlainSecrets?.();
           if (r.ok) { onLoggedIn(r.nickname); done(true); return; }
           err.textContent = errText(r);
           if (/истёк|не найден|попыток/i.test(err.textContent)) err.textContent += " Нажми «Отправить код ещё раз».";
@@ -426,8 +428,8 @@
     const where = target.id ? `в альбом «${target.title}»` : `в новый альбом «${target.title}»`;
     toast(`«${t.title}» сохраняется ${where}…`, 0);
     try {
-      if (typeof directLink !== "function") throw new Error("не найдена функция загрузки трека (main.js)");
-      const args = { audioUrl: await directLink(t.id), fileName: trackFileName(t), albumId: target.id || null, albumTitle: null, coverUrl: null, coverBytes: null };
+      // трек Rust скачивает сам по его номеру (адрес файла интерфейс не передаёт)
+      const args = { trackId: id, fileName: trackFileName(t), albumId: target.id || null, albumTitle: null, coverUrl: null, coverBytes: null };
       if (!target.id) {
         args.albumTitle = target.title;
         const cu = typeof cover === "function" ? cover(t, "800x800") : "";
@@ -463,7 +465,7 @@
     const wait = menuNote("Загрузка альбомов…", box);
     placeMenu();
     let albums;
-    try { albums = listOf(await waGet("/api/albums/mine")); }
+    try { albums = listOf(await waGet("wa_albums_mine")); }
     catch (e) {
       if (!menuAlive(seq)) return;
       if (e?.status === 401 || e?.status === 403) {
@@ -524,7 +526,7 @@
   }
   async function refreshNick() {                  // для ключа, вставленного вручную, никнейм узнаём у сервера
     try {
-      const me = await waGet("/api/auth/me");
+      const me = await waGet("wa_me");
       const n = nameOf(pick(me, "nickname"));
       if (n && n !== st.nick) { st.nick = n.slice(0, 64); saveCfg(); render(); }
     } catch (e) { if (e?.status === 401) { $w("waAcc") && ($w("waAcc").textContent = "Вход больше не действует — войди заново"); } }
@@ -542,6 +544,7 @@
     btn.disabled = true; note("Проверка ключа…");
     try {
       await invoke("wa_token_set", { token: v });
+      window.warnPlainSecrets?.();
       inp.value = ""; st.hasToken = true; st.nick = ""; saveCfg();
       clearIndex(); render(); refreshNick();
       await doSync();
@@ -552,7 +555,7 @@
     const page = $w("settingsPage");
     if (!page || $w("waCard")) return;
     const card = document.createElement("div");
-    card.className = "card"; card.id = "waCard";
+    card.className = "card"; card.id = "waCard"; card.dataset.tab = "services";      // вкладка «Сервисы» в настройках
     card.innerHTML = `
       <h3>Для разработчиков</h3>
       <h4 class="devh">Whisper Archive</h4>

@@ -42,7 +42,7 @@
     cancelAnimationFrame(raf);
     const bar = $("bar");
     if (!s.has || !s.dur) { bar.style.width = "0"; return; }
-    const pos = s.pos + (s.playing ? (Date.now() - s.at) / 1000 : 0);
+    const pos = s.pos + (s.playing ? ((Date.now() - s.at) / 1000) * (s.rate || 1) : 0);
     bar.style.width = Math.min(100, Math.max(0, (pos / s.dur) * 100)) + "%";
     if (s.playing && document.visibilityState === "visible") raf = requestAnimationFrame(() => setTimeout(tick, 250));
   }
@@ -52,7 +52,7 @@
     b.onclick = () => {
       const a = b.dataset.a;
       if (a === "toggle" && s.has) {           // отклик сразу, не дожидаясь главного окна
-        s.pos = s.pos + (s.playing ? (Date.now() - s.at) / 1000 : 0); s.at = Date.now();
+        s.pos = s.pos + (s.playing ? ((Date.now() - s.at) / 1000) * (s.rate || 1) : 0); s.at = Date.now();
         s.playing = !s.playing; render(s);
       }
       ctl(a);

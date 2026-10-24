@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "archive",
+  "description": "Whisper Archive: свои альбомы, альбом по id, профиль, поток трека, сохранение трека (с лимитом частоты), комнаты «Слушать вместе». Путь к API собирает Rust.",
+  "windows": [
+    "main"
+  ],
+  "local": true,
+  "permissions": [
+    "allow-wa-albums-mine",
+    "allow-wa-album",
+    "allow-wa-me",
+    "allow-wa-stream",
+    "allow-wa-prefetch",
+    "allow-wa-save-track",
+    "allow-wa-room-create",
+    "allow-wa-room-get",
+    "allow-wa-room-join",
+    "allow-wa-room-leave",
+    "allow-wa-room-state",
+    "allow-wa-room-suggest",
+    "allow-wa-room-dismiss"
+  ]
+}

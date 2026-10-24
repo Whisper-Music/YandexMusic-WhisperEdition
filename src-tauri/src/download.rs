@@ -3,7 +3,6 @@ use crate::net;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
@@ -315,10 +314,46 @@ pub fn download_dir_open(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Временный файл для скачивания (аудит F-06): случайное имя (128 бит из getrandom) и создание только
+/// нового файла (create_new = O_EXCL / CREATE_NEW). Если по этому пути уже лежит что угодно, в том числе
+/// подставленная ссылка (symlink), открытие завершится ошибкой, а не запишет данные по ссылке.
+/// Пишем через открытый дескриптор, а не повторным открытием по пути.
+fn write_temp(dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
+    use std::io::Write;
+    for _ in 0..8 {
+        let mut r = [0u8; 16];
+        getrandom::fill(&mut r).map_err(|e| std::io::Error::other(e.to_string()))?;
+        let name: String = r.iter().map(|b| format!("{b:02x}")).collect();
+        let tmp = dir.join(format!(".{name}.part"));
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o644);
+        }
+        let mut f = match opts.open(&tmp) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        };
+        // открыли действительно обычный файл, а не что-то подставленное
+        if !f.metadata()?.is_file() {
+            return Err(std::io::Error::other("временный файл подменён"));
+        }
+        if let Err(e) = f.write_all(bytes).and_then(|_| f.sync_all()) {
+            drop(f);
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        return Ok(tmp);
+    }
+    Err(std::io::Error::other("не удалось создать временный файл"))
+}
+
 #[tauri::command]
 pub async fn download_track(
     app: AppHandle,
-    url: String,
     name: String,
     id: String,
     meta: Option<serde_json::Value>,
@@ -326,7 +361,9 @@ pub async fn download_track(
     if !id_ok(&id) {
         return Err("Некорректный номер трека".into());
     }
-    let bytes = net::fetch_checked(&url).await?;
+    // ссылку на файл Rust получает сам по номеру трека (интерфейс адрес для скачивания не передаёт)
+    let url = net::track_mp3_url(&id).await?;
+    let bytes = net::fetch_media(&url).await?;
     if bytes.len() < 1024 {
         return Err("Сервер вернул пустой файл".into());
     }
@@ -334,9 +371,7 @@ pub async fn download_track(
     std::fs::create_dir_all(&dir).map_err(|e| format!("Не удалось создать папку: {e}"))?;
     let stem = sanitize_name(&name);
     let path = free_path(&dir, &stem, sniff_ext(&bytes));
-    static SEQ: AtomicU64 = AtomicU64::new(0);
-    let tmp = dir.join(format!(".{}-{}.part", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed)));
-    std::fs::write(&tmp, &bytes).map_err(|e| format!("Не удалось записать файл: {e}"))?;
+    let tmp = write_temp(&dir, &bytes).map_err(|e| format!("Не удалось записать файл: {e}"))?;
     if let Err(e) = std::fs::rename(&tmp, &path) {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("Не удалось сохранить файл: {e}"));
@@ -376,9 +411,10 @@ fn audio_ctype(p: &Path) -> &'static str {
 
 fn local_resp(status: StatusCode, origin: &Option<String>) -> tauri::http::response::Builder {
     let mut b = Response::builder().status(status).header(header::CACHE_CONTROL, "no-store");
-    // запрос приходит только из главного окна (проверка в lib.rs); CORS нужен визуализатору
-    if let Some(o) = origin {
-        b = b.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, o.as_str()).header(header::VARY, "Origin");
+    // запрос приходит только из главного окна (проверка в lib.rs); CORS нужен визуализатору —
+    // разрешаем ровно Origin страниц приложения, а не любой присланный (аудит F-11)
+    if let Some(o) = net::app_origin(origin.as_deref()) {
+        b = b.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, o).header(header::VARY, "Origin");
     }
     b
 }
@@ -440,6 +476,38 @@ pub fn serve_local(app: &AppHandle, req: &Request<Vec<u8>>) -> Response<Vec<u8>>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temp_files() {
+        let dir = std::env::temp_dir().join(format!("yd-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = write_temp(&dir, b"hello").unwrap();
+        let b = write_temp(&dir, b"world").unwrap();
+        assert_ne!(a, b);
+        assert_eq!(std::fs::read(&a).unwrap(), b"hello");
+        let n = a.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(n.starts_with('.') && n.ends_with(".part") && n.len() == 1 + 32 + 5);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Заранее подставленная ссылка с «предсказуемым» именем не используется: create_new не идёт по ссылке.
+    #[cfg(unix)]
+    #[test]
+    fn temp_never_follows_symlink() {
+        let dir = std::env::temp_dir().join(format!("yd-test-sl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("victim");
+        std::fs::write(&target, b"keep").unwrap();
+        let link = dir.join(".x.part");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let mut o = std::fs::OpenOptions::new();
+        o.write(true).create_new(true);
+        assert!(o.open(&link).is_err());
+        let t = write_temp(&dir, b"new").unwrap();
+        assert_ne!(t, link);
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn names() {

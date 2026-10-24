@@ -4,7 +4,12 @@
 //! * Linux — Secret Service (GNOME Keyring, KWallet, KeePassXC…). Если в системе нет ни одной
 //!   «связки ключей» (минимальные оконные менеджеры: i3, Openbox и т. п.), секрет кладётся в файл
 //!   в папке настроек приложения с правами 0600 — читать его может только сам пользователь.
-//!   Как только связка ключей появится, при следующем сохранении секрет переедет туда, а файл удалится.
+//!   Это открытый текст на диске (аудит F-08), поэтому:
+//!     - тихо это не происходит: команда secret_backend сообщает интерфейсу, где лежат секреты,
+//!       и он показывает предупреждение;
+//!     - как только связка ключей появится, секрет переезжает туда при первом же чтении, а файл удаляется;
+//!     - сборка/запуск с YANDEX_DESKTOP_STRICT_KEYRING=1 запасной файл не использует вовсе
+//!       (вход без связки ключей тогда невозможен — для «боевых» установок).
 use crate::net::{KEYRING_ACCOUNT, KEYRING_SERVICE};
 use keyring::Entry;
 
@@ -54,6 +59,19 @@ pub fn clear_in(slot: Slot) -> Result<(), String> {
     imp::clear(slot)
 }
 
+/// Где сейчас лежат секреты: "keyring" — системное хранилище, "file" — запасной файл (Linux),
+/// "none" — секрета нет. Интерфейс по этому показывает предупреждение о файле.
+#[derive(serde::Serialize)]
+pub struct Backend {
+    ym: &'static str,
+    wa: &'static str,
+}
+
+#[tauri::command]
+pub fn secret_backend() -> Backend {
+    Backend { ym: imp::backend(YM), wa: imp::backend(WA) }
+}
+
 #[cfg(not(target_os = "linux"))]
 mod imp {
     use super::{entry, Slot};
@@ -76,6 +94,13 @@ mod imp {
         match entry(slot)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
+        }
+    }
+
+    pub fn backend(slot: Slot) -> &'static str {
+        match get(slot) {
+            Ok(Some(_)) => "keyring",
+            _ => "none",
         }
     }
 }
@@ -136,10 +161,33 @@ mod imp {
         }
     }
 
+    /// Запасной файл запрещён переменной окружения YANDEX_DESKTOP_STRICT_KEYRING=1.
+    fn strict() -> bool {
+        std::env::var_os("YANDEX_DESKTOP_STRICT_KEYRING").is_some_and(|v| v == "1")
+    }
+
     pub fn get(slot: Slot) -> Result<Option<String>, String> {
-        match entry(slot).and_then(|e| e.get_password().map_err(|e| e.to_string())) {
-            Ok(t) => Ok(Some(t)),
-            // нет записи в связке ключей или нет самой связки — смотрим запасной файл
+        let e = entry(slot);
+        match e.as_ref().map_err(|e| e.clone()).and_then(|e| e.get_password().map_err(|err| match err {
+            keyring::Error::NoEntry => String::new(),
+            other => other.to_string(),
+        })) {
+            Ok(t) => {
+                file_remove(slot); // секрет уже в связке ключей — старый файл не нужен
+                Ok(Some(t))
+            }
+            // связка ключей работает, но записи нет: если остался файл — переносим его туда и удаляем
+            Err(msg) if msg.is_empty() => {
+                let Some(t) = file_read(slot) else { return Ok(None) };
+                if let Ok(en) = &e {
+                    if en.set_password(&t).is_ok() && en.get_password().ok().as_deref() == Some(t.as_str()) {
+                        file_remove(slot);
+                    }
+                }
+                Ok(Some(t))
+            }
+            // связки ключей нет вовсе — запасной файл (если не запрещён)
+            Err(_) if strict() => Ok(None),
             Err(_) => Ok(file_read(slot)),
         }
     }
@@ -150,6 +198,10 @@ mod imp {
                 file_remove(slot);
                 Ok(())
             }
+            Err(e) if strict() => Err(format!(
+                "Связка ключей недоступна ({e}), а хранение в файле отключено (YANDEX_DESKTOP_STRICT_KEYRING=1). \
+                 Установи и запусти GNOME Keyring, KWallet или KeePassXC (Secret Service)"
+            )),
             Err(_) => file_write(slot, token)
                 .map_err(|e| format!("Не удалось сохранить токен ни в связку ключей, ни в файл: {e}")),
         }
@@ -161,5 +213,16 @@ mod imp {
         }
         file_remove(slot);
         Ok(())
+    }
+
+    pub fn backend(slot: Slot) -> &'static str {
+        let _ = get(slot); // заодно перенесёт файл в связку ключей, если она появилась
+        if file(slot).is_some_and(|p| p.exists()) {
+            "file"
+        } else if entry(slot).and_then(|e| e.get_password().map_err(|e| e.to_string())).is_ok() {
+            "keyring"
+        } else {
+            "none"
+        }
     }
 }

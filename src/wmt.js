@@ -26,8 +26,12 @@
 // В JSON-секциях можно оставлять комментарии // и /* */, а также лишние запятые — как в настройках VS Code.
 (function (root) {
   const VERSION = 1;
-  const MAX_BYTES = 256 * 1048576;           // все ресурсы темы после распаковки
-  const MAX_FILE = 300 * 1048576;            // сам файл темы (текст или архив) — единый лимит для всех способов импорта
+  // Лимиты для тем из чужих рук (аудит F-07): раньше было 300 МБ файла и 256 МБ ресурсов — с копиями при
+  // распаковке это давало сотни мегабайт пиковой памяти. Тема — оформление, ей хватает десятков мегабайт.
+  // Общий бюджет: файл (сжатый) + распакованные ресурсы не больше MAX_FILE + MAX_BYTES; при распаковке
+  // каждый файл пишется сразу в итоговый буфер, без промежуточных копий.
+  const MAX_BYTES = 80 * 1048576;            // все ресурсы темы после распаковки
+  const MAX_FILE = 64 * 1048576;             // сам файл темы (текст или архив) — единый лимит для всех способов импорта
   const MAX_TEXT_PART = 4 * 1048576;         // одна несекционная часть: manifest, tokens, settings, css
   const MAX_ASSETS = 200;
   const MAX_ZIP_FILES = 200;
@@ -164,7 +168,7 @@
       if (s.type !== "asset") continue;
       if (!NAME_RE.test(s.name)) throw new WmtError("Имя ресурса: буквы, цифры, точка, дефис, подчёркивание", s.line);
       if (assets.size >= MAX_ASSETS) throw new WmtError(`В теме больше ${MAX_ASSETS} ресурсов`, s.line);
-      if (s.encoding === "base64" && s.text.length > (MAX_BYTES - total) * 1.4 + 16) throw new WmtError("Ресурсы темы больше 256 МБ", s.line);   // до декодирования
+      if (s.encoding === "base64" && s.text.length > (MAX_BYTES - total) * 1.4 + 16) throw new WmtError(`Ресурсы темы больше ${MAX_BYTES / 1048576} МБ`, s.line);   // до декодирования
       if (assets.has(s.name)) throw new WmtError(`Ресурс «${s.name}» встречается дважды`, s.line);
       let bytes;
       if (s.encoding === "base64") {
@@ -172,7 +176,7 @@
       } else if (!s.encoding || s.encoding === "text") bytes = new TextEncoder().encode(s.text);
       else throw new WmtError(`Ресурс «${s.name}»: неизвестная кодировка «${s.encoding}» (нужно base64 или text)`, s.line);
       total += bytes.length;
-      if (total > MAX_BYTES) throw new WmtError("Ресурсы темы больше 256 МБ");
+      if (total > MAX_BYTES) throw new WmtError(`Ресурсы темы больше ${MAX_BYTES / 1048576} МБ`);
       assets.set(s.name, { name: s.name, mime: mimeOf(s.name), bytes });
     }
 
@@ -205,27 +209,24 @@
   // размера (а заявленное в оглавлении zip злоумышленник может подделать), поток обрывается, не дожидаясь конца.
   async function inflateLimited(raw, size, name) {
     const reader = new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
-    const chunks = [];
+    const out = new Uint8Array(size);        // size уже проверен по общему бюджету MAX_BYTES; куски пишутся сразу сюда
     let n = 0;
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        n += value.length;
-        if (n > size) {
+        if (n + value.length > size) {
           reader.cancel().catch(() => {});
           throw new WmtError(`Архив темы повреждён: файл «${name}» распаковывается в больший размер, чем заявлено`);
         }
-        chunks.push(value);
+        out.set(value, n);
+        n += value.length;
       }
     } catch (e) {
       if (e instanceof WmtError) throw e;
       throw new WmtError(`Архив темы повреждён (не распаковывается «${name}»)`);
     }
-    const out = new Uint8Array(n);
-    let o = 0;
-    for (const c of chunks) { out.set(c, o); o += c.length; }
-    return out;
+    return n === size ? out : out.subarray(0, n);
   }
   async function unzip(b) {
     if (b.length > MAX_FILE) throw new WmtError(`Файл темы больше ${MAX_FILE / 1048576} МБ`);
@@ -250,7 +251,7 @@
       if (csize === 0xffffffff || size === 0xffffffff) throw new WmtError("Архивы больше 4 ГБ (zip64) не поддерживаются");
       if (files.has(name)) throw new WmtError(`В архиве темы два файла с именем «${name}»`);
       total += size;
-      if (total > MAX_BYTES) throw new WmtError("Файлы в архиве темы больше 256 МБ");
+      if (total > MAX_BYTES) throw new WmtError(`Файлы в архиве темы больше ${MAX_BYTES / 1048576} МБ`);
       if (off + 30 > b.length || u32(b, off) !== 0x04034b50) throw new WmtError(`Архив темы повреждён (файл «${name}»)`);
       const start = off + 30 + u16(b, off + 26) + u16(b, off + 28), end = start + csize;
       if (end > b.length || end > cdStart) throw new WmtError(`Архив темы повреждён (данные «${name}» за пределами файла)`);

@@ -2,8 +2,9 @@
 //
 //  * API-ключ wa_… хранится так же, как токен Яндекса (secret.rs: Диспетчер учётных данных / связка ключей Linux),
 //    и в JavaScript не отдаётся: интерфейс передаёт его сюда один раз при сохранении;
-//  * запросы идут только на https://origin.whisper-archive.ru и только к путям /api/…: чтение (GET) — любые,
-//    запись (POST) — лишь вход по почте и загрузка трека, произвольных POST-запросов из интерфейса нет;
+//  * запросы идут только на https://origin.whisper-archive.ru, и интерфейс не задаёт ни метод, ни путь (аудит F-03):
+//    у каждой операции своя команда (свои альбомы, один альбом по id, профиль, комнаты, загрузка трека),
+//    а путь Rust собирает сам из проверенных id;
 //  * перенаправления разрешены только в пределах того же хоста — ключ не может уйти на чужой адрес;
 //  * ключ отправляется в заголовке Authorization: Bearer wa_…, как описано в схеме API;
 //  * вход по почте (код из письма) — POST /api/auth/request-code и /api/auth/token: выданный ключ сразу уходит
@@ -151,10 +152,8 @@ pub fn wa_token_clear() -> Result<(), String> {
     secret::clear_in(WA)
 }
 
-/// GET к API архива с ключом из хранилища. Возвращает статус и текст ответа.
-#[tauri::command]
-pub async fn wa_get(path: String) -> Result<WaResponse, String> {
-    let url = api_url(&path)?;
+async fn get_json(path: &str) -> Result<WaResponse, String> {
+    let url = api_url(path)?;
     let token = read_token()?;
     let resp = send_get(json_client(), url, &token).await?;
     let status = resp.status().as_u16();
@@ -163,6 +162,27 @@ pub async fn wa_get(path: String) -> Result<WaResponse, String> {
         status,
         body: String::from_utf8_lossy(&bytes).into_owned(),
     })
+}
+
+/// Альбомы владельца ключа (GET /api/albums/mine) — из них строится список треков архива.
+#[tauri::command]
+pub async fn wa_albums_mine() -> Result<WaResponse, String> {
+    get_json("/api/albums/mine").await
+}
+
+/// Один альбом с треками (GET /api/albums/{uuid}).
+#[tauri::command]
+pub async fn wa_album(id: String) -> Result<WaResponse, String> {
+    if !is_uuid(&id) {
+        return Err("Некорректный id альбома".into());
+    }
+    get_json(&format!("/api/albums/{id}")).await
+}
+
+/// Профиль владельца ключа (GET /api/auth/me) — только чтобы показать никнейм.
+#[tauri::command]
+pub async fn wa_me() -> Result<WaResponse, String> {
+    get_json("/api/auth/me").await
 }
 
 /// Файл трека из архива (/api/tracks/{id}/stream) «сырыми» байтами — в JS это ArrayBuffer.
@@ -425,13 +445,60 @@ async fn post_multipart(path: &str, token: &str, form: Multipart) -> Result<WaRe
     })
 }
 
+// Бюджет загрузок в архив (аудит F-03): не больше двух одновременно и не больше 30 за 10 минут.
+// Даже если в интерфейс попадёт чужой код, он не сможет «залить» архив сотнями треков подряд.
+const UPLOAD_PARALLEL: usize = 2;
+const UPLOAD_WINDOW: Duration = Duration::from_secs(600);
+const UPLOAD_PER_WINDOW: usize = 30;
+
+struct Budget {
+    active: usize,
+    recent: std::collections::VecDeque<std::time::Instant>,
+}
+
+fn budget() -> &'static std::sync::Mutex<Budget> {
+    static B: OnceLock<std::sync::Mutex<Budget>> = OnceLock::new();
+    B.get_or_init(|| std::sync::Mutex::new(Budget { active: 0, recent: Default::default() }))
+}
+
+/// Место в очереди загрузок; освобождается, когда загрузка закончилась (успешно или нет).
+struct UploadSlot;
+
+impl Drop for UploadSlot {
+    fn drop(&mut self) {
+        let mut b = budget().lock().unwrap_or_else(|e| e.into_inner());
+        b.active = b.active.saturating_sub(1);
+    }
+}
+
+fn take_slot(b: &mut Budget, now: std::time::Instant) -> Result<(), String> {
+    while b.recent.front().is_some_and(|t| now.duration_since(*t) > UPLOAD_WINDOW) {
+        b.recent.pop_front();
+    }
+    if b.active >= UPLOAD_PARALLEL {
+        return Err("В архив уже загружаются два трека — дождись, пока они сохранятся".into());
+    }
+    if b.recent.len() >= UPLOAD_PER_WINDOW {
+        return Err("Слишком много загрузок подряд — попробуй через несколько минут".into());
+    }
+    b.active += 1;
+    b.recent.push_back(now);
+    Ok(())
+}
+
+fn upload_budget() -> Result<UploadSlot, String> {
+    let mut b = budget().lock().unwrap_or_else(|e| e.into_inner());
+    take_slot(&mut b, std::time::Instant::now())?;
+    Ok(UploadSlot)
+}
+
 /// Скачивает трек с Яндекса и сохраняет в архив.
 ///  * `album_id` задан — трек добавляется в этот альбом (он должен принадлежать владельцу ключа);
 ///  * иначе создаётся новый приватный альбом `album_title` с обложкой: `cover_url` (адрес Яндекса)
 ///    или `cover_bytes` (картинка, нарисованная интерфейсом, если у трека нет обложки).
 #[tauri::command]
 pub async fn wa_save_track(
-    audio_url: String,
+    track_id: String,
     file_name: String,
     album_id: Option<String>,
     album_title: Option<String>,
@@ -444,8 +511,16 @@ pub async fn wa_save_track(
             return Err("Некорректный id альбома".into());
         }
     }
+    if cover_bytes.as_ref().is_some_and(|b| b.len() > MAX_COVER_UPLOAD) {
+        return Err("Обложка пустая или больше 10 МБ".into());
+    }
+    let _slot = upload_budget()?;
 
-    let audio = crate::net::fetch_checked(&audio_url)
+    // ссылку на файл Rust получает сам по номеру трека — произвольный адрес для скачивания интерфейс не передаёт
+    let audio_url = crate::net::track_mp3_url(&track_id)
+        .await
+        .map_err(|e| format!("не удалось получить трек с Яндекса: {e}"))?;
+    let audio = crate::net::fetch_media(&audio_url)
         .await
         .map_err(|e| format!("не удалось скачать трек с Яндекса: {e}"))?;
     if audio.len() > MAX_TRACK_UPLOAD {
@@ -466,7 +541,7 @@ pub async fn wa_save_track(
         return Err("Не указано название альбома".into());
     }
     let cover = match (cover_url, cover_bytes) {
-        (Some(u), _) => crate::net::fetch_checked(&u)
+        (Some(u), _) => crate::net::fetch_media(&u)
             .await
             .map_err(|e| format!("не удалось скачать обложку с Яндекса: {e}"))?,
         (None, Some(b)) => b,
@@ -520,6 +595,22 @@ mod tests {
         assert!(image_kind(b"GIF89a").is_none());
         assert!(is_uuid("0f8fad5b-d9cb-469f-a165-70867728950e"));
         assert!(api_url("/api/albums/../x").is_err());
+    }
+
+    #[test]
+    fn upload_budget_limits() {
+        let mut b = Budget { active: 0, recent: Default::default() };
+        let t0 = std::time::Instant::now();
+        assert!(take_slot(&mut b, t0).is_ok());
+        assert!(take_slot(&mut b, t0).is_ok());
+        assert!(take_slot(&mut b, t0).is_err()); // третья одновременно — нельзя
+        b.active = 0;
+        for _ in 2..UPLOAD_PER_WINDOW {
+            take_slot(&mut b, t0).unwrap();
+            b.active = 0;
+        }
+        assert!(take_slot(&mut b, t0).is_err()); // лимит за окно исчерпан
+        assert!(take_slot(&mut b, t0 + UPLOAD_WINDOW + Duration::from_secs(1)).is_ok()); // окно прошло
     }
 }
 
@@ -631,10 +722,10 @@ async fn fetch_range(id: &str, token: &str, start: u64, end: u64) -> Result<Chun
 }
 
 fn cors(mut b: tauri::http::response::Builder, origin: &Option<String>) -> tauri::http::response::Builder {
-    // запрос приходит только из главного окна (lib.rs), поэтому его Origin можно вернуть как есть:
-    // это нужно визуализатору (анализ звука работает только с CORS-разрешённым источником)
-    if let Some(o) = origin {
-        b = b.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, o.as_str()).header(header::VARY, "Origin");
+    // запрос приходит только из главного окна (lib.rs); CORS нужен визуализатору (анализ звука работает
+    // только с CORS-разрешённым источником) — разрешаем ровно Origin приложения, а не любой (аудит F-11)
+    if let Some(o) = crate::net::app_origin(origin.as_deref()) {
+        b = b.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, o).header(header::VARY, "Origin");
     }
     b
 }
@@ -768,5 +859,143 @@ mod stream_tests {
             assert_eq!(b.start, FIRST_CHUNK);
             assert!(a.total.unwrap() > FIRST_CHUNK);
         });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// «Слушать вместе» (src/together.js): комнаты на сервере архива, /api/rooms/…
+// Разрешены только пути комнат; тело — JSON. Ожидание изменений (GET с ?since=) держится сервером до 25 с,
+// поэтому у него свой клиент с запасом по времени.
+// ---------------------------------------------------------------------------
+
+fn poll_client() -> &'static Client {
+    static C: OnceLock<Client> = OnceLock::new();
+    C.get_or_init(|| build_client(45))
+}
+
+fn room_code_ok(s: &str) -> bool {
+    (4..=12).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+}
+
+fn room_id_ok(id: &str) -> bool {
+    (1..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
+fn room_code(code: &str) -> Result<&str, String> {
+    if room_code_ok(code) {
+        Ok(code)
+    } else {
+        Err("Некорректный код комнаты".into())
+    }
+}
+
+/// Запрос к комнате. Путь собирается здесь из проверенного кода комнаты — интерфейс передаёт только данные.
+async fn room_request(post: bool, path: String, body: Option<serde_json::Value>, since: Option<i64>) -> Result<WaResponse, String> {
+    let mut url = api_url(&path)?;
+    let token = read_token()?;
+    let resp = if !post {
+        if let Some(v) = since {
+            url.query_pairs_mut().append_pair("since", &v.max(0).to_string());
+        }
+        poll_client()
+            .get(url)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Accept", "application/json")
+            .send()
+            .await
+    } else {
+        let text = match body {
+            None => "{}".to_string(),
+            Some(v) if v.is_object() => v.to_string(),
+            Some(_) => return Err("Данные комнаты должны быть объектом".into()),
+        };
+        if text.len() > 32 * 1024 {
+            return Err("Слишком большой запрос".into());
+        }
+        json_client()
+            .post(url)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .body(text)
+            .send()
+            .await
+    }
+    .map_err(|e| format!("Whisper Archive недоступен: {e}"))?;
+    let status = resp.status().as_u16();
+    let bytes = read_limited(resp, MAX_SMALL_BODY).await?;
+    Ok(WaResponse { status, body: String::from_utf8_lossy(&bytes).into_owned() })
+}
+
+/// Создать комнату (POST /api/rooms).
+#[tauri::command]
+pub async fn wa_room_create() -> Result<WaResponse, String> {
+    room_request(true, "/api/rooms".into(), None, None).await
+}
+
+/// Снимок комнаты; с `since` сервер ждёт изменений до 25 с (GET /api/rooms/{code}?since=).
+#[tauri::command]
+pub async fn wa_room_get(code: String, since: Option<i64>) -> Result<WaResponse, String> {
+    room_request(false, format!("/api/rooms/{}", room_code(&code)?), None, since).await
+}
+
+#[tauri::command]
+pub async fn wa_room_join(code: String) -> Result<WaResponse, String> {
+    room_request(true, format!("/api/rooms/{}/join", room_code(&code)?), None, None).await
+}
+
+#[tauri::command]
+pub async fn wa_room_leave(code: String) -> Result<WaResponse, String> {
+    room_request(true, format!("/api/rooms/{}/leave", room_code(&code)?), None, None).await
+}
+
+/// Ведущий сообщает, что у него играет.
+#[tauri::command]
+pub async fn wa_room_state(code: String, state: serde_json::Value) -> Result<WaResponse, String> {
+    room_request(true, format!("/api/rooms/{}/state", room_code(&code)?), Some(state), None).await
+}
+
+/// Гость предлагает трек.
+#[tauri::command]
+pub async fn wa_room_suggest(code: String, track: serde_json::Value) -> Result<WaResponse, String> {
+    room_request(true, format!("/api/rooms/{}/suggest", room_code(&code)?), Some(track), None).await
+}
+
+/// Ведущий убирает предложение.
+#[tauri::command]
+pub async fn wa_room_dismiss(code: String, id: String) -> Result<WaResponse, String> {
+    if !room_id_ok(&id) {
+        return Err("Некорректный id предложения".into());
+    }
+    room_request(true, format!("/api/rooms/{}/suggestions/{id}/dismiss", room_code(&code)?), None, None).await
+}
+
+#[cfg(test)]
+mod room_tests {
+    use super::*;
+
+    /// Ключ из хранилища, только чтение: cargo test --lib live_archive -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn live_archive() {
+        tauri::async_runtime::block_on(async {
+            let mine = wa_albums_mine().await.unwrap();
+            println!("albums/mine: HTTP {} ({} bytes)", mine.status, mine.body.len());
+            assert_eq!(mine.status, 200);
+            let me = wa_me().await.unwrap();
+            println!("auth/me: HTTP {}", me.status);
+            assert!(wa_album("not-a-uuid".into()).await.is_err());
+            assert!(wa_room_get("bad/code".into(), None).await.is_err());
+        });
+    }
+    #[test]
+    fn codes() {
+        assert!(room_code("ABC234").is_ok());
+        assert!(room_code("abc234").is_err());
+        assert!(room_code("ABC/../x").is_err());
+        assert!(room_code("").is_err());
+        assert!(room_id_ok("a1b2c3"));
+        assert!(!room_id_ok("a/b"));
+        assert!(!room_id_ok(""));
     }
 }

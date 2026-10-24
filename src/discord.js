@@ -23,6 +23,10 @@
     const t = typeof current === "number" && current >= 0 ? queue?.[current] : null;
     if (!t || !started || !audio) return null;
     const al = t.albums?.[0];
+    // Discord отсчитывает время по обычным часам, поэтому при скорости ≠ 1× длительность и позиция
+    // пересчитываются в «настоящие» секунды: полоска и время окончания совпадают с тем, что слышно.
+    const r = audio.playbackRate > 0 ? audio.playbackRate : 1;
+    const dur = audio.duration > 0 && isFinite(audio.duration) ? audio.duration * 1000 : t.durationMs || 0;
     return {
       id: String(t.id ?? ""),
       title: String(t.title || "Без названия"),
@@ -30,8 +34,8 @@
       album: String(al?.title || ""),
       albumId: al?.id != null ? String(al.id) : "",
       cover: cover(t, "400x400") || "",
-      durationMs: Math.round((audio.duration > 0 && isFinite(audio.duration) ? audio.duration * 1000 : t.durationMs) || 0),
-      positionMs: Math.round((audio.currentTime || 0) * 1000),
+      durationMs: Math.round(dur / r),
+      positionMs: Math.round(((audio.currentTime || 0) * 1000) / r),
       playing: !audio.paused,
     };
   }

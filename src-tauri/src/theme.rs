@@ -5,7 +5,7 @@
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
-const MAX_THEME: usize = 300 * 1024 * 1024;
+const MAX_THEME: usize = 64 * 1024 * 1024; // как MAX_FILE в src/wmt.js (аудит F-07)
 
 fn file_stem(name: &str) -> String {
     let s: String = name

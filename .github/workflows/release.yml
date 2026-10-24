@@ -1,0 +1,62 @@
+# Выпуск новой версии: установщики для Windows и Linux + файлы обновлений.
+#
+# Как выпустить:
+#   1. Поднять версию в src-tauri/tauri.conf.json (и для порядка в Cargo.toml / package.json), например 0.6.0 → 0.6.1.
+#   2. git tag v0.6.1 && git push origin v0.6.1   (или запустить вручную: Actions → release → Run workflow)
+#   3. Дождаться обеих сборок — на GitHub появится черновик выпуска «v0.6.1» со всеми файлами и latest.json.
+#   4. Написать в черновике «что нового» и нажать Publish. Только после публикации приложения увидят обновление:
+#      оно смотрит в releases/latest, а туда не попадают черновики и pre-release.
+#
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY — содержимое закрытого ключа подписи обновлений (файл yandex-whisper-updater.key).
+#   Без него сборка упадёт: подписать обновления нечем, а неподписанные приложение не примет.
+name: release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+
+      - name: Системные библиотеки (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+
+      - run: npm ci
+
+      # tauri-action собирает установщики, подписывает файлы обновлений ключом из секрета и кладёт в выпуск
+      # latest.json (обе сборки дописывают в него свою платформу)
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Yandex Music Whisper Edition v__VERSION__'
+          releaseBody: 'Что нового — допиши перед публикацией.'
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true

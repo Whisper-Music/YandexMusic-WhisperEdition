@@ -4,12 +4,16 @@ mod desktop;
 mod discord;
 mod download;
 mod hotkeys;
+mod lyrics;
 mod mini;
 mod net;
+mod obs;
 mod power;
 mod secret;
 mod sleep;
 mod theme;
+mod thumbbar;
+mod update;
 mod whisper;
 mod winstate;
 use tauri::{
@@ -36,11 +40,6 @@ pub(crate) fn tray_menu(app: &tauri::AppHandle, on: bool) {
 fn tray_playing(app: tauri::AppHandle, state: tauri::State<TrayToggle>, playing: bool) {
     let _ = state.0.set_text(if playing { "Пауза" } else { "Играть" });
     power::on_playing(&app, playing);
-}
-
-#[tauri::command]
-fn md5_hex(input: String) -> String {
-    format!("{:x}", md5::compute(input))
 }
 
 #[tauri::command]
@@ -172,6 +171,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(hotkeys::plugin())
+        // обновления из GitHub Releases — только через команды update.rs, у страницы прямого доступа к плагину нет
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Whisper Archive: потоковое воспроизведение треков архива (wa://localhost/track/<id>,
         // на Windows — http://wa.localhost/...). Только для главного окна: окно входа Яндекса
         // и любые внешние страницы получить треки архива этим путём не могут.
@@ -207,7 +208,6 @@ pub fn run() {
             });
         })
         .invoke_handler(tauri::generate_handler![
-            md5_hex,
             win_minimize,
             win_toggle_max,
             win_is_max,
@@ -215,13 +215,18 @@ pub fn run() {
             win_drag,
             win_set_fullscreen,
             tray_playing,
-            net::http_request,
+            // Яндекс Музыка: только именованные операции (net.rs, OPS), без произвольных адресов и методов
+            net::ym_read,
+            net::ym_write,
+            net::ym_track_url,
+            net::ym_lyrics,
             net::fetch_bytes,
             desktop::desktop_wallpaper,
             auth::token_exists,
             auth::token_store,
             auth::token_clear,
             auth::yandex_login,
+            secret::secret_backend,
             download::download_track,
             download::downloaded_ids,
             download::downloaded_tracks,
@@ -233,15 +238,25 @@ pub fn run() {
             bg::bg_dir_pick,
             bg::bg_read,
             theme::theme_save,
+            // Whisper Archive: у каждой операции своя команда, путь собирает Rust (whisper.rs)
             whisper::wa_token_exists,
             whisper::wa_token_set,
             whisper::wa_token_clear,
-            whisper::wa_get,
+            whisper::wa_albums_mine,
+            whisper::wa_album,
+            whisper::wa_me,
             whisper::wa_stream,
             whisper::wa_auth_request_code,
             whisper::wa_auth_issue,
             whisper::wa_save_track,
             whisper::wa_prefetch,
+            whisper::wa_room_create,
+            whisper::wa_room_get,
+            whisper::wa_room_join,
+            whisper::wa_room_leave,
+            whisper::wa_room_state,
+            whisper::wa_room_suggest,
+            whisper::wa_room_dismiss,
             discord::discord_config,
             discord::discord_status,
             discord::discord_retry,
@@ -253,7 +268,14 @@ pub fn run() {
             hotkeys::hotkeys_set,
             sleep::sleep_start,
             sleep::sleep_cancel,
-            sleep::sleep_status
+            sleep::sleep_status,
+            lyrics::lyrics_lrclib,
+            thumbbar::thumbbar_state,
+            obs::obs_config,
+            obs::obs_state,
+            obs::obs_theme,
+            update::update_check,
+            update::update_install
         ])
         .setup(|app| {
             secret::init(app.handle());
@@ -262,6 +284,7 @@ pub fn run() {
                 let _ = w.set_decorations(false);
                 winstate::restore(&w); // размер и место с прошлого запуска; окно создано скрытым и показывается здесь
                 no_autofill(&w);
+                thumbbar::init(app.handle(), &w); // кнопки под миниатюрой окна на панели задач (Windows)
             }
             let prev = MenuItem::with_id(app, "prev", "Предыдущий", true, None::<&str>)?;
             let toggle = MenuItem::with_id(app, "toggle", "Пауза / Играть", true, None::<&str>)?;
@@ -280,6 +303,7 @@ pub fn run() {
             app.manage(FsSaved::default());
             app.manage(bg::Picked::default());
             app.manage(mini::Shared::default());
+            app.manage(update::Pending::default());
             // Трей одинаково создаётся в Windows и Linux, но ведёт себя по-разному:
             // * Windows — левый клик открывает окно, правый показывает меню;
             // * Linux (libayatana-appindicator / StatusNotifierItem) — щелчки по значку приложению

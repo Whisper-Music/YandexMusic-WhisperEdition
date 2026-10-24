@@ -3,16 +3,52 @@ const invoke = async (cmd, args) => {
   catch (e) { throw e instanceof Error ? e : new Error(String(e)); }
 };
 
-const API = "https://api.music.yandex.net";
-const SALT = "XGRlBW9FXlekgbPrRHuSiA";
 const OAUTH_URL =
   "https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d";
 const $ = (s) => document.querySelector(s);
+
+// Динамический CSS (свои цвета, CSS своих тем) — без элементов <style>: CSP приложения запрещает
+// встроенные стили (style-src без 'unsafe-inline', аудит F-11). На constructable stylesheets
+// (document.adoptedStyleSheets) CSP не распространяется; где их нет (старый WebKitGTK) — <link> на blob:
+// этого же приложения (style-src разрешает только 'self' и blob:). Подключаются после всех файлов .css;
+// настройки пользователя (ccStyle) — всегда последними, после CSS своих тем.
+const DynCss = (() => {
+  const sheets = new Map();
+  const LAST = "ccStyle";
+  const adopt = "adoptedStyleSheets" in Document.prototype && "replaceSync" in CSSStyleSheet.prototype;
+  const order = () => [...sheets.keys()].filter((k) => k !== LAST).concat(sheets.has(LAST) ? [LAST] : []);
+  function sync() {
+    if (adopt) document.adoptedStyleSheets = order().map((k) => sheets.get(k));
+    else for (const k of order()) { const l = sheets.get(k); if (l !== document.head.lastElementChild) document.head.append(l); }
+  }
+  return {
+    set(key, css) {
+      let sh = sheets.get(key);
+      if (adopt) {
+        if (!sh) { sh = new CSSStyleSheet(); sheets.set(key, sh); sync(); }
+        sh.replaceSync(String(css));
+        return;
+      }
+      if (!sh) { sh = document.createElement("link"); sh.rel = "stylesheet"; sheets.set(key, sh); }
+      const old = sh.href;
+      sh.href = URL.createObjectURL(new Blob([String(css)], { type: "text/css" }));
+      if (old.startsWith("blob:")) setTimeout(() => URL.revokeObjectURL(old), 5000);
+      sync();
+    },
+    remove(key) {
+      const sh = sheets.get(key);
+      if (!sh) return;
+      sheets.delete(key);
+      if (adopt) sync();
+      else { if (sh.href.startsWith("blob:")) URL.revokeObjectURL(sh.href); sh.remove(); }
+    },
+  };
+})();
+window.DynCss = DynCss;
 const ICON = {
   play: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>',
 };
-const JSON_H = { "Content-Type": "application/json" };
 const SPK = '<path fill="currentColor" d="M3 9v6h4l5 4V5L7 9z"/>';
 const WV = (d) => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`;
 const vsvg = (inner) => `<svg viewBox="0 0 24 24" width="22" height="22">${SPK}${inner}</svg>`;
@@ -59,6 +95,7 @@ const got = new Set();
 const PL = { list: null, loading: null, full: new Map(), covers: new Map() };
 let curPl = null;
 let likesTab = "likes";
+let likesQuery = "", likesSrc = [];     // поиск по лайкам: строка запроса и полный список, по которому ищем
 const recArr = [];
 const pins = lsJSON("ym_pins", [], Array.isArray)
   .filter((p) => p && typeof p === "object" && /^\d+$/.test(String(p.id)) && typeof p.title === "string")
@@ -131,7 +168,7 @@ let probing = false;
 async function probeOnline() {
   if (!offline || probing || !uid) return;
   probing = true;
-  try { await api("/account/status"); } catch { return; } finally { probing = false; }
+  try { await ym("account_status"); } catch { return; } finally { probing = false; }
   setOffline(false);
   showToast("Связь с Яндекс Музыкой восстановлена", 3500, { kind: "ok" });
   loadLikedIds(); loadDislikedIds();
@@ -139,17 +176,16 @@ async function probeOnline() {
 }
 window.addEventListener("online", probeOnline);
 
-const HEADERS = () => ({
-  "User-Agent": "Yandex-Music-API",
-  "X-Yandex-Music-Client": "YandexMusicAndroid/24023231",
-});
-async function http(url, { method = "GET", headers = {}, body = null } = {}) {
-  return await invoke("http_request", { method, url, headers, body });
-}
-async function api(path, opts = {}) {
-  const r = await http(API + path, { ...opts, headers: { ...HEADERS(), ...(opts.headers || {}) } });
-  if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${r.body.slice(0, 200)}`);
-  return JSON.parse(r.body).result;
+// Яндекс Музыка. Интерфейс называет только операцию и её параметры; адрес, метод, заголовки и токен
+// знает Rust (src-tauri/src/net.rs, список OPS). Чтение и изменение данных аккаунта — разные команды
+// (ym_read / ym_write) с разными разрешениями (capabilities/yandex-read.json и yandex-write.json).
+const YM_WRITE = new Set(["like_add", "like_remove", "dislike_add", "dislike_remove", "rotor_feedback",
+  "playlist_create", "playlist_rename", "playlist_change", "playlist_change_rel", "playlist_delete"]);
+const strMap = (o) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])) : null);
+async function ym(op, { id = null, query = null, form = null, json = null } = {}) {
+  const body = await invoke(YM_WRITE.has(op) ? "ym_write" : "ym_read",
+    { op, id: id == null ? null : String(id), query: strMap(query), form: strMap(form), json });
+  return JSON.parse(body).result;
 }
 
 const STYLE_DEF = {
@@ -186,7 +222,7 @@ function loadCfg() {
   try { old = JSON.parse(localStorage.getItem("ym_cfg2") || "null"); } catch {}
   const c = freshCfg();
   if (saved) {
-    for (const k of ["style", "blur", "viz", "vizStyle", "bg", "anim"]) if (saved[k] !== undefined) c[k] = saved[k];
+    for (const k of ["style", "blur", "viz", "vizStyle", "bg", "anim", "dyn", "dynColors"]) if (saved[k] !== undefined) c[k] = saved[k];
     for (const st of Object.keys(STYLE_DEF)) {
       Object.assign(c.s[st], saved.s?.[st] || {});
       if (saved.s?.[st]?.dim === undefined && saved.dim !== undefined) c.s[st].dim = saved.dim;
@@ -325,7 +361,10 @@ const CC_GROUPS = [
     { k: "navActBg", label: "Фон активной кнопки", fb: "accent2", css: { all: [[SIDE_ACT, "background: $"]] } },
     { k: "navActText", label: "Текст активной кнопки", css: { all: [[SIDE_ACT, "color: $"]], steam: [[SIDE_ACT, "color: $"], [SIDE_ACT + "::before", "background: $"]], lolitta: [[SIDE_ACT, "color: $"], [SIDE_ACT + "::before", "background: $"]] }, probe: [SIDE_ACT, "color"] },
     { k: "searchBg", label: "Фон поиска", css: { all: [[".search", "background: $"]], steam: [[".search", "background: var(--search-ic) 12px center / 16px 16px no-repeat, $"]], lolitta: [[".side .search", "background: var(--l-search) 16px center / 18px 18px no-repeat, $"]] }, probe: [".search", "background-color"] },
-    { k: "searchText", label: "Текст поиска", css: { all: [[".search", "color: $"]] }, probe: [".search", "color"] },
+    { k: "searchText", label: "Текст поиска", css: { all: [[".search, .lkfindcnt", "color: $"], [".search::placeholder", "color: color-mix(in srgb, $ 62%, transparent)"]] }, probe: [".search", "color"],
+      // выбран только фон поиска — текст сам становится тёмным на светлом фоне и светлым на тёмном
+      gen: (cc) => cc.searchBg && !cc.searchText && /^#[0-9a-f]{6}/i.test(cc.searchBg)
+        ? `.search, .lkfindcnt { color: ${inkOn(cc.searchBg)} !important; } .search::placeholder { color: color-mix(in srgb, ${inkOn(cc.searchBg)} 62%, transparent) !important; }` : "" },
   ] },
   { name: "Кнопки в окне", note: "Чипы, «Показать ещё», «Закрепить», кнопки в окнах", items: [
     { k: "btnBg", label: "Фон кнопок", css: { all: [[BTN, "background: $"]] }, extra: ".main .nav:not(.active):not(.danger):hover, .chip:not(.active):hover, .pill:not(.active):hover, .round:hover { filter: brightness(1.15); }" },
@@ -431,11 +470,8 @@ function ccCss(st) {
   return out.join("\n");
 }
 function applyCustom() {
-  let el = document.getElementById("ccStyle");
-  if (!el) { el = document.createElement("style"); el.id = "ccStyle"; }
-  if (el !== document.head.lastElementChild) document.head.append(el);      // всегда последним — после CSS своих тем
-  el.textContent = "";                                                      // обводки проверяем по виду стиля без старых настроек
-  el.textContent = ccCss(cfg.style);
+  DynCss.set("ccStyle", "");                 // обводки проверяем по виду стиля без старых настроек
+  DynCss.set("ccStyle", ccCss(cfg.style));   // DynCss держит этот блок последним — после CSS своих тем
 }
 
 // что показать в пипетке у «авто»-параметра: реальный цвет элемента, если его можно прочитать, иначе — основной/второй
@@ -579,8 +615,120 @@ function openColorEditor() {
 }
 $("#ccBtn").onclick = openColorEditor;
 
+// ---------- динамический фон ----------
+// Обложка трека скачивается через Rust (fetch_bytes) и превращается в blob: — так её можно и показать, и
+// разобрать на цвета (картинку с чужого адреса холст прочитать не даёт). Слоёв обложки два: новая плавно
+// проявляется поверх старой. Над ними — «аура» из цветов обложки, лёгкое зерно и виньетка (styles.css, .dynbg).
+var dynPal = null, dynKey = "", dynSeq = 0, dynFront = 0;     // var: applyCfg вызывается и до этой строки
+const dynCache = new Map();      // coverUri → { url, soft, echo, pal }
+// Размытая и подкрашенная копия обложки — один раз на маленьком холсте, а не CSS-фильтром blur в каждом кадре.
+// Уменьшение до side px уже размывает; затем коробочное размытие в пикселях (работает везде, в т.ч. в WebKitGTK,
+// где у холста нет ctx.filter) и увеличение до out px, чтобы при растяжке на всё окно не было «ступенек».
+function boxBlur(d, w, h, r) {
+  const t = new Float32Array(d.length), n = 2 * r + 1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) {
+    let s = 0; for (let k = -r; k <= r; k++) s += d[(y * w + Math.min(w - 1, Math.max(0, x + k))) * 4 + c];
+    t[(y * w + x) * 4 + c] = s / n;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) {
+    let s = 0; for (let k = -r; k <= r; k++) s += t[(Math.min(h - 1, Math.max(0, y + k)) * w + x) * 4 + c];
+    d[(y * w + x) * 4 + c] = s / n;
+  }
+}
+async function dynSoft(img, side, out, r, sat, bri) {
+  const a = document.createElement("canvas"); a.width = a.height = side;
+  const g = a.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingQuality = "high";
+  g.drawImage(img, 0, 0, side, side);
+  const id = g.getImageData(0, 0, side, side), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {                 // насыщенность и яркость — как filter: saturate() brightness()
+    const L = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    for (let c = 0; c < 3; c++) d[i + c] = Math.min(255, Math.max(0, (L + (d[i + c] - L) * sat) * bri));
+  }
+  boxBlur(d, side, side, r); boxBlur(d, side, side, r);
+  g.putImageData(id, 0, 0);
+  const b = document.createElement("canvas"); b.width = b.height = out;
+  const h = b.getContext("2d", { willReadFrequently: true });
+  h.imageSmoothingQuality = "high";
+  h.drawImage(a, 0, 0, out, out);
+  const id2 = h.getImageData(0, 0, out, out);
+  boxBlur(id2.data, out, out, Math.max(1, Math.round(out / side)));      // сглаживаем швы после увеличения
+  h.putImageData(id2, 0, 0);
+  const blob = await new Promise((res) => b.toBlob(res, "image/png"));
+  return blob ? URL.createObjectURL(blob) : "";
+}
+const dynRevoke = (v) => { for (const u of [v.url, v.soft, v.echo]) if (u) URL.revokeObjectURL(u); };
+async function dynArt(t) {
+  const key = String(t.coverUri || "");
+  let it = dynCache.get(key);
+  if (it) { dynCache.delete(key); dynCache.set(key, it); return it; }          // свежие — в конец
+  const src = cover(t, "400x400");
+  if (!src) return null;
+  const buf = await invoke("fetch_bytes", { url: src });
+  const url = URL.createObjectURL(new Blob([buf], { type: "image/jpeg" }));
+  let pal = null, soft = "", echo = "";
+  try { pal = await paletteFrom(url); } catch {}
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    soft = await dynSoft(img, 40, 160, 2, 1.5, 0.72);       // большие «дышащие» слои: сильное размытие
+    echo = await dynSoft(img, 72, 216, 1, 1.4, 1);          // «эхо» обложки: размытие помягче
+  } catch {}
+  it = { url, soft: soft || url, echo: echo || url, pal };
+  dynCache.set(key, it);
+  while (dynCache.size > 16) { const [k, v] = dynCache.entries().next().value; if (v.url === dynShownUrl()) break; dynRevoke(v); dynCache.delete(k); }
+  return it;
+}
+const dynLayers = () => document.querySelectorAll("#dynBg .dyn-l");
+const dynShownUrl = () => dynLayers()[dynFront]?.dataset.url || "";
+function dynShow(it) {
+  const box = $("#dynBg"), ls = dynLayers();
+  if (dynShownUrl() !== it.url) {
+    const next = ls[1 - dynFront];
+    next.style.backgroundImage = `url("${it.soft}")`; next.dataset.url = it.url;
+    // перезапуск «дыхания», чтобы новая обложка начинала с того же кадра
+    next.classList.remove("on"); void next.offsetWidth; next.classList.add("on");
+    ls[dynFront].classList.remove("on");
+    dynFront = 1 - dynFront;
+    const [art, echo] = box.querySelectorAll(".dyn-art i");
+    if (art) art.style.backgroundImage = `url("${it.url}")`;
+    if (echo) echo.style.backgroundImage = `url("${it.echo}")`;
+  }
+  box.classList.add("ready");
+  const p = it.pal;
+  if (p) {
+    box.style.setProperty("--dyn-a", p.accent); box.style.setProperty("--dyn-b", p.accent2);
+    dynPal = { accent: p.accent, accent2: p.accent2 };
+    if (dynColorsOn()) { $("#cAccent").value = p.accent; $("#cAccent2").value = p.accent2; }
+  }
+  applyCfg();
+}
+async function dynUpdate(t, force = false) {
+  const my = ++dynSeq;
+  if (cfg.dyn !== true) {
+    $("#dynBg").classList.remove("ready");
+    if (dynPal || force) { dynPal = null; dynKey = ""; applyCfg(); }
+    syncBgVideo();
+    return;
+  }
+  syncBgVideo();
+  if (!t?.coverUri) { if (force) applyCfg(); return; }        // нет обложки (трек из файла) — остаётся прежний фон
+  const key = String(t.coverUri);
+  if (key === dynKey && !force) return;
+  try {
+    const it = await dynArt(t);
+    if (my !== dynSeq || !it) return;
+    dynKey = key;
+    dynShow(it);
+  } catch { if (force) applyCfg(); }
+}
+
+// Динамический фон: основные цвета берутся из обложки (dynPal), пока пользователь не выбрал их сам —
+// тогда фон по обложке остаётся, а цвета — свои (cfg.dynColors = false). Сохранённые цвета стиля не трогаются.
+function dynColorsOn() { return cfg.dyn === true && cfg.dynColors !== false; }      // объявление функции: applyCfg зовут и раньше этой строки
 function applyCfg() {
-  const r = document.documentElement.style, st = sty(), base = baseOf();
+  const r = document.documentElement.style, base = baseOf();
+  const st = dynColorsOn() && dynPal ? { ...sty(), accent: dynPal.accent, accent2: dynPal.accent2 } : sty();
+  document.body.classList.toggle("dyn-on", cfg.dyn === true);
   // свой стиль, чей CSS ещё не подключён (идёт загрузка при старте), временно показывается как его основа
   document.documentElement.dataset.style = BUILTIN.includes(cfg.style) || themeReady.has(cfg.style) ? cfg.style : base;
   document.documentElement.dataset.base = base;
@@ -673,6 +821,7 @@ function applyHooks() {
   else ["role", "aria-valuemin", "aria-valuemax", "aria-valuenow"].forEach((a) => vb.removeAttribute(a));
   window.layoutLock?.(!!hook("layoutFixed"));
   renderThemeButtons(hook("buttons") || []);
+  window.cliMount?.(hook("console") || null);          // стиль-консоль (cli.js)
 }
 function saveCfg() {
   try { localStorage.setItem("ym_cfg3", JSON.stringify(cfg)); $("#setNote").textContent = ""; return true; }
@@ -683,9 +832,18 @@ const getv = (k) => (STYLE_KEYS.includes(k) ? sty()[k] : cfg[k]);
 const setv = (k, v) => { if (STYLE_KEYS.includes(k)) sty()[k] = v; else cfg[k] = v; };
 function syncControls() {
   for (const [id, k] of SLIDERS) $(id).value = getv(k);
+  if (dynColorsOn() && dynPal) { $("#cAccent").value = dynPal.accent; $("#cAccent2").value = dynPal.accent2; }      // видно, какие цвета сейчас взяты из обложки
   $("#cViz").checked = cfg.viz;
   syncVizStyles();
   $("#cAnim").checked = cfg.anim !== false;
+  $("#cDyn").checked = cfg.dyn === true;
+  // цвета можно выбрать всегда: при динамическом фоне свой выбор просто заменяет цвета обложки
+  document.querySelectorAll("#cAccent, #cAccent2").forEach((el) => {
+    el.disabled = false;
+    el.title = dynColorsOn() ? "Сейчас цвета берутся из обложки — выбери свой, и он заменит их (фон останется)" : "";
+  });
+  $("#paletteBtn").disabled = dynColorsOn();
+  $("#paletteBtn").title = dynColorsOn() ? "Пока включён динамический фон, цвета берутся из обложки" : "";
   // ползунки и галочки — только для того, что у стиля есть (feature)
   const glow = feature("glow"), panels = feature("panelOpacity"), anim = feature("animations");
   $("#cGlow").closest("label").style.display = glow ? "" : "none";
@@ -698,9 +856,16 @@ function syncControls() {
   if (cap) cap.textContent = sel ? [sel.querySelector(".scauth")?.textContent, sel.querySelector(".scname")?.textContent].filter(Boolean).join(" · ") : "";
   fillAll();
 }
+// свой цвет при динамическом фоне: фон по обложке остаётся, цвета интерфейса — выбранные
+function manualColors() {
+  if (!dynColorsOn()) return;
+  cfg.dynColors = false;
+  syncControls();
+  showToast("Цвета выбраны вручную, фон по обложке остался", 6000, { kind: "ok", action: { label: "Вернуть цвета обложки", fn: () => { cfg.dynColors = true; saveCfg(); applyCfg(); syncControls(); } } });
+}
 for (const [id, key, num] of SLIDERS) {
   const el = $(id);
-  el.addEventListener("input", () => { setv(key, num ? +el.value : el.value); applyCfg(); });      // пока тянешь — только применяем
+  el.addEventListener("input", () => { if (key === "accent" || key === "accent2") manualColors(); setv(key, num ? +el.value : el.value); applyCfg(); });      // пока тянешь — только применяем
   el.addEventListener("change", () => saveCfg());                                                     // на диск — когда отпустил
 }
 document.querySelectorAll("input[type=range]").forEach((el) => el.addEventListener("input", () => fill(el)));
@@ -750,7 +915,7 @@ function setBgBlob(blob, st = cfg.style) {
 // В трее видео ещё и выгружается целиком — декодер и буферы кадров (у 4K это сотни МБ) освобождаются.
 let bgUnloaded = false;
 function syncBgVideo() {
-  const v = $("#bgVideo"), url = curBgVideo() ? curBg() : "";
+  const v = $("#bgVideo"), url = curBgVideo() && cfg.dyn !== true ? curBg() : "";
   if (!url || bgUnloaded) {
     v.hidden = true;
     if (v.getAttribute("src")) { v.pause(); v.removeAttribute("src"); v.load(); }      // отпускаем декодер
@@ -830,7 +995,7 @@ async function pickBgFromFiles(files) {
 function nativeFiles(list) {
   return (Array.isArray(list) ? list : []).map((e) => ({
     name: String(e.name || ""), type: "", size: Number(e.size) || 0, _id: e.id,
-    async text() { return new TextDecoder().decode(new Uint8Array(await invoke("bg_read", { id: this._id, maxBytes: 4 * 1048576 }))); },
+    async text() { return new TextDecoder().decode(new Uint8Array(await invoke("bg_read", { id: this._id, kind: "text" }))); },
   }));
 }
 const BG_MIME = {
@@ -845,7 +1010,7 @@ async function loadNativeBg(list) {
     const ext = (pick.name.split(".").pop() || "").toLowerCase();
     const lim = /^(mp4|m4v|mov|webm|mkv)$/.test(ext) ? VIDEO_MAX_BYTES : BG_MAX_BYTES;      // лимит проверяет и Rust до чтения файла
     if (pick.size > lim) throw new Error(`Файл «${pick.name}» весит ${Math.round(pick.size / 1048576)} МБ — больше лимита в ${lim / 1048576} МБ.`);
-    const buf = await invoke("bg_read", { id: pick._id, maxBytes: lim });
+    const buf = await invoke("bg_read", { id: pick._id, kind: lim === VIDEO_MAX_BYTES ? "video" : "image" });      // потолок по сценарию держит и Rust
     return await loadBg(new File([buf], pick.name, { type: BG_MIME[ext] || "" }));
   } catch (e) { bgNote(e.message || "Не удалось прочитать файлы."); return false; }
 }
@@ -973,6 +1138,7 @@ function syncVizStyles() {
 }
 document.querySelectorAll(".vizopt").forEach((b) => (b.onclick = () => { cfg.vizStyle = b.dataset.viz; syncVizStyles(); saveCfg(); }));
 $("#cAnim").onchange = (e) => { cfg.anim = e.target.checked; applyCfg(); saveCfg(); };
+$("#cDyn").onchange = (e) => { cfg.dyn = e.target.checked; if (cfg.dyn) cfg.dynColors = true; saveCfg(); syncControls(); dynUpdate(queue[current], true); };
 
 function rgb2hsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -1110,7 +1276,7 @@ function updatePlusNotice(st) {
 $("#plusNotice")?.addEventListener("click", () => { try { window.__TAURI__.opener.openUrl(PLUS_URL); } catch {} });
 async function refreshPlusNotice() {
   if (!uid || offline) return;
-  try { updatePlusNotice(await api("/account/status")); } catch {}
+  try { updatePlusNotice(await ym("account_status")); } catch {}
 }
 setInterval(refreshPlusNotice, 30 * 60 * 1000);
 {
@@ -1120,7 +1286,7 @@ setInterval(refreshPlusNotice, 30 * 60 * 1000);
 
 async function finishLogin() {
   try {
-    const st = await api("/account/status");
+    const st = await ym("account_status");
     uid = st.account.uid;
     updatePlusNotice(st);
   } catch (e) {
@@ -1128,7 +1294,21 @@ async function finishLogin() {
     throw e;
   }
   localStorage.setItem("ym_uid", uid);
+  warnPlainSecrets();
 }
+// Linux без «связки ключей» (Secret Service): токены лежат в файле открытым текстом (права 0600).
+// Не молчим об этом (аудит F-08). Как только связка ключей появится, Rust сам перенесёт токен туда.
+let plainWarned = false;
+async function warnPlainSecrets() {
+  if (plainWarned) return;
+  let b = null;
+  try { b = await invoke("secret_backend"); } catch { return; }
+  if (b?.ym !== "file" && b?.wa !== "file") return;
+  plainWarned = true;
+  showToast("Нет системной связки ключей: токен сохранён в файл в папке настроек (открытым текстом, доступ только у тебя). "
+    + "Установи GNOME Keyring, KWallet или KeePassXC — токен переедет туда сам.", 15000, { kind: "err" });
+}
+window.warnPlainSecrets = warnPlainSecrets;
 function showLogin(msg = "") { $("#login").classList.remove("hidden"); $("#loginErr").textContent = msg; }
 function afterLogin() { $("#login").classList.add("hidden"); goTop(showLikes); restorePlayer(); loadLikedIds(); loadDislikedIds(); }
 
@@ -1330,7 +1510,7 @@ function resetView() {
   document.querySelector(".main").classList.remove("wavemode");
   shown = []; $("#list").innerHTML = ""; $("#list").hidden = false;
   $("#more").hidden = true; $("#status").textContent = "";
-  $("#chips").hidden = true; $("#lastAlbum").hidden = true; $("#similar").hidden = true;
+  $("#chips").hidden = true; $("#lkFind").hidden = true; $("#lastAlbum").hidden = true; $("#similar").hidden = true;
   $("#wavePage").hidden = true; $("#settingsPage").hidden = true; $("#statsPage").hidden = true;
   $("#plPage").hidden = true; $("#plBar").hidden = true; $("#plRecs").hidden = true; $("#plCreateBtn").hidden = true;
   curPl = null; recArr.length = 0; $("#plRecList").innerHTML = "";
@@ -1364,7 +1544,7 @@ function renderTabs(active) {
     d.insertAdjacentHTML("beforeend", `<span class="lodeco lo-tabbow" aria-hidden="true">${LO.bow2}</span>`);
     d.onclick = fn; box.append(d);
   };
-  mk("Лайки", "likes", () => goTop(showLikes), null, "♥");
+  mk("Лайки", "likes", () => { likesQuery = ""; goTop(showLikes); }, null, "♥");
   for (const p of pins) {
     const open = p.type === "artist" ? () => showArtist(p.id) : p.type === "playlist" ? () => showPlaylist(p.id) : () => showAlbum(p.id);
     mk(p.title, pinKey(p.type, p.id), () => goTop(open), () => unpin(p.type, p.id), p.type === "artist" ? "♪" : p.type === "playlist" ? "♫" : roman(p.year) || "†");
@@ -1407,6 +1587,18 @@ function syncIcons() {
   window.discordPush?.();                 // Discord RPC (discord.js), если включён
   window.miniPush?.();                    // мини-плеер у значка в трее (traymini.js)
   if (active !== trayPlaying) { trayPlaying = active; Promise.resolve(invoke("tray_playing", { playing: active })).catch(() => {}); }   // в трей — только при смене
+  thumbSync();
+}
+// Кнопки под миниатюрой окна на панели задач Windows (thumbbar.rs): «В лайки», «Назад», «Пауза/Играть», «Вперёд».
+// В Rust отправляется только изменившееся состояние.
+var thumbKey = "";       // var: syncIcons может сработать раньше этой строки
+function thumbSync() {
+  const t = queue[current];
+  const st = { has: !!t, playing: !!audio && !audio.paused, liked: !!t && likedIds.has(String(t.id)) };
+  const k = JSON.stringify(st);
+  if (k === thumbKey) return;
+  thumbKey = k;
+  Promise.resolve(invoke("thumbbar_state", st)).catch(() => {});
 }
 // окно ушло в трей: Rust переводит движок окна в режим экономии; здесь отпускаем то, что легко загрузить заново
 window.__TAURI__.event?.listen("power-save", () => {
@@ -1431,7 +1623,7 @@ window.__TAURI__.event?.listen("tray-ctl", (e) => {
 
 function navigate(fn) { if (view) hist.push(view); view = fn; fn(); }
 function goTop(fn) { hist.length = 0; view = fn; fn(); }
-$("#likes").onclick = () => goTop(showLikes);
+$("#likes").onclick = () => { likesQuery = ""; goTop(showLikes); };
 $("#wave").onclick = () => goTop(showWave);
 $("#settingsBtn").onclick = () => goTop(showSettings);
 $("#statsBtn").onclick = () => goTop(showStats);
@@ -1444,26 +1636,25 @@ async function showLikes(tab = likesTab) {
   $("#search").value = "";
   setChips([["likes", "♥ Лайки"], ["playlists", "≡ Мои плейлисты"]], likesTab, (t) => { if (t !== likesTab) { view = () => showLikes(t); view(); } });
   if (likesTab === "playlists") return showMyPlaylists(my);
-  if (likes.done) return renderList(likes.tracks, false, LK);
+  lkFindShow();
+  if (likes.done) { likesSrc = likes.tracks; return renderLikes(); }
+  likesSrc = [];
   $("#status").textContent = "Загрузка…";
   try {
-    const lib = await api(`/users/${uid}/likes/tracks`);
+    const lib = await ym("likes");
     setOffline(false);
     const ids = rememberLikes(lib).map((t) => `${t.id}:${t.albumId}`);
     const acc = [];
     for (let i = 0; i < ids.length; i += 100) {
-      const tracks = await api("/tracks", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "track-ids=" + encodeURIComponent(ids.slice(i, i + 100).join(",")),
-      });
+      const tracks = await ym("tracks", { form: { "track-ids": ids.slice(i, i + 100).join(",") } });
       if (my !== nav) return;
-      acc.push(...tracks);
-      renderList(tracks, i > 0, LK);
+      acc.push(...tracks); likesSrc = acc;
+      renderList(likesFilter(tracks), i > 0, LK);
+      lkFindCount();
       $("#status").textContent = i + 100 < ids.length ? `Загружено ${acc.length} из ${ids.length}…` : "";
     }
-    likes.tracks = mergeLikesAdded(acc); likes.done = true;
-    if (likes.tracks !== acc) redrawLikes();
+    likes.tracks = mergeLikesAdded(acc); likes.done = true; likesSrc = likes.tracks;
+    if (likes.tracks !== acc) redrawLikes(); else lkFindCount(true);
     backfillMeta(acc);
   } catch (e) {
     if (my !== nav) return;
@@ -1479,9 +1670,71 @@ const likesOpen = () => document.querySelector(".main").dataset.page === "likes"
 function redrawLikes() {
   if (!likesOpen()) return;
   const main = document.querySelector(".main"), top = main.scrollTop;
-  renderList(likes.tracks, false, LK);
+  likesSrc = likes.tracks;
+  renderLikes();
   main.scrollTop = top;
 }
+
+// ---------- поиск по лайкам ----------
+// Ищет по названию (с версией), артистам и альбомам; без учёта регистра и «ё». Несколько слов — все должны найтись
+// (в любом порядке). Включённый трек из найденного ставит в очередь только найденные треки.
+const normQ = (s) => String(s || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
+const hayCache = new WeakMap();
+function trackHay(t) {
+  let h = hayCache.get(t);
+  if (h === undefined) {
+    h = normQ([t.title, t.version, ...(t.artists || []).map((a) => a.name), ...(t.albums || []).map((a) => a.title)].filter(Boolean).join(" "));
+    hayCache.set(t, h);
+  }
+  return h;
+}
+function likesFilter(tracks) {
+  const words = normQ(likesQuery).split(" ").filter(Boolean);
+  if (!words.length) return tracks;
+  return tracks.filter((t) => { const h = trackHay(t); return words.every((w) => h.includes(w)); });
+}
+function lkFindCount(final = false) {
+  const c = $("#lkFindCnt");
+  if (!normQ(likesQuery)) { c.textContent = ""; return; }
+  const n = shown.length;
+  c.textContent = `${n} из ${likesSrc.length}`;
+  if (!n && (final || likes.done)) $("#status").textContent = "Ничего не найдено";
+  else if ($("#status").textContent === "Ничего не найдено") $("#status").textContent = "";
+}
+function renderLikes() {
+  renderList(likesFilter(likesSrc), false, LK);
+  lkFindCount(true);
+}
+function lkFindShow() {
+  $("#lkFind").hidden = false;
+  const inp = $("#lkFindIn");
+  if (inp.value !== likesQuery) inp.value = likesQuery;
+  $("#lkFindCnt").textContent = "";
+}
+let lkFindT = 0;
+$("#lkFindIn").addEventListener("input", (e) => {
+  clearTimeout(lkFindT);
+  const v = e.target.value;
+  lkFindT = setTimeout(() => {
+    if (normQ(v) === normQ(likesQuery)) { likesQuery = v; return; }
+    likesQuery = v;
+    if (!likesOpen()) return;
+    document.querySelector(".main").scrollTop = 0;
+    if ($("#status").textContent === "Ничего не найдено") $("#status").textContent = "";
+    renderLikes();
+  }, 120);
+});
+$("#lkFindIn").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.stopPropagation();
+    if (e.target.value) { e.target.value = ""; e.target.dispatchEvent(new Event("input")); }
+    else e.target.blur();
+  } else if (e.key === "Enter") {
+    // Enter — включить первый найденный трек
+    clearTimeout(lkFindT); likesQuery = e.target.value; renderLikes();
+    $("#list li")?.click();
+  }
+});
 // Лайки, поставленные во время загрузки списка (его номера уже были получены), — в начало.
 function mergeLikesAdded(acc) {
   const have = new Set(acc.map((x) => String(x.id)));
@@ -1527,7 +1780,9 @@ async function showOfflineLikes(my) {
   const tracks = await offlineLikes();
   if (my !== nav) return;
   setOffline(true);
-  renderList(tracks, false, LK);
+  likesSrc = tracks;
+  renderLikes();
+  if (tracks.length && normQ(likesQuery) && !shown.length) return;
   $("#status").textContent = tracks.length
     ? `Нет связи с Яндекс Музыкой — показаны скачанные треки (${tracks.length}).`
     : "Нет связи с Яндекс Музыкой, а скачанных треков пока нет.";
@@ -1535,15 +1790,11 @@ async function showOfflineLikes(my) {
 
 async function loadAllLikes(onProgress, stale) {
   if (likes.done) return likes.tracks;
-  const lib = await api(`/users/${uid}/likes/tracks`);
+  const lib = await ym("likes");
   const ids = rememberLikes(lib).map((t) => `${t.id}:${t.albumId}`);
   const acc = [];
   for (let i = 0; i < ids.length; i += 100) {
-    const tracks = await api("/tracks", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "track-ids=" + encodeURIComponent(ids.slice(i, i + 100).join(",")),
-    });
+    const tracks = await ym("tracks", { form: { "track-ids": ids.slice(i, i + 100).join(",") } });
     if (stale()) return null;
     acc.push(...tracks);
     onProgress(acc.length, ids.length);
@@ -1624,7 +1875,7 @@ function donutColors() {
 }
 async function playAlbumById(al) {
   try {
-    const a = await api(`/albums/${al.id}/with-tracks`);
+    const a = await ym("album", { id: al.id });
     const tracks = (a.volumes || []).flat();
     tracks.forEach((t) => { if (!t.coverUri) t.coverUri = a.coverUri; });
     if (!tracks.length) return;
@@ -1634,7 +1885,10 @@ async function playAlbumById(al) {
 async function showStats() {
   const my = ++nav;
   setHead({ title: "Статистика" }); setActive("statsBtn"); renderTabs(false); resetView();
-  $("#list").hidden = true; $("#statsPage").hidden = false; $("#statsBody").hidden = true;
+  $("#list").hidden = true; $("#statsPage").hidden = false; $("#statsBody").hidden = true; $("#lsBody").hidden = true;
+  // «Записывать статистику» включена — страница прослушиваний (listenstats.js); вкладка «Лайки» — как ниже
+  if (window.lstatsShow && (await window.lstatsShow(my))) return;
+  if (my !== nav) return;
   const note = $("#stNote");
   note.textContent = "Загружаю понравившиеся треки…";
   let tracks;
@@ -1776,9 +2030,9 @@ function showWave() {
 }
 function waveFeedback(type, t, extra = {}) {
   if (!wave.on || !wave.session || !t) return;
-  api(`/rotor/session/${wave.session}/feedback`, {
-    method: "POST", headers: JSON_H,
-    body: JSON.stringify({ event: { type, timestamp: new Date().toISOString(), trackId: String(t.id), ...extra }, batchId: wave.batch }),
+  ym("rotor_feedback", {
+    id: wave.session,
+    json: { event: { type, timestamp: new Date().toISOString(), trackId: String(t.id), ...extra }, batchId: wave.batch },
   }).catch(() => {});
 }
 function markHeard(t) {
@@ -1808,13 +2062,9 @@ async function waveMoreRun() {
       try {
         let r;
         if (wave.session && k === 0) {
-          r = await api(`/rotor/session/${wave.session}/tracks`, {
-            method: "POST", headers: JSON_H, body: JSON.stringify({ queue: [String(q[q.length - 1].id)] }),
-          });
+          r = await ym("rotor_tracks", { id: wave.session, json: { queue: [String(q[q.length - 1].id)] } });
         } else {
-          r = await api("/rotor/session/new", {
-            method: "POST", headers: JSON_H, body: JSON.stringify({ seeds: [wave.seed], includeTracksInResponse: true }),
-          });
+          r = await ym("rotor_new", { json: { seeds: [wave.seed], includeTracksInResponse: true } });
           wave.session = r.radioSessionId;
         }
         wave.batch = r.batchId;
@@ -1834,18 +2084,13 @@ async function waveMoreRun() {
 }
 
 async function waveStart(autoplay = true) {
-  const r = await api("/rotor/session/new", {
-    method: "POST", headers: JSON_H,
-    body: JSON.stringify({ seeds: [wave.seed], includeTracksInResponse: true }),
-  });
+  const r = await ym("rotor_new", { json: { seeds: [wave.seed], includeTracksInResponse: true } });
   const session = r.radioSessionId;
   const okT = (t) => !dislikedIds.has(String(t.id));
   let batch = r.batchId, tracks = trackList(r).filter(okT);
   let fresh = tracks.filter((t) => !heard.has(String(t.id)));
   for (let k = 0; k < 3 && fresh.length < 3 && tracks.length; k++) {
-    const more = await api(`/rotor/session/${session}/tracks`, {
-      method: "POST", headers: JSON_H, body: JSON.stringify({ queue: [String(tracks[tracks.length - 1].id)] }),
-    });
+    const more = await ym("rotor_tracks", { id: session, json: { queue: [String(tracks[tracks.length - 1].id)] } });
     batch = more.batchId;
     const have = new Set(tracks.map((t) => String(t.id)));
     tracks = tracks.concat(trackList(more).filter((t) => okT(t) && !have.has(String(t.id))));
@@ -1883,7 +2128,7 @@ const WAVE_SETTINGS = [["moodEnergy", "mood"], ["diversity", "character"], ["lan
 
 async function loadStations(force = false) {
   if (stations.loaded && !force) return;
-  const [gr, ws] = await Promise.allSettled([api("/genres"), api("/rotor/wave/settings?language=ru")]);
+  const [gr, ws] = await Promise.allSettled([ym("genres"), ym("wave_settings", { query: { language: "ru" } })]);
   const groups = {}; let seen = 0;
   const add = (type, seed, name) => { if (!name) return; (groups[type] ||= []).push({ seed, name: String(name) }); seen++; };
   const title = (g) => g?.titles?.ru?.title || g?.title;
@@ -2010,7 +2255,7 @@ const CACHE_MAX = 40;
 async function loadAlbums(id) {
   const out = [];
   for (let p = 0; p < 5; p++) {
-    const r = await api(`/artists/${id}/direct-albums?page=${p}&page-size=100&sort-by=year`);
+    const r = await ym("artist_albums", { id, query: { page: p, "page-size": 100, "sort-by": "year" } });
     out.push(...(r.albums || []));
     if (!r.pager || out.length >= r.pager.total) break;
   }
@@ -2021,7 +2266,7 @@ function loadArtist(id) {
   if (artistCache.has(key)) { const v = artistCache.get(key); artistCache.delete(key); artistCache.set(key, v); return v; }
   if (artistCache.size >= CACHE_MAX) artistCache.delete(artistCache.keys().next().value);
   const p = Promise.all([
-    api(`/artists/${id}/brief-info`).catch(() => null),
+    ym("artist_brief", { id }).catch(() => null),
     loadAlbums(id).catch(() => []),
   ]).then(([info, albums]) => ({ info, albums }));
   p.catch(() => artistCache.delete(key));
@@ -2064,7 +2309,7 @@ async function showArtist(id, tab = "tracks") {
   let page = 0;
   const loadMore = async () => {
     try {
-      const r = await api(`/artists/${id}/tracks?page=${page}&page-size=50`);
+      const r = await ym("artist_tracks", { id, query: { page, "page-size": 50 } });
       if (my !== nav) return;
       renderList(r.tracks, page > 0); page++;
       $("#more").hidden = !(r.pager && page * 50 < r.pager.total);
@@ -2079,7 +2324,7 @@ async function showAlbum(id) {
   const my = ++nav;
   setHead({ title: "Загрузка…", back: true }); setActive(null, "album"); renderTabs(pinKey("album", id)); resetView();
   try {
-    const a = await api(`/albums/${id}/with-tracks`);
+    const a = await ym("album", { id });
     if (my !== nav) return;
     setHead({
       title: a.title, img: cover(a, "200x200"), round: false, back: true, pin: { type: "album", id: a.id, title: a.title, year: a.year },
@@ -2105,7 +2350,7 @@ async function loadSimilar(a, my) {
     let items = [], title = "Похожие альбомы";
     const sim = (info?.similarArtists || []).slice(0, 6);
     if (sim.length) {
-      const res = await Promise.allSettled(sim.map((q) => api(`/artists/${q.id}/direct-albums?page=0&page-size=20&sort-by=year`)));
+      const res = await Promise.allSettled(sim.map((q) => ym("artist_albums", { id: q.id, query: { page: 0, "page-size": 20, "sort-by": "year" } })));
       for (const r of res) {
         if (r.status !== "fulfilled") continue;
         items.push(...(r.value.albums || []).slice().sort((x, y) => albumTime(y) - albumTime(x)).slice(0, 2));
@@ -2175,11 +2420,11 @@ async function showSearch(q, historyTab = false) {
   if (tab === "history") { renderSearchHist(); return; }
 
   $("#status").textContent = "Ищу…";
-  const enc = encodeURIComponent(q), type = searchType, key = SEARCH_KEYS[type];
+  const type = searchType, key = SEARCH_KEYS[type];
   // type=all возвращает best — лучшее совпадение, которое Яндекс ставит первым; второй запрос — полный список по фильтру
   const [allR, listR] = await Promise.allSettled([
-    api(`/search?text=${enc}&type=all&page=0`),
-    api(`/search?text=${enc}&type=${type}&page=0`),
+    ym("search", { query: { text: q, type: "all", page: 0 } }),
+    ym("search", { query: { text: q, type, page: 0 } }),
   ]);
   if (my !== nav) return;
   const all = allR.status === "fulfilled" ? allR.value : null;
@@ -2331,10 +2576,11 @@ function refreshHearts() {
   setHeart($("#likeBtn"), !!t && likedIds.has(String(t.id)));
   setHeart($("#fLike"), !!t && likedIds.has(String(t.id)));
   refreshPlayerBtns();
+  thumbSync();
 }
 async function loadLikedIds() {
   try {
-    const lib = await api(`/users/${uid}/likes/tracks`);
+    const lib = await ym("likes");
     rememberLikes(lib);
     refreshHearts();
   } catch {}
@@ -2346,11 +2592,7 @@ async function toggleLike(t) {
   if (!was && dislikedIds.delete(id)) saveDislikes();       // лайк снимает «Не нравится» (Яндекс делает так же)
   refreshHearts();
   try {
-    await api(`/users/${uid}/likes/tracks/${was ? "remove" : "add-multiple"}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "track-ids=" + encodeURIComponent(albumId ? `${id}:${albumId}` : id),
-    });
+    await ym(was ? "like_remove" : "like_add", { form: { "track-ids": albumId ? `${id}:${albumId}` : id } });
     if (was) likes.tracks = likes.tracks.filter((x) => String(x.id) !== id);
     else if (likes.done) { likes.tracks = [t, ...likes.tracks.filter((x) => String(x.id) !== id)]; redrawLikes(); }
     else likesAdded.push(t);              // лайки ещё грузятся — трек добавится, когда загрузка закончится
@@ -2368,7 +2610,7 @@ function rememberDislikes(lib) {
   try { localStorage.setItem("ym_disliked_ids", JSON.stringify(ids)); } catch {}
 }
 async function loadDislikedIds() {
-  try { rememberDislikes(await api(`/users/${uid}/dislikes/tracks`)); refreshPlayerBtns(); } catch {}
+  try { rememberDislikes(await ym("dislikes")); refreshPlayerBtns(); } catch {}
 }
 function saveDislikes() { try { localStorage.setItem("ym_disliked_ids", JSON.stringify([...dislikedIds])); } catch {} }
 // «Не нравится»: трек уходит в дизлайки Яндекса (волна его больше не предложит), из лайков он убирается,
@@ -2382,11 +2624,7 @@ async function toggleDislike(t) {
   saveDislikes(); refreshHearts();
   if (!was && isCur) $("#next").click();
   try {
-    await api(`/users/${uid}/dislikes/tracks/${was ? "remove" : "add-multiple"}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "track-ids=" + encodeURIComponent(albumId ? `${id}:${albumId}` : id),
-    });
+    await ym(was ? "dislike_remove" : "dislike_add", { form: { "track-ids": albumId ? `${id}:${albumId}` : id } });
     if (!was && wasLiked) { likes.tracks = likes.tracks.filter((x) => String(x.id) !== id); redrawLikes(); }
     if (!was) showToast(`«${t.title}» — не нравится`, 5000, { kind: "ok", action: { label: "Отменить", fn: () => { if (dislikedIds.has(id)) toggleDislike(t); } } });
   } catch (e) {
@@ -2460,16 +2698,11 @@ async function lyricsSign(id, ts) {
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(`${id}${ts}`)));
   return btoa(String.fromCharCode(...sig));
 }
+// Запрос текста и сам файл текста по ссылке из ответа берёт Rust (net.rs, ym_lyrics).
 async function lyricsRaw(id, fmt) {
   const ts = Math.floor(Date.now() / 1000);
   const sign = await lyricsSign(id, ts);
-  const r = await api(`/tracks/${id}/lyrics?format=${fmt}&timeStamp=${ts}&sign=${encodeURIComponent(sign)}`);
-  if (!r?.downloadUrl) throw new Error("текста нет");
-  const url = safeUrl(r.downloadUrl);
-  if (!url) throw new Error("сервер вернул неожиданный адрес текста");
-  const d = await http(url, { headers: { "User-Agent": "Yandex-Music-API" } });
-  if (d.status < 200 || d.status >= 300) throw new Error("HTTP " + d.status);
-  return d.body;
+  return await invoke("ym_lyrics", { id: String(id), format: fmt, timeStamp: ts, sign });
 }
 async function fetchLyrics(id) {
   let body;
@@ -2481,6 +2714,53 @@ async function fetchLyrics(id) {
   return text ? { type: "text", text } : { type: "none" };
 }
 
+// ---------- источники текста ----------
+// Яндекс — основной; LRCLIB (lrclib.net, открытая база, часто с синхронизацией) — второй, запрос идёт через Rust
+// (lyrics.rs). Если у выбранного источника текста нет, берётся другой; если текста нет нигде (или нет сети) —
+// на весь экран показывается обложка.
+const LYR_SRCS = ["yandex", "lrclib"];
+const LYR_NAME = { yandex: "Яндекс", lrclib: "LRCLIB" };
+let lyrPref = (() => { try { const v = localStorage.getItem("ym_lyr_src"); return LYR_SRCS.includes(v) ? v : "yandex"; } catch { return "yandex"; } })();
+let lyrShown = "";            // источник, чей текст сейчас на экране
+async function fetchLrclib(t) {
+  const r = await invoke("lyrics_lrclib", {
+    artist: (t.artists || []).map((a) => a?.name).filter(Boolean).join(", "),
+    title: String(t.title || ""),
+    album: t.albums?.[0]?.title || null,
+    duration: t.durationMs ? t.durationMs / 1000 : null,
+  });
+  if (!r) return { type: "none" };
+  if (r.synced) { const lines = parseLrc(r.synced); if (lines.length >= 3) return { type: "lrc", lines }; }
+  if (r.plain && r.plain.trim()) return { type: "text", text: r.plain.replace(/\r/g, "").trim() };
+  if (r.instrumental) return { type: "instr" };
+  return { type: "none" };
+}
+async function lyricsFrom(t, src) {
+  const key = String(t.id) + ":" + src;
+  let res = lyricsCache.get(key);
+  if (res) return res;
+  try { res = src === "lrclib" ? await fetchLrclib(t) : await fetchLyrics(t.id); }
+  catch { return { type: "none", err: true }; }                // ошибку сети не кэшируем — можно повторить
+  lyricsCache.set(key, res);
+  if (lyricsCache.size > 120) lyricsCache.delete(lyricsCache.keys().next().value);
+  return res;
+}
+function paintLyrSrc() {
+  for (const b of document.querySelectorAll("#fSrc [data-src]")) {
+    b.classList.toggle("on", b.dataset.src === lyrShown);
+  }
+}
+document.querySelectorAll("#fSrc [data-src]").forEach((b) => {
+  b.onclick = () => {
+    const t = queue[current];
+    if (!t) return;
+    const src = b.dataset.src;
+    lyrPref = src;
+    try { localStorage.setItem("ym_lyr_src", src); } catch {}
+    loadFullLyrics(t, src);
+  };
+});
+
 function setFullMode(m) {
   $("#full").dataset.mode = m;
   requestAnimationFrame(fitFull);
@@ -2491,7 +2771,7 @@ function fitFull() {
   if (f.dataset.mode !== "cover") { cv.style.width = cv.style.height = ""; return; }
   const box = $("#fHead");
   const avail = box.clientHeight - $("#fTitles").offsetHeight - 22;
-  const size = Math.max(120, Math.min(box.clientWidth, avail, 760));
+  const size = Math.max(120, Math.min(box.clientWidth, avail));
   cv.style.width = cv.style.height = size + "px";
 }
 window.addEventListener("resize", fitFull);
@@ -2512,18 +2792,35 @@ function renderLyrics(res) {
     box.className = "flyrics plain";
     const p = document.createElement("div"); p.className = "ptext"; p.textContent = res.text;
     box.append(p); setFullMode("lyrics");
-  } else setFullMode("cover");
+  } else if (res.type === "instr") {
+    box.className = "flyrics"; box.innerHTML = '<div class="fstatus">Инструментальная композиция — без слов</div>';
+    setFullMode("lyrics");
+  } else { box.className = "flyrics"; setFullMode("cover"); }
 }
 
-async function loadFullLyrics(t) {
+// only — источник выбран кнопкой: показываем именно его, даже если там пусто (чтобы было видно, что текста нет).
+// Иначе — сначала предпочитаемый источник, при пустом ответе — другой.
+async function loadFullLyrics(t, only = null) {
   const my = ++fullSeq;
   const box = $("#fLyrics");
-  box.className = "flyrics"; box.innerHTML = '<div class="fstatus">Ищу текст…</div>';
+  // пока ищем — обложка на весь экран; текст появится, только если он нашёлся
+  box.className = "flyrics"; box.innerHTML = "";
   fLines = []; fIdx = -1;
-  setFullMode("lyrics");
-  let res = lyricsCache.get(String(t.id));
-  if (!res) { try { res = await fetchLyrics(t.id); } catch { res = { type: "none" }; } lyricsCache.set(String(t.id), res); if (lyricsCache.size > 60) lyricsCache.delete(lyricsCache.keys().next().value); }
-  if (my !== fullSeq || $("#full").hidden) return;
+  setFullMode("cover");
+  $("#fSrc").classList.add("busy");
+  const order = only ? [only] : [lyrPref, ...LYR_SRCS.filter((s) => s !== lyrPref)];
+  let res = { type: "none" }, src = order[0], err = false;
+  for (const s of order) {
+    const r = await lyricsFrom(t, s);
+    if (my !== fullSeq || $("#full").hidden) return;
+    err ||= !!r.err;
+    if (r.type !== "none") { res = r; src = s; break; }
+  }
+  $("#fSrc").classList.remove("busy");
+  lyrShown = res.type === "none" ? "" : src;
+  // источник выбран вручную, а текста там нет — короткая подсказка поверх обложки
+  if (res.type === "none" && only) showToast(err ? `${LYR_NAME[only]}: не удалось получить текст — проверь интернет` : `У источника «${LYR_NAME[only]}» текста этой песни нет`, 3000);
+  paintLyrSrc();
   renderLyrics(res);
 }
 
@@ -2544,7 +2841,7 @@ function openFull() {
   fLast = { cur: -1, dur: -1, tc: "", td: "" };
   if (!fullRun) { fullRun = true; requestAnimationFrame(fullFrame); }
 }
-function closeFull() { $("#full").hidden = true; fullRun = false; fullSeq++; syncBgVideo(); }
+function closeFull() { $("#full").hidden = true; fullRun = false; fullSeq++; $("#fSrc").classList.remove("busy"); syncBgVideo(); }
 
 let fLast = { cur: -1, dur: -1, tc: "", td: "" };
 function fullFrame() {
@@ -2700,6 +2997,60 @@ function modal({ title, text = "", input = null, check = null, ok = "Готов�
   });
 }
 
+// ---------- скорость воспроизведения ----------
+// Ползунок 0.5–2 и пять готовых значений. Скорость общая для всех треков и запоминается между запусками;
+// высота звука сохраняется (preservesPitch). defaultPlaybackRate нужен, чтобы смена src её не сбрасывала.
+const SPEEDS = [0.5, 1, 1.25, 1.5, 2], SPEED_MIN = 0.5, SPEED_MAX = 2, SPEED_STEP = 0.05;
+const clampSpeed = (v) => Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round((+v || 1) / SPEED_STEP) * SPEED_STEP));
+let speed = (() => { try { return clampSpeed(localStorage.getItem("ym_speed") || 1); } catch { return 1; } })();
+const fmtSpeed = (v) => (+v.toFixed(2)).toString().replace(".", ",") + "×";
+function applySpeed(a) {
+  if (!a) return;
+  a.preservesPitch = true;
+  a.defaultPlaybackRate = speed;
+  if (a.playbackRate !== speed) a.playbackRate = speed;
+}
+function setSpeed(v) {
+  speed = clampSpeed(v);
+  try { localStorage.setItem("ym_speed", String(speed)); } catch {}
+  applySpeed(audio);
+  syncSpeedBadge();
+  window.discordPush?.(true); window.miniPush?.(true);     // время в Discord и мини-плеере — с новой скоростью
+}
+function syncSpeedBadge() {
+  const b = $("#pMore");
+  if (!b) return;
+  b.classList.toggle("spd", speed !== 1);
+  b.dataset.speed = speed !== 1 ? fmtSpeed(speed) : "";
+  b.title = speed !== 1 ? `Ещё · скорость ${fmtSpeed(speed)}` : "Ещё";
+}
+function menuSpeed() {
+  const box = document.createElement("div"); box.className = "mspeed";
+  const head = document.createElement("div"); head.className = "mspeedhead";
+  const lbl = document.createElement("span"); lbl.textContent = "Скорость";
+  const val = document.createElement("b"); val.textContent = fmtSpeed(speed);
+  head.append(lbl, val);
+  const r = document.createElement("input");
+  r.type = "range"; r.min = SPEED_MIN; r.max = SPEED_MAX; r.step = SPEED_STEP; r.value = speed;
+  r.setAttribute("aria-label", "Скорость воспроизведения");
+  const row = document.createElement("div"); row.className = "mspeedrow";
+  const btns = SPEEDS.map((v) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "mspd"; b.textContent = fmtSpeed(v);
+    b.onclick = (e) => { e.stopPropagation(); setSpeed(v); sync(); };
+    row.append(b); return b;
+  });
+  const sync = () => {
+    r.value = speed; fill(r); val.textContent = fmtSpeed(speed);
+    btns.forEach((b, i) => b.classList.toggle("on", Math.abs(SPEEDS[i] - speed) < 1e-6));
+  };
+  r.oninput = () => { setSpeed(r.value); sync(); };
+  r.onclick = (e) => e.stopPropagation();
+  r.ondblclick = () => { setSpeed(1); sync(); };       // двойной клик по ползунку — обычная скорость
+  box.append(head, r, row);
+  tmenu.append(box);
+  sync();
+}
+
 function openTrackMenu(t, btn, ctx = null) { openMenu(btn, () => trackMenuMain(t, ctx)); }
 function trackMenuMain(t, ctx) {
   menuReset();
@@ -2716,7 +3067,9 @@ function trackMenuMain(t, ctx) {
   menuSep();
   menuItem(got.has(String(t.id)) ? ICON.got : ICON.download, got.has(String(t.id)) ? "Уже скачан" : "Скачать трек", () => downloadTrack(t));
   window.waTrackMenu?.(t, ctx);         // «Сохранить в архив» (whisper.js)
+  window.roomTrackMenu?.(t);            // «Предложить в комнату» (together.js), если ты гость в комнате
   if (window.eqOpen) { menuSep(); menuItem(ICON.eq || "", "Эквалайзер", () => window.eqOpen()); }    // eq.js
+  if (tmenuBtn?.id === "pMore") { menuSep(); menuSpeed(); }       // скорость — только в меню нижней панели
   placeMenu();
 }
 async function trackMenuPlaylists(t, ctx) {
@@ -2745,9 +3098,6 @@ async function trackMenuPlaylists(t, ctx) {
   placeMenu();
 }
 
-const FORM_H = { "Content-Type": "application/x-www-form-urlencoded" };
-const formBody = (o) => Object.entries(o).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
-const plPath = (kind, tail = "") => `/users/${uid}/playlists/${kind}${tail}`;
 const kindOk = (k) => /^\d{1,12}$/.test(String(k));
 const plCount = (n) => { n = Number(n) || 0; return `${n} ${plural(n, ["трек", "трека", "треков"])}`; };
 const plName = (kind) => (PL.full.get(String(kind)) || PL.list?.find((p) => String(p.kind) === String(kind)))?.title || "плейлист";
@@ -2763,7 +3113,7 @@ function plErr(e) {
 
 async function plLoadList(force = false) {
   if (PL.list && !force) return PL.list;
-  return (PL.loading ||= api(`/users/${uid}/playlists/list`)
+  return (PL.loading ||= ym("playlists")
     .then((r) => (PL.list = (Array.isArray(r) ? r : []).filter((p) => p && kindOk(p.kind) && typeof p.title === "string")))
     .finally(() => { PL.loading = null; }));
 }
@@ -2777,7 +3127,7 @@ function plUpsert(p) {
 
 async function plFetch(kind) {
   kind = String(kind);
-  const p = await api(plPath(kind));
+  const p = await ym("playlist", { id: kind });
   const raw = Array.isArray(p.tracks) ? p.tracks : [];
   const items = raw.map((x) => ({ id: String(x.id ?? x.track?.id), albumId: x.albumId ?? albumOf(x.track) }));
   const list = raw.map((x) => x.track || null);
@@ -2785,7 +3135,7 @@ async function plFetch(kind) {
   for (let s = 0; s < missing.length; s += 100) {
     const part = missing.slice(s, s + 100);
     try {
-      const got = await api("/tracks", { method: "POST", headers: FORM_H, body: "track-ids=" + encodeURIComponent(part.map((i) => items[i].albumId ? `${items[i].id}:${items[i].albumId}` : items[i].id).join(",")) });
+      const got = await ym("tracks", { form: { "track-ids": part.map((i) => items[i].albumId ? `${items[i].id}:${items[i].albumId}` : items[i].id).join(",") } });
       const byId = new Map((got || []).map((t) => [String(t.id), t]));
       for (const i of part) list[i] = byId.get(items[i].id) || null;
     } catch {}
@@ -2803,7 +3153,7 @@ async function plFetch(kind) {
 let plChangeTail = "/change";
 async function plChangeRaw(kind, revision, ops) {
   try {
-    return await api(plPath(kind, plChangeTail), { method: "POST", headers: FORM_H, body: formBody({ kind, revision, diff: JSON.stringify(ops) }) });
+    return await ym(plChangeTail === "/change" ? "playlist_change" : "playlist_change_rel", { id: kind, form: { kind, revision, diff: JSON.stringify(ops) } });
   } catch (e) {
     if (plChangeTail === "/change" && /^HTTP 404/.test(e.message)) { plChangeTail = "/change-relative"; return plChangeRaw(kind, revision, ops); }
     throw e;
@@ -2909,7 +3259,7 @@ async function plMoveTrack(kind, from, to, t) {
 }
 
 async function plCreate(title, isPublic) {
-  const r = await api(`/users/${uid}/playlists/create`, { method: "POST", headers: FORM_H, body: formBody({ title, visibility: isPublic ? "public" : "private" }) });
+  const r = await ym("playlist_create", { form: { title, visibility: isPublic ? "public" : "private" } });
   if (!r || !kindOk(r.kind)) throw new Error("сервер вернул неожиданный ответ");
   if (PL.list) plUpsert({ ...r, trackCount: r.trackCount || 0 });
   return r;
@@ -2930,7 +3280,7 @@ async function plRename(kind) {
   const r = await modal({ title: "Название плейлиста", input: { value: old, placeholder: "Название плейлиста", max: 100 }, ok: "Сохранить" });
   if (!r || r.value === old) return;
   try {
-    const res = await api(plPath(kind, "/name"), { method: "POST", headers: FORM_H, body: formBody({ value: r.value }) });
+    const res = await ym("playlist_rename", { id: kind, form: { value: r.value } });
     const p = PL.full.get(kind);
     const title = res?.title || r.value;
     if (p) { p.title = title; if (Number.isFinite(res?.revision)) p.revision = res.revision; }
@@ -2945,7 +3295,7 @@ async function plDelete(kind) {
   const ok = await modal({ title: "Удалить плейлист?", text: `«${name}» будет удалён из твоей Яндекс Музыки на всех устройствах. Треки останутся в каталоге и в лайках.`, ok: "Удалить", danger: true });
   if (!ok) return;
   try {
-    await api(plPath(kind, "/delete"), { method: "POST", headers: FORM_H });
+    await ym("playlist_delete", { id: kind });
     PL.full.delete(kind);
     if (PL.list) PL.list = PL.list.filter((p) => String(p.kind) !== kind);
     const pi = pins.findIndex((p) => p.type === "playlist" && String(p.id) === kind);
@@ -3115,7 +3465,7 @@ $("#plDelete").onclick = () => curPl && plDelete(curPl);
 async function plLoadRecs(kind, my) {
   $("#plRecs").hidden = false; $("#plRecNote").textContent = "Подбираю рекомендации…"; $("#plRecList").innerHTML = "";
   try {
-    const r = await api(plPath(kind, "/recommendations"));
+    const r = await ym("playlist_recs", { id: kind });
     if (my !== nav) return;
     const p = PL.full.get(kind), have = new Set(p ? p.items.map((x) => x.id) : []);
     const tracks = (r?.tracks || []).filter((t) => t && t.id != null && !have.has(String(t.id)));
@@ -3243,8 +3593,7 @@ async function downloadTrack(t, force = false) {
   const name = artists ? `${artists} — ${t.title}` : String(t.title || id);
   showToast(`Скачиваю «${t.title}»…`, 0);
   try {
-    const url = await directLink(t.id);
-    const path = await invoke("download_track", { url, name, id, meta: trackMin(t) });
+    const path = await invoke("download_track", { name, id, meta: trackMin(t) });      // ссылку на файл Rust берёт сам по id
     got.add(id); metaSent.add(id); syncGot();
     showToast(`Сохранено: ${path}`, 5000, { kind: "ok" });
   } catch (e) {
@@ -3255,6 +3604,7 @@ async function downloadTrack(t, force = false) {
 $("#disBtn").onclick = () => toggleDislike(queue[current]);
 // «⋯» в нижней панели: то же меню, что у треков в списках, для играющего трека
 $("#pMore").innerHTML = ICON.more;
+syncSpeedBadge();
 $("#pMore").onclick = (e) => { e.stopPropagation(); const t = queue[current]; if (t) openTrackMenu(t, e.currentTarget); };
 // Кнопка «Не нравится» в нижней панели (скачивание — в меню «⋯»)
 function refreshPlayerBtns() {
@@ -3290,19 +3640,9 @@ $("#dlOpen").onclick = async () => {
   catch (e) { $("#dlNote").textContent = "Не удалось открыть папку: " + e.message; }
 };
 
+// Прямая ссылка на MP3: download-info, адрес файла и подпись (MD5 по протоколу Яндекса) получает Rust (net.rs).
 async function directLink(id) {
-  const infos = await api(`/tracks/${id}/download-info`);
-  const best = (Array.isArray(infos) ? infos : []).filter((i) => i && i.codec === "mp3").sort((a, b) => b.bitrateInKbps - a.bitrateInKbps)[0];
-  if (!best) throw new Error("для этого трека нет MP3-версии");
-  const base = safeUrl(best.downloadInfoUrl);
-  if (!base) throw new Error("сервер вернул неожиданный адрес файла");
-  const url = base + (base.includes("?") ? "&" : "?") + "format=json";
-  const info = JSON.parse((await http(url, { headers: { "User-Agent": "Yandex-Music-API" } })).body);
-  const host = String(info.host || ""), path = String(info.path || ""), ts = String(info.ts || ""), s = String(info.s || "");
-  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*$/i.test(host) || !hostTrusted(host.toLowerCase()) || !/^\/[\w\-./%]+$/.test(path) || !/^[\w-]+$/.test(ts) || !/^[\w-]+$/.test(s))
-    throw new Error("сервер вернул неожиданный адрес файла");
-  const sign = await invoke("md5_hex", { input: SALT + path.slice(1) + s });
-  return `https://${host}/get-mp3/${sign}/${ts}${path}`;
+  return await invoke("ym_track_url", { id: String(id) });
 }
 function markPlaying() {
   document.querySelectorAll(".list li").forEach((li) => li.classList.toggle("playing", li.dataset.id === String(playingId)));
@@ -3350,6 +3690,7 @@ function showTrack(t, pos = 0) {
   pt.classList.toggle("link", !!albumOf(t));
   fillArtists($("#pArtist"), t);
   swapCover(cover(t));
+  dynUpdate(t);
   const dur = (t.durationMs || 0) / 1000;
   $("#tCur").textContent = fmtTime(pos); $("#tDur").textContent = fmtTime(dur);
   $("#seek").value = dur ? (pos / dur) * 1000 : 0; fill($("#seek"));
@@ -3575,11 +3916,12 @@ setInterval(() => {
 function makeAudio(useViz) {
   const a = new Audio();
   a.volume = volume;
+  applySpeed(a);
   a.onplay = syncIcons;
   // конец трека: браузер сначала шлёт pause, потом ended. Этот pause — не остановка: ended сразу включит следующий
   // трек, а сообщи мы в Rust «не играет» — в трее страницу заморозило бы раньше, чем следующий трек загрузится.
   a.onpause = () => { if (!a.ended) syncIcons(); };
-  a.onplaying = () => { if (a === audio) { loadAt = 0; wdPos = -1; wdAt = 0; if (transit) setTransit(false); } };
+  a.onplaying = () => { applySpeed(a); if (a === audio) { loadAt = 0; wdPos = -1; wdAt = 0; if (transit) setTransit(false); } };
   a.onseeked = () => { if (a === audio) { window.discordPush?.(true); window.miniPush?.(true); } };
   a.onended = () => {
     if (a !== audio) return;
@@ -3750,7 +4092,9 @@ function vizFrame(ts) {
     vz.br = ($("#waveBtn").offsetWidth || 112) / 2;          // размер кнопки меняется только вместе с размером холста
   }
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const A = sty().cc?.vizA || sty().accent, B = sty().cc?.vizB || sty().accent2;
+  // динамический фон — визуализатор в цветах обложки (они главнее и своих цветов визуализатора)
+  const dp = dynColorsOn() && dynPal ? dynPal : null;
+  const A = dp ? dp.accent : sty().cc?.vizA || sty().accent, B = dp ? dp.accent2 : sty().cc?.vizB || sty().accent2;
   const key = `${full}|${cfg.vizStyle}|${cfg.style}|${document.documentElement.dataset.anim}|${w}x${h}|${A}|${B}`;
   const fresh = key !== vz.key;
   if (fresh) {
@@ -4121,13 +4465,13 @@ const LO = (() => {
     <circle cx="40" cy="40" r="30" fill="var(--l-deep)" stroke="var(--l-hi)" stroke-width="1.6"/>
     <circle cx="40" cy="40" r="26.5" fill="url(#loM)"/><circle cx="40" cy="40" r="26.5" fill="none" stroke="var(--l-pearl)" stroke-width=".8" stroke-dasharray="1 2.2" opacity=".8"/>${P(40, 3.5, 2.6)}${P(40, 76.5, 2.6)}${P(3.5, 40, 2.6)}${P(76.5, 40, 2.6)}
     <path d="M67 2L69 10L77 12L69 14L67 22L65 14L57 12L65 10Z" fill="#fff" opacity=".95"/><circle cx="67" cy="12" r="4" fill="#fff" opacity=".35"/></svg>`;
-  const defs = `<svg width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true"><defs>
-    <linearGradient id="loG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--l-hi)"/><stop offset=".55" style="stop-color:var(--l-mid)"/><stop offset="1" style="stop-color:var(--l-lo)"/></linearGradient>
-    <linearGradient id="loG2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--l2-hi)"/><stop offset=".55" style="stop-color:var(--l2-mid)"/><stop offset="1" style="stop-color:var(--l2-lo)"/></linearGradient>
-    <radialGradient id="loR" cx=".42" cy=".38" r=".7"><stop offset="0" style="stop-color:var(--l-hi)"/><stop offset=".55" style="stop-color:var(--l-mid)"/><stop offset="1" style="stop-color:var(--l-lo)"/></radialGradient>
-    <radialGradient id="loP" cx=".36" cy=".3" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".45" style="stop-color:var(--l-pearl)"/><stop offset="1" style="stop-color:var(--l-lo)"/></radialGradient>
+  const defs = `<svg width="0" height="0" class="lo-defs" aria-hidden="true"><defs>
+    <linearGradient id="loG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="lgs-l-hi"/><stop offset=".55" class="lgs-l-mid"/><stop offset="1" class="lgs-l-lo"/></linearGradient>
+    <linearGradient id="loG2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="lgs-l2-hi"/><stop offset=".55" class="lgs-l2-mid"/><stop offset="1" class="lgs-l2-lo"/></linearGradient>
+    <radialGradient id="loR" cx=".42" cy=".38" r=".7"><stop offset="0" class="lgs-l-hi"/><stop offset=".55" class="lgs-l-mid"/><stop offset="1" class="lgs-l-lo"/></radialGradient>
+    <radialGradient id="loP" cx=".36" cy=".3" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".45" class="lgs-l-pearl"/><stop offset="1" class="lgs-l-lo"/></radialGradient>
     <radialGradient id="loV" cx=".45" cy=".35" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-    <radialGradient id="loM" cx=".5" cy=".3" r=".8"><stop offset="0" style="stop-color:var(--l-mid)"/><stop offset=".6" style="stop-color:var(--l-lo)"/><stop offset="1" style="stop-color:var(--l-btn)"/></radialGradient>
+    <radialGradient id="loM" cx=".5" cy=".3" r=".8"><stop offset="0" class="lgs-l-mid"/><stop offset=".6" class="lgs-l-lo"/><stop offset="1" class="lgs-l-btn"/></radialGradient>
   </defs></svg>`;
   const bow2 = bow.replaceAll("url(#loG)", "url(#loG2)");
   return { bow, bow2, rose, corner, gem, cameo, medal, defs };
@@ -4158,6 +4502,24 @@ syncIcons();
   const migMsg = await migrateLegacyToken();
   const has = await tokenExists();
   if (has === null) showLogin("Не найдены команды хранилища токена: обнови Rust-часть (auth.rs и net.rs).");
-  else if (has && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); loadDislikedIds(); }
+  else if (has && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); loadDislikedIds(); warnPlainSecrets(); }
   else showLogin(migMsg);
+})();
+
+// ---------- вкладки настроек: Оформление / Плеер / Сервисы ----------
+// Карточки остаются прямыми детьми .settings (на это опираются стили и темы); видна вкладка из data-tab.
+// Карточка без data-tab (её добавил другой модуль) попадает в «Сервисы».
+(() => {
+  const page = $("#settingsPage"), TABS = ["look", "player", "services"];
+  let tab = "look";
+  try { const v = localStorage.getItem("ym_set_tab"); if (TABS.includes(v)) tab = v; } catch {}
+  function setTab(t) {
+    tab = t; page.dataset.tab = t;
+    for (const c of page.children) if (c.classList.contains("card") && !c.dataset.tab) c.dataset.tab = "services";
+    document.querySelectorAll("#setTabs .chip").forEach((b) => { const on = b.dataset.tab === t; b.classList.toggle("active", on); b.setAttribute("aria-selected", on ? "true" : "false"); });
+    try { localStorage.setItem("ym_set_tab", t); } catch {}
+  }
+  document.querySelectorAll("#setTabs .chip").forEach((b) => { b.onclick = () => { setTab(b.dataset.tab); document.querySelector(".main").scrollTop = 0; }; });
+  new MutationObserver(() => setTab(tab)).observe(page, { childList: true });
+  setTab(tab);
 })();
