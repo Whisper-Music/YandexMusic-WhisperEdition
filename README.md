@@ -1,12 +1,8 @@
-<<<<<<< Updated upstream
-# Yandex Music (Whisper Edition)
-=======
 <div align="center">
->>>>>>> Stashed changes
 
 <img src="docs/brand/logo.svg" width="128" alt="Логотип Whisper Edition" />
 
-# Yandex Music · Whisper Edition
+# Yandex Music (Whisper Edition)
 
 **Яндекс Музыка, какой она могла бы быть.**
 Неофициальный десктопный клиент, в котором музыку слушают так, как хочется тебе:
@@ -213,7 +209,7 @@ sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl xdotool
 
 ## ⚠️ Дисклеймер
 
-**Yandex Music · Whisper Edition — неофициальный сторонний проект.** Он не связан с Яндексом,
+**Yandex Music (Whisper Edition) — неофициальный сторонний проект.** Он не связан с Яндексом,
 не разрабатывается и не поддерживается компанией Яндекс. Для прослушивания нужен свой аккаунт Яндекс Музыки
 (и подписка Плюс — там, где её требует сам сервис).
 
