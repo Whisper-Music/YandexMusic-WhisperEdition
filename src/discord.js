@@ -19,6 +19,15 @@
   const call = (cmd, args) => Promise.resolve(invoke(cmd, args));
 
   // ---------- что играет ----------
+  // «Играет» — не просто audio.paused === false: плеер может стоять на загрузке, буферизации или после ошибки
+  // сети, а paused при этом остаётся false — и Discord продолжал показывать бегущее время. Поэтому раз в секунду
+  // проверяем, что позиция действительно движется; если стоит дольше STUCK_MS — сообщаем «пауза».
+  const STUCK_MS = 2500, DRIFT_MS = 3000;
+  let stuck = false, stuckSince = 0, lastCt = -1;
+  let sent = null, sentAt = 0;            // что и когда ушло в Discord — для проверки расхождения времени
+  const nominal = () => !!audio && !audio.paused && !audio.ended && !audio.error;
+  const isPlaying = () => nominal() && !stuck;
+
   function snapshot() {
     const t = typeof current === "number" && current >= 0 ? queue?.[current] : null;
     if (!t || !started || !audio) return null;
@@ -36,7 +45,7 @@
       cover: cover(t, "400x400") || "",
       durationMs: Math.round(dur / r),
       positionMs: Math.round(((audio.currentTime || 0) * 1000) / r),
-      playing: !audio.paused,
+      playing: isPlaying(),
     };
   }
   // вызывается из main.js при смене трека, паузе/воспроизведении и перемотке
@@ -47,8 +56,31 @@
     const key = s ? JSON.stringify({ ...s, positionMs: 0 }) : "";       // позиция меняется всегда — сравниваем без неё
     if (!force && key === last) return;
     last = key;
+    sent = s; sentAt = Date.now();
     call("discord_update", { track: s }).catch(() => {});
   };
+
+  // Страховка от пропущенных событий: зависание/буферизация, ошибка загрузки, смена плеера,
+  // а также расхождение времени (трек долго грузился, система «спала») — всё это ловится здесь.
+  setInterval(() => {
+    if (!dc.enabled || !started) return;
+    const now = Date.now();
+    const ct = audio ? audio.currentTime || 0 : 0;
+    let s = false;
+    if (nominal() && (ct === lastCt || audio.readyState < 3)) {
+      if (!stuckSince) stuckSince = now;
+      s = now - stuckSince >= STUCK_MS;
+    } else stuckSince = 0;
+    lastCt = ct;
+    if (s !== stuck) { stuck = s; window.discordPush(true); return; }
+    const cur = snapshot();
+    if (!cur) { if (sent) window.discordPush(true); return; }
+    if (!sent || cur.playing !== sent.playing || cur.id !== sent.id) { window.discordPush(true); return; }
+    if (cur.playing) {
+      const expected = sent.positionMs + (now - sentAt);
+      if (Math.abs(cur.positionMs - expected) > DRIFT_MS) window.discordPush(true);
+    }
+  }, 1000);
 
   // ---------- подключение ----------
   async function apply() {
@@ -111,7 +143,7 @@
     const pt = el("div", "dcptxt"); const p1 = el("b"), p2 = el("span"), p3 = el("span", "dcpalb"); pt.append(p1, p2, p3);
     pr.append(pc, pt);
     const bar = el("div", "dcbar"); const t1 = el("small"), tr = el("div", "dctrack"), fillEl = el("i"), t2 = el("small"); tr.append(fillEl); bar.append(t1, tr, t2);
-    const pbtn = el("div", "dcpbtn", "Слушать в Яндекс Музыке");
+    const pbtn = el("div", "dcpbtn", "Скачать Whisper");
     const empty = el("p", "dcempty", "Включи любой трек — здесь появится превью");
     prev.append(ph, pr, bar, pbtn, empty);
 
@@ -119,7 +151,7 @@
     const opts = el("div", "dcopts");
     opts.append(
       sw("Обложка трека", "Обложка альбома рядом со статусом", "cover"),
-      sw("Кнопка «Слушать в Яндекс Музыке»", "Другие смогут открыть трек по кнопке в профиле", "button"),
+      sw("Кнопка «Скачать Whisper»", "В профиле появится кнопка со ссылкой на GitHub, где можно скачать этот клиент", "button"),
       sw("Показывать на паузе", "Иначе статус пропадает, пока музыка на паузе", "showPaused"),
       sw("Название трека в списке участников", "Вместо названия приложения рядом с ником будет название трека", "titleStatus"),
     );
@@ -163,16 +195,17 @@
     for (const x of [m.prev.querySelector(".dcph"), m.prev.querySelector(".dcprow"), m.bar, m.pbtn]) x.hidden = !show;
     m.empty.hidden = show;
     if (!show) return;
-    const playing = audio && !audio.paused;
+    const playing = isPlaying();
     const hiddenOnPause = !playing && !dc.showPaused;
     m.prev.classList.toggle("off", hiddenOnPause || !dc.enabled);
     m.prev.title = hiddenOnPause ? "На паузе статус не показывается" : "";
     const c = dc.cover ? cover(t, "200x200") : "";
     m.pc.hidden = !c;
     if (c && m.pc.getAttribute("src") !== c) m.pc.src = c;
-    m.p1.textContent = t.title || "Без названия";
+    const title = t.title || "Без названия";
+    m.p1.textContent = playing ? title : "⏸ " + title;
     const artist = (t.artists || []).map((a) => a?.name).filter(Boolean).join(", ") || "Неизвестный исполнитель";
-    m.p2.textContent = playing ? artist : "⏸ " + artist;
+    m.p2.textContent = playing ? artist : "На паузе · " + artist;
     m.p3.textContent = t.albums?.[0]?.title || "";
     m.p3.hidden = !dc.cover || !m.p3.textContent;
     const dur = audio?.duration > 0 && isFinite(audio.duration) ? audio.duration * 1000 : t.durationMs || 0;

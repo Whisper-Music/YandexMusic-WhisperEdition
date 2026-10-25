@@ -21,6 +21,12 @@
         },
         {
           "url": "https://github.com/Whisper-Music/YandexMusic-WhisperEdition/releases/*"
+        },
+        {
+          "url": "https://github.com/Whisper-Music/whisper-themes"
+        },
+        {
+          "url": "https://github.com/Whisper-Music/whisper-themes/*"
         }
       ]
     },
@@ -45,6 +51,7 @@
     "allow-bg-dir-pick",
     "allow-bg-read",
     "allow-theme-save",
+    "allow-themelib-fetch",
     "allow-discord-config",
     "allow-discord-status",
     "allow-discord-retry",

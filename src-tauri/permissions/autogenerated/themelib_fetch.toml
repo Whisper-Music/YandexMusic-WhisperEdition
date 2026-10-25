@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-themelib-fetch"
+description = "Enables the themelib_fetch command without any pre-configured scope."
+commands.allow = ["themelib_fetch"]
+
+[[permission]]
+identifier = "deny-themelib-fetch"
+description = "Denies the themelib_fetch command without any pre-configured scope."
+commands.deny = ["themelib_fetch"]

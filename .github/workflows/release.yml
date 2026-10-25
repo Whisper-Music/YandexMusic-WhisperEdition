@@ -54,4 +54,6 @@ jobs:
           releaseBody: 'Что нового — допиши перед публикацией.'
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true          # latest.json — по нему приложение находит обновление (подписи внутри)
+          uploadUpdaterSignatures: false   # отдельные .sig в выпуске не нужны: те же подписи уже в latest.json
+          updaterJsonPreferNsis: true      # обновлять установщиком setup.exe (NSIS), а не .msi

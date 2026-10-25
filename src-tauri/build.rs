@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "bg_dir_pick",
     "bg_read",
     "theme_save",
+    "themelib_fetch",
     "wa_token_exists",
     "wa_token_set",
     "wa_token_clear",

@@ -555,7 +555,7 @@
     const page = $w("settingsPage");
     if (!page || $w("waCard")) return;
     const card = document.createElement("div");
-    card.className = "card"; card.id = "waCard"; card.dataset.tab = "services";      // вкладка «Сервисы» в настройках
+    card.className = "card colbreak"; card.id = "waCard"; card.dataset.tab = "play";      // вкладка «Воспроизведение», правый столбец
     card.innerHTML = `
       <h3>Для разработчиков</h3>
       <h4 class="devh">Whisper Archive</h4>

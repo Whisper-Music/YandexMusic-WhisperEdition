@@ -1,4 +1,4 @@
-// Обновления приложения: Настройки → Сервисы → «Обновления». Проверка и установка — в Rust (src-tauri/src/update.rs):
+// Обновления приложения: Настройки → Приложение → «Обновления». Проверка и установка — в Rust (src-tauri/src/update.rs):
 // он берёт latest.json последнего выпуска на GitHub, проверяет подпись файла и ставит новую версию.
 // Здесь — только кнопки, сообщение о новой версии и ход загрузки.
 (() => {
@@ -50,7 +50,7 @@
 
   function openSettings() {
     $("#settingsBtn")?.click();
-    document.querySelector('#settingsPage .chip[data-tab="services"]')?.click();
+    document.querySelector('#settingsPage .chip[data-tab="app"]')?.click();
     $u("updBox")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 

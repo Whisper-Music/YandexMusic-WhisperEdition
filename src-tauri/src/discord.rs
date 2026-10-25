@@ -23,6 +23,11 @@ use tauri::{AppHandle, Emitter};
 /// все копии клиента подключаются с ним к Discord на своём компьютере.
 const APP_ID: &str = "1561411272946352150";
 
+/// Кнопка в профиле Discord ведёт на страницу клиента, откуда его можно скачать.
+/// Discord принимает подпись кнопки не длиннее 32 символов.
+const BUTTON_LABEL: &str = "Скачать Whisper";
+const REPO_URL: &str = "https://github.com/Whisper-Music/YandexMusic-WhisperEdition";
+
 const RETRY: Duration = Duration::from_secs(15);
 const MIN_GAP: Duration = Duration::from_secs(4);
 
@@ -31,7 +36,7 @@ const MIN_GAP: Duration = Duration::from_secs(4);
 pub struct Config {
     pub enabled: bool,
     pub cover: bool,        // обложка трека
-    pub button: bool,       // кнопка «Слушать в Яндекс Музыке»
+    pub button: bool,       // кнопка «Скачать Whisper» (ссылка на GitHub)
     pub show_paused: bool,  // на паузе статус остаётся (иначе пропадает)
     pub title_status: bool, // в списке участников — название трека вместо названия приложения
 }
@@ -332,10 +337,12 @@ fn activity(t: &Track, at: u64, cfg: &Config, with_display: bool) -> Value {
         return Value::Null;
     }
     let artist = if t.artist.is_empty() { "Неизвестный исполнитель" } else { &t.artist };
+    // Пауза отмечается в названии трека: при status_display_type = 2 именно его Discord показывает
+    // в списке участников, и раньше там трек на паузе выглядел играющим.
     let mut a = json!({
         "type": 2, // «Слушает»
-        "details": fit(&t.title),
-        "state": fit(&if t.playing { artist.to_string() } else { format!("⏸ {artist}") }),
+        "details": fit(&if t.playing { t.title.clone() } else { format!("⏸ {}", t.title) }),
+        "state": fit(&if t.playing { artist.to_string() } else { format!("На паузе · {artist}") }),
         "assets": {},
     });
     if with_display && cfg.title_status {
@@ -351,14 +358,8 @@ fn activity(t: &Track, at: u64, cfg: &Config, with_display: bool) -> Value {
         let start = at.saturating_sub(t.position_ms);
         a["timestamps"] = json!({ "start": start, "end": start + t.duration_ms });
     }
-    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    if cfg.button && digits(&t.id) {
-        let url = if digits(&t.album_id) {
-            format!("https://music.yandex.ru/album/{}/track/{}", t.album_id, t.id)
-        } else {
-            format!("https://music.yandex.ru/track/{}", t.id)
-        };
-        a["buttons"] = json!([{ "label": "Слушать в Яндекс Музыке", "url": url }]);
+    if cfg.button {
+        a["buttons"] = json!([{ "label": BUTTON_LABEL, "url": REPO_URL }]);
     }
     a
 }

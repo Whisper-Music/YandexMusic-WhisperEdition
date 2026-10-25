@@ -12,8 +12,10 @@
   <link rel="stylesheet" href="queue.css" />
   <script src="queue.js" defer></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="themelib.css" />
   <script src="wmt.js" defer></script>
   <script src="theme.js" defer></script>
+  <script src="themelib.js" defer></script>
   <link rel="stylesheet" href="discord.css" />
   <script src="discord.js" defer></script>
   <script src="traymini.js" defer></script>
@@ -29,6 +31,8 @@
   <link rel="stylesheet" href="eq.css" />
   <script src="eq.js" defer></script>
   <link rel="stylesheet" href="layout.css" />
+  <link rel="stylesheet" href="mascot.css" />
+  <script src="mascot.js" defer></script>
   <script src="layout.js"></script>
 </head>
 <body>
@@ -161,8 +165,10 @@
       <section id="settingsPage" class="settings" data-tab="look" hidden>
         <nav class="settabs" id="setTabs" role="tablist">
           <button type="button" class="chip" data-tab="look" role="tab">Оформление</button>
-          <button type="button" class="chip" data-tab="player" role="tab">Плеер</button>
-          <button type="button" class="chip" data-tab="services" role="tab">Сервисы</button>
+          <button type="button" class="chip" data-tab="ui" role="tab">Интерфейс</button>
+          <button type="button" class="chip" data-tab="play" role="tab">Воспроизведение</button>
+          <button type="button" class="chip" data-tab="app" role="tab">Приложение</button>
+          <button type="button" class="chip" data-tab="int" role="tab">Интеграции</button>
         </nav>
         <div class="card" data-tab="look">
           <div class="stylehead">
@@ -179,10 +185,30 @@
           </div>
           <p id="styleCap" class="stylecap" aria-live="polite"></p>
         </div>
+        <div class="card" id="fxCard" data-tab="look">
+          <h3>Эффекты</h3>
+          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
+          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
+          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
+        </div>
+        <div class="card colbreak" data-tab="look">
+          <h3>Цвета</h3>
+          <div class="swrow">
+            <div class="swatches">
+              <label class="swatch"><input type="color" id="cAccent" /><span>Основной</span></label>
+              <label class="swatch"><input type="color" id="cAccent2" /><span>Второй</span></label>
+            </div>
+            <div class="swbtns">
+              <button class="nav ccopen" id="colorReset" type="button" title="Вернуть основной и второй цвета, которые заданы в теме">Цвета темы</button>
+              <button class="nav ccopen" id="ccBtn">Тонкая настройка…</button>
+            </div>
+          </div>
+        </div>
         <div class="card" data-tab="look">
           <h3>Фон</h3>
           <label class="switch" title="Фон — обложка текущего трека, цвета интерфейса берутся из неё"><input type="checkbox" id="cDyn" /><i></i><span>Динамический фон по обложке</span></label>
           <label class="slide"><span>Размытие фона</span><input type="range" id="cBlur" min="0" max="40" /></label>
+          <label class="slide"><span>Затемнение</span><input type="range" id="cDim" min="0" max="85" /></label>
           <label class="drop" id="drop">
             <input type="file" id="bgFile" accept="image/*,video/mp4,video/webm,.mp4,.webm,.m4v,.mov,.json" multiple hidden />
             <svg viewBox="0 0 24 24" width="30" height="30"><path fill="currentColor" d="M12 3l5 5h-3.5v6h-3V8H7zM5 17h14v3H5z"/></svg>
@@ -194,34 +220,18 @@
           <button class="nav palette" id="paletteBtn">✦ Подобрать цвета под фон</button>
           <div class="row">
             <button class="nav" id="bgReset">Убрать фон</button>
-            <button class="nav" id="cfgReset">Сбросить всё</button>
           </div>
           <p id="setNote" class="status"></p>
         </div>
-        <div class="card" data-tab="look">
-          <h3>Цвета</h3>
-          <div class="swrow">
-            <div class="swatches">
-              <label class="swatch"><input type="color" id="cAccent" /><span>Основной</span></label>
-              <label class="swatch"><input type="color" id="cAccent2" /><span>Второй</span></label>
-            </div>
-            <button class="nav ccopen" id="ccBtn">Тонкая настройка…</button>
-          </div>
-          <h4 id="glassTitle" class="subh">Стекло и свечение</h4>
-          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
-          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
-          <label class="slide"><span>Затемнение фона</span><input type="range" id="cDim" min="0" max="85" /></label>
-        </div>
-        <div class="card" id="layoutCard" data-tab="look">
+        <div class="card" id="layoutCard" data-tab="ui">
           <h3>Расположение</h3>
           <div class="lyrow"><span>Боковая панель</span><div class="lyseg" data-k="side"><button class="chip" data-v="left">Слева</button><button class="chip" data-v="right" title="Закреплённые альбомы и артисты тоже переедут вправо">Справа</button></div></div>
           <div class="lyrow"><span>Вид боковой панели</span><div class="lyseg" data-k="sb"><button class="chip" data-v="full">Обычный</button><button class="chip" data-v="mini" title="Узкая полоса со значками, подписи — при наведении">Свёрнутый</button></div></div>
           <div class="lyrow"><span>Нижняя панель</span><div class="lyseg" data-k="pl"><button class="chip" data-v="full">Обычная</button><button class="chip" data-v="mini" title="Кнопки и линия воспроизведения в одну строку">Свёрнутая</button></div></div>
           <div class="lyrow"><span>Время трека</span><div class="lyseg" data-k="time"><button class="chip" data-v="always">Всегда</button><button class="chip" data-v="hover" title="Время появляется при наведении на линию воспроизведения">При наведении</button></div></div>
         </div>
-        <div class="card" data-tab="player">
-          <h3>Анимации и визуализатор</h3>
-          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
+        <div class="card colbreak" data-tab="ui">
+          <h3>Визуализатор</h3>
           <label class="switch"><input type="checkbox" id="cViz" /><i></i><span>Аудиовизуализатор</span></label>
           <div id="vizStyles" class="vizstyles" hidden>
             <div class="vizpick">
@@ -231,39 +241,15 @@
             <p id="vizNote" class="status"></p>
           </div>
         </div>
-        <div class="card" data-tab="player">
-          <h3>Статистика</h3>
-          <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
-          <div class="row"><button type="button" class="nav" id="lsClear">Очистить записанное</button></div>
-        </div>
-        <div class="card" data-tab="player">
-          <h3>Трей и горячие клавиши</h3>
-          <div class="lyrow"><span>Щелчок по значку</span><div class="lyseg trseg"><button class="chip" data-v="menu" title="Правый щелчок — меню с кнопками">Кнопки</button><button class="chip" data-v="mini" title="Правый щелчок — мини-плеер с обложкой, кнопками, повтором и перемешиванием">Мини-плеер</button></div></div>
-          <p id="trayNote" class="status"></p>
-          <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
-          <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
-        </div>
-        <div class="card" data-tab="services">
-          <h3>Виджет для OBS</h3>
-          <label class="switch" title="Полупрозрачная карточка «Сейчас играет» — источник «Браузер» в OBS"><input type="checkbox" id="obsOn" /><i></i><span>Мини-плеер для стрима</span></label>
-          <div id="obsBox" class="obsbox" hidden>
-            <div class="obsurl"><input id="obsUrl" class="field" readonly spellcheck="false" /><button type="button" class="nav" id="obsCopy">Копировать</button></div>
-            <div class="lyrow"><span>Вид</span><div class="lyseg obsseg"><button class="chip" data-v="style" title="Как задано в стиле (секция whisper-obs файла темы), иначе — карточка">Как в стиле</button><button class="chip" data-v="card">Карточка</button><button class="chip" data-v="compact">Компактный</button><button class="chip" data-v="bar">Полоска</button></div></div>
-            <label class="slide" title="Двойной щелчок — как в стиле"><span>Непрозрачность фона <small id="obsAlphaVal" class="obsval"></small></span><input type="range" id="obsAlpha" min="0" max="100" /></label>
-            <label class="switch"><input type="checkbox" id="obsHide" /><i></i><span>Прятать на паузе</span></label>
-            <p id="obsNote" class="status"></p>
+        <div class="card" id="mascotCard" data-tab="ui">
+          <h3>Маскот</h3>
+          <label class="switch" title="Чёрный пиксельный кот Whisper гуляет по нижней панели: сидит, слушает, спит"><input type="checkbox" id="mcOn" /><i></i><span>Показывать маскота</span></label>
+          <div id="mcBox" hidden>
+            <div class="lyrow"><span>Размер</span><div class="lyseg" id="mcSize"><button class="chip" data-v="2">2×</button><button class="chip" data-v="3">3×</button></div></div>
+            <label class="switch" title="Кивает в такт, засыпает на долгой паузе и в режиме сна, радуется лайку"><input type="checkbox" id="mcReact" /><i></i><span>Реагирует на музыку</span></label>
           </div>
         </div>
-        <div class="card" data-tab="services">
-          <h3>Discord</h3>
-          <label class="switch" title="Показывает в профиле Discord, что сейчас играет. Подключается само, когда Discord запущен"><input type="checkbox" id="dcOn" /><i></i><span>Использовать Discord RPC</span></label>
-          <div class="dcline">
-            <span class="dcdot" id="dcDot"></span>
-            <span class="dcnote" id="dcNote">Выключено</span>
-            <button class="nav" id="dcSetup">Настроить…</button>
-          </div>
-        </div>
-        <div class="card sleepcard" data-tab="player">
+        <div class="card sleepcard" data-tab="play">
           <h3 title="Кнопка с луной в нижней панели: Моя волна под настроение, последние 3 минуты музыка плавно затихает">Режим сна</h3>
           <div class="lyrow"><span>Выключить через</span><div class="lyseg" id="slTime"></div></div>
           <div class="lyrow"><span>Когда время выйдет</span><div class="lyseg" id="slAct"><button class="chip" data-v="off">Выключить компьютер</button><button class="chip" data-v="stop">Только остановить музыку</button></div></div>
@@ -275,7 +261,7 @@
           <div class="row"><button class="nav active" id="slStart">Включить режим сна</button></div>
           <p class="status" id="slNote"></p>
         </div>
-        <div class="card" data-tab="services">
+        <div class="card colbreak" data-tab="play">
           <h3>Скачивание треков</h3>
           <div class="dlpath"><small>Папка для треков</small><span id="dlPath">—</span></div>
           <div class="row">
@@ -285,7 +271,14 @@
           </div>
           <p class="status" id="dlNote"></p>
         </div>
-        <div class="card" data-tab="services">
+        <div class="card" data-tab="app">
+          <h3>Трей и горячие клавиши</h3>
+          <div class="lyrow"><span>Щелчок по значку</span><div class="lyseg trseg"><button class="chip" data-v="menu" title="Правый щелчок — меню с кнопками">Кнопки</button><button class="chip" data-v="mini" title="Правый щелчок — мини-плеер с обложкой, кнопками, повтором и перемешиванием">Мини-плеер</button></div></div>
+          <p id="trayNote" class="status"></p>
+          <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
+          <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
+        </div>
+        <div class="card" data-tab="app">
           <h3>Обновления</h3>
           <div class="updline"><span>Версия <b id="updCur">—</b></span><button type="button" class="nav" id="updCheck">Проверить обновления</button></div>
           <label class="switch" title="Новые версии берутся с GitHub (Whisper-Music/YandexMusic-WhisperEdition), файлы проверяются по подписи"><input type="checkbox" id="updAuto" /><i></i><span>Проверять при запуске</span></label>
@@ -296,6 +289,36 @@
             <div class="row"><button type="button" class="nav active" id="updInstall">Обновить и перезапустить</button><button type="button" class="nav" id="updPage">Страница выпуска</button></div>
           </div>
           <p class="status" id="updNote"></p>
+        </div>
+        <div class="card colbreak" data-tab="app">
+          <h3>Статистика</h3>
+          <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
+          <div class="row"><button type="button" class="nav" id="lsClear">Очистить записанное</button></div>
+        </div>
+        <div class="card" id="resetCard" data-tab="app">
+          <h3>Сброс</h3>
+          <p class="status">Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.</p>
+          <div class="row"><button class="nav danger" id="cfgReset">Сбросить оформление…</button></div>
+        </div>
+        <div class="card" data-tab="int">
+          <h3>Discord</h3>
+          <label class="switch" title="Показывает в профиле Discord, что сейчас играет. Подключается само, когда Discord запущен"><input type="checkbox" id="dcOn" /><i></i><span>Использовать Discord RPC</span></label>
+          <div class="dcline">
+            <span class="dcdot" id="dcDot"></span>
+            <span class="dcnote" id="dcNote">Выключено</span>
+            <button class="nav" id="dcSetup">Настроить…</button>
+          </div>
+        </div>
+        <div class="card colbreak" data-tab="int">
+          <h3>Виджет для OBS</h3>
+          <label class="switch" title="Полупрозрачная карточка «Сейчас играет» — источник «Браузер» в OBS"><input type="checkbox" id="obsOn" /><i></i><span>Мини-плеер для стрима</span></label>
+          <div id="obsBox" class="obsbox" hidden>
+            <div class="obsurl"><input id="obsUrl" class="field" readonly spellcheck="false" /><button type="button" class="nav" id="obsCopy">Копировать</button></div>
+            <div class="lyrow"><span>Вид</span><div class="lyseg obsseg"><button class="chip" data-v="style" title="Как задано в стиле (секция whisper-obs файла темы), иначе — карточка">Как в стиле</button><button class="chip" data-v="card">Карточка</button><button class="chip" data-v="compact">Компактный</button><button class="chip" data-v="bar">Полоска</button></div></div>
+            <label class="slide" title="Двойной щелчок — как в стиле"><span>Непрозрачность фона <small id="obsAlphaVal" class="obsval"></small></span><input type="range" id="obsAlpha" min="0" max="100" /></label>
+            <label class="switch"><input type="checkbox" id="obsHide" /><i></i><span>Прятать на паузе</span></label>
+            <p id="obsNote" class="status"></p>
+          </div>
         </div>
       </section>
     </main>
