@@ -1,0 +1,41 @@
+/* Окно «Библиотека тем» (themelib.js). Рамка, фон и кнопки — от текущего стиля (.modalbox, .nav, .field). */
+.tlmodal { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 12px; }
+.tlhead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tlhead h2 { margin: 0; flex: none; }
+.tlhead .tlfind { flex: 1; min-width: 200px; }
+.tlnote { margin: 0; }
+.tlnote[hidden] { display: none; }
+.tlgrid {
+  flex: 1; min-height: 120px; overflow-y: auto; padding: 4px 6px 4px 2px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); grid-auto-rows: max-content; gap: 14px; align-content: start;
+}
+.tlcard { display: flex; flex-direction: column; min-width: 0; border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+.tlcard[hidden] { display: none; }
+.tlpv { position: relative; aspect-ratio: 16 / 10; background: rgba(255,255,255,.06); }
+.tlpv::after {      /* пока картинка грузится — мягкая полоска «загрузки» */
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.08) 50%, transparent 70%) 0 0 / 300% 100%;
+  animation: tlShimmer 1.4s linear infinite;
+}
+.tlcard.pvok .tlpv::after, .tlcard.nopv .tlpv::after { display: none; }
+.tlcard.nopv .tlpv { display: none; }
+.tlpv img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s; }
+.tlcard.pvok .tlpv img { opacity: 1; }
+@keyframes tlShimmer { to { background-position: -300% 0; } }
+:root[data-anim="off"] .tlpv::after { animation: none; }
+.tlbody { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px; min-width: 0; }
+.tlname { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tlby { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tldesc { margin: 4px 0 0; color: var(--text); opacity: .85; font-size: 13px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tldesc:empty { display: none; }
+.tlmeta { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
+.tlmeta span { font-size: 11px; color: var(--muted); padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.06); }
+.tlbtn { margin-top: auto; align-self: stretch; text-align: center; }
+.tlbody .tlbtn { margin-top: 12px; }
+.tlbtn:disabled { opacity: .55; cursor: default; }
+.tlfoot { flex: none; }
+.tlfoot .nav { flex: 1; }
+
+/* кнопка в карточке стилей настроек */
+.wmtbar .wmtlib { width: 100%; text-align: center; margin-bottom: 8px; }

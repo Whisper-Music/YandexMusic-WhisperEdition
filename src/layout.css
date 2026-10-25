@@ -24,6 +24,30 @@ html:root[data-ly-side="right"] .main[data-page="settingsBtn"] .head { max-width
 /* закладки прижаты к той же стороне; auto-отступ (а не justify-content) — чтобы при переполнении полоса листалась */
 html:root[data-ly-side="right"] .tabs > .tab:first-child { margin-left: auto; }
 
+/* ---------- свой размер панелей (перетаскивание за край, layout.js) ---------- */
+/* data-ly-sw / data-ly-ph стоят, только пока размер изменён вручную; ширина не больше 45% окна */
+html:root[data-ly-sw]:not([data-ly-sb="mini"]) .app { --sw: min(var(--ly-sw), 45vw); }
+html:root[data-ly-ph]:not([data-ly-pl="mini"]) .app { grid-template-rows: auto minmax(0, 1fr) minmax(var(--ly-ph), auto); }
+
+/* ручки лежат в промежутке между панелями (элементы сетки .app поверх областей side и player) */
+.lyhandle { position: relative; z-index: 20; touch-action: none; }
+.lyh-side { grid-area: side; justify-self: end; align-self: stretch; width: 12px; margin-right: -13px; cursor: col-resize; }
+html:root[data-ly-side="right"] .lyh-side { justify-self: start; margin-right: 0; margin-left: -13px; }
+.lyh-pl { grid-area: player; align-self: start; justify-self: stretch; height: 12px; margin-top: -13px; cursor: row-resize; }
+.lyhandle::after {
+  content: ""; position: absolute; border-radius: 3px; pointer-events: none;
+  background: var(--accent, #a78bfa); opacity: 0; transition: opacity .15s;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent, #a78bfa) 60%, transparent);
+}
+.lyh-side::after { top: 50%; left: 4px; width: 4px; height: 56px; transform: translateY(-50%); }
+.lyh-pl::after { left: 50%; top: 4px; width: 64px; height: 4px; transform: translateX(-50%); }
+.lyhandle:hover::after { opacity: .55; }
+.lyhandle.drag::after { opacity: .9; }
+/* во время перетаскивания: курсор не меняется над другими элементами, текст не выделяется */
+html.lyresizing, html.lyresizing * { user-select: none !important; }
+html.lyresizing-x, html.lyresizing-x * { cursor: col-resize !important; }
+html.lyresizing-y, html.lyresizing-y * { cursor: row-resize !important; }
+
 /* ---------- свёрнутая боковая панель ---------- */
 /* по вертикали отступы остаются от стиля (у «Королевского» и «Lolitta» там орнамент), по бокам — убираем */
 html:root[data-ly-sb="mini"] .side { position: relative; z-index: 5; padding-left: 0 !important; padding-right: 0 !important; gap: 8px; align-items: center; }

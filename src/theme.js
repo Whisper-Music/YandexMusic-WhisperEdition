@@ -613,6 +613,7 @@
     const bar = document.createElement("div");
     bar.id = "wmtBar"; bar.className = "wmtbar";
     bar.innerHTML = `
+      <button class="nav wmtlib" id="wmtLib" title="Готовые темы из репозитория Whisper-Music/whisper-themes на GitHub">Библиотека тем</button>
       <div class="row">
         <button class="nav" id="wmtLoad" title="Файл .wmt — Whisper Music Theme">Загрузить тему…</button>
         <button class="nav" id="wmtSave">Сохранить стиль в файл…</button>
@@ -647,6 +648,18 @@
       } catch (e) { note("Не удалось прочитать тему: " + (e?.message || e)); }
     })();
     return true;
+  };
+
+  // для библиотеки тем (themelib.js): установка тем же путём, что «Загрузить тему…», и версия установленной темы
+  window.wmtImport = (bytes) => importSafe(bytes);
+  window.wmtVersion = (id) => String(meta.get(id)?.manifest?.version || "");
+
+  // основной и второй цвета своего стиля — как в его файле (кнопка «Цвета темы» в настройках)
+  window.wmtDefaultColors = (id) => {
+    const t = cfg.themes.find((x) => x.id === id), mm = meta.get(id);
+    if (!t || !mm) return null;
+    const d = defaultsFrom({ tokens: mm.tokens, settings: mm.settings }, t.base);
+    return { accent: d.accent, accent2: d.accent2 };
   };
 
   // «Сбросить всё» в настройках: цвета и фон своих стилей — как в их файлах

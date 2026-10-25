@@ -12,6 +12,7 @@ mod power;
 mod secret;
 mod sleep;
 mod theme;
+mod themelib;
 mod thumbbar;
 mod update;
 mod whisper;
@@ -270,6 +271,7 @@ pub fn run() {
             sleep::sleep_cancel,
             sleep::sleep_status,
             lyrics::lyrics_lrclib,
+            themelib::themelib_fetch,
             thumbbar::thumbbar_state,
             obs::obs_config,
             obs::obs_state,

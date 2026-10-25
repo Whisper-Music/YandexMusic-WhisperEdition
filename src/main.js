@@ -842,14 +842,15 @@ function syncControls() {
     el.disabled = false;
     el.title = dynColorsOn() ? "Сейчас цвета берутся из обложки — выбери свой, и он заменит их (фон останется)" : "";
   });
+  syncColorReset();
   $("#paletteBtn").disabled = dynColorsOn();
   $("#paletteBtn").title = dynColorsOn() ? "Пока включён динамический фон, цвета берутся из обложки" : "";
   // ползунки и галочки — только для того, что у стиля есть (feature)
   const glow = feature("glow"), panels = feature("panelOpacity"), anim = feature("animations");
   $("#cGlow").closest("label").style.display = glow ? "" : "none";
   $("#cPanel").closest("label").style.display = panels ? "" : "none";
-  $("#glassTitle").textContent = glow ? (panels ? "Стекло и свечение" : "Свечение") : "Панели";
   $("#cAnim").closest("label").style.display = anim ? "" : "none";
+  $("#fxCard").style.display = glow || panels || anim ? "" : "none";      // у стиля нет ни одного эффекта — карточка не нужна
   document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
   // под списком стилей (в компактном виде): «Автор · Название» выбранного стиля
   const sel = document.querySelector(".stylecard.on"), cap = $("#styleCap");
@@ -863,10 +864,40 @@ function manualColors() {
   syncControls();
   showToast("Цвета выбраны вручную, фон по обложке остался", 6000, { kind: "ok", action: { label: "Вернуть цвета обложки", fn: () => { cfg.dynColors = true; saveCfg(); applyCfg(); syncControls(); } } });
 }
+// «Цвета темы»: основной и второй цвета — как задумал автор стиля (встроенного или из файла .wmt).
+// Остальные настройки стиля (свечение, прозрачность, «Тонкая настройка») не трогаются.
+function themeColors(st = cfg.style) {
+  if (STYLE_DEF[st]) return { accent: STYLE_DEF[st].accent, accent2: STYLE_DEF[st].accent2 };
+  return window.wmtDefaultColors?.(st) || null;
+}
+function syncColorReset() {
+  const b = $("#colorReset");
+  if (!b) return;
+  const d = themeColors(), s = sty();
+  const same = !!d && !dynColorsOn() && s.accent?.toLowerCase() === d.accent.toLowerCase() && s.accent2?.toLowerCase() === d.accent2.toLowerCase();
+  b.disabled = !d || same;
+  b.title = !d ? "Цвета темы пока не загружены"
+    : same ? "Сейчас и так стоят цвета темы"
+    : dynColorsOn() ? "Вернуть цвета темы вместо цветов обложки (фон по обложке останется)"
+    : "Вернуть основной и второй цвета, которые заданы в теме";
+}
+$("#colorReset")?.addEventListener("click", () => {
+  const d = themeColors();
+  if (!d) return;
+  const s = sty(), prev = { accent: s.accent, accent2: s.accent2 }, wasDyn = dynColorsOn();
+  if (wasDyn) cfg.dynColors = false;
+  s.accent = d.accent; s.accent2 = d.accent2;
+  applyCfg(); saveCfg(); syncControls();
+  showToast("Цвета темы возвращены", 5000, { kind: "ok", action: { label: "Отменить", fn: () => {
+    Object.assign(sty(), prev);
+    if (wasDyn) cfg.dynColors = true;
+    applyCfg(); saveCfg(); syncControls();
+  } } });
+});
 for (const [id, key, num] of SLIDERS) {
   const el = $(id);
   el.addEventListener("input", () => { if (key === "accent" || key === "accent2") manualColors(); setv(key, num ? +el.value : el.value); applyCfg(); });      // пока тянешь — только применяем
-  el.addEventListener("change", () => saveCfg());                                                     // на диск — когда отпустил
+  el.addEventListener("change", () => { saveCfg(); syncColorReset(); });                              // на диск — когда отпустил
 }
 document.querySelectorAll("input[type=range]").forEach((el) => el.addEventListener("input", () => fill(el)));
 document.querySelectorAll(".stylecard").forEach((b) => (b.onclick = () => { cfg.style = b.dataset.style; applyCfg(); saveCfg(); syncControls(); }));
@@ -1120,6 +1151,7 @@ window.__TAURI__.event?.listen("bg-drop", (e) => {
 });
 $("#bgReset").onclick = async () => { await clearBg(); applyCfg(); saveCfg(); };
 $("#cfgReset").onclick = async () => {
+  if (!(await modal({ title: "Сбросить оформление?", text: "Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.", ok: "Сбросить", danger: true }))) return;
   const keep = cfg.style, themes = cfg.themes;
   for (const st of Object.keys(cfg.s)) await clearBg(st);
   cfg = freshCfg(); cfg.themes = themes;
@@ -3969,7 +4001,8 @@ const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.s
 // анализ звука нужен, когда визуализатор включён и его видно (играет волна или открыта страница волны)
 // Звуковой граф (Web Audio) нужен ещё и эквалайзеру (eq.js): с ним трек идёт через фильтры. Без визуализатора
 // и с выключенным эквалайзером граф не создаётся вовсе — звук играет напрямую, без лишней работы.
-function vizWanted() { return (cfg.viz && (wave.on || !$("#wavePage").hidden)) || !!window.eqActive?.(); }
+// консольный визуализатор (cli.js → visual, cat vibe) тоже просит анализ звука: window.cliVizOn
+function vizWanted() { return (cfg.viz && (wave.on || !$("#wavePage").hidden)) || !!window.eqActive?.() || !!window.cliVizOn; }
 function applyViz() {
   waveOrbitsSync();
   $("#viz").hidden = !cfg.viz;
@@ -4506,16 +4539,18 @@ syncIcons();
   else showLogin(migMsg);
 })();
 
-// ---------- вкладки настроек: Оформление / Плеер / Сервисы ----------
+// ---------- вкладки настроек: Оформление / Интерфейс / Воспроизведение / Приложение / Интеграции ----------
 // Карточки остаются прямыми детьми .settings (на это опираются стили и темы); видна вкладка из data-tab.
-// Карточка без data-tab (её добавил другой модуль) попадает в «Сервисы».
+// Два столбца: карточки вкладки идут в порядке разметки, первая карточка правого столбца помечена .colbreak.
+// Карточка без data-tab (её добавил другой модуль) попадает в «Интеграции».
 (() => {
-  const page = $("#settingsPage"), TABS = ["look", "player", "services"];
+  const page = $("#settingsPage"), TABS = ["look", "ui", "play", "app", "int"];
+  const OLD = { player: "play", services: "int" };      // вкладки до перестановки
   let tab = "look";
-  try { const v = localStorage.getItem("ym_set_tab"); if (TABS.includes(v)) tab = v; } catch {}
+  try { let v = localStorage.getItem("ym_set_tab"); v = OLD[v] || v; if (TABS.includes(v)) tab = v; } catch {}
   function setTab(t) {
     tab = t; page.dataset.tab = t;
-    for (const c of page.children) if (c.classList.contains("card") && !c.dataset.tab) c.dataset.tab = "services";
+    for (const c of page.children) if (c.classList.contains("card") && !c.dataset.tab) c.dataset.tab = "int";
     document.querySelectorAll("#setTabs .chip").forEach((b) => { const on = b.dataset.tab === t; b.classList.toggle("active", on); b.setAttribute("aria-selected", on ? "true" : "false"); });
     try { localStorage.setItem("ym_set_tab", t); } catch {}
   }

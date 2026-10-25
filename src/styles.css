@@ -157,11 +157,20 @@ input[type=range]::-webkit-slider-thumb {
 .wavehint { margin: 0; color: var(--muted); text-align: center; max-width: min(420px, 100%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* настройки: вкладки сверху, карточки в две колонки (на узком окне — в одну) */
-.settings { display: block; columns: 2 400px; column-gap: 14px; max-width: 1000px; padding-bottom: 20px; }
+/* Настройки: два столбца блоков. Какой блок в каком столбце — решает разметка, а не браузер: карточки вкладки идут
+   по порядку, а с карточки .colbreak начинается правый столбец (break-before: column). Так порядок не прыгает,
+   когда раскрывается вложенная настройка. В узком окне — один столбец. */
+.settings { display: block; columns: 1; column-gap: 14px; max-width: 1000px; padding-bottom: 20px; }
 .settings > * { break-inside: avoid; margin-bottom: 14px; }
+@media (min-width: 1100px) {
+  .settings { columns: 2; }
+  .settings > .card.colbreak { break-before: column; }
+}
 .settings[data-tab="look"] > .card:not([data-tab="look"]),
-.settings[data-tab="player"] > .card:not([data-tab="player"]),
-.settings[data-tab="services"] > .card:not([data-tab="services"]) { display: none; }
+.settings[data-tab="ui"] > .card:not([data-tab="ui"]),
+.settings[data-tab="play"] > .card:not([data-tab="play"]),
+.settings[data-tab="app"] > .card:not([data-tab="app"]),
+.settings[data-tab="int"] > .card:not([data-tab="int"]) { display: none; }
 .settabs { column-span: all; display: flex; flex-wrap: wrap; gap: 8px; }
 .settabs .chip { padding: 8px 16px; font-size: 14px; }
 .card { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
@@ -612,7 +621,11 @@ a { color: var(--accent); }
    а при включённом визуализаторе всё дышит в такт: --kick (0…1) приходит из анализатора на каждый удар бочки,
    и волны 4–5 запускаются ровно на удар, а не по таймеру. */
 @property --orb-h { syntax: "<number>"; inherits: true; initial-value: 0; }
-:root[data-style="neon"] .stage { --viz-gap: 46px; }      /* визуализатор начинается снаружи орбит */
+:root[data-style="neon"]:not([data-anim="off"]) .stage { --viz-gap: 46px; }      /* визуализатор начинается снаружи орбит */
+/* без анимаций неподвижные кольца и огоньки на рамке смотрятся как случайные полосы — убираем их совсем;
+   включатся анимации — вернутся вместе с ними */
+:root[data-style="neon"][data-anim="off"] .waveorbits,
+:root[data-style="neon"][data-anim="off"] .player::before { display: none; }
 :root[data-style="neon"] .waveorbits {
   display: block; position: absolute; left: 50%; top: 50%; z-index: 0; width: 112px; height: 112px; pointer-events: none;
   translate: -50% -50%;
@@ -2041,7 +2054,9 @@ body.vizfull-on .thbtns { visibility: hidden; }
 .lkfind[hidden] { display: none; }
 .lkfind > svg { position: absolute; left: 14px; color: var(--muted); pointer-events: none; }
 .lkfind > svg { z-index: 1; color: color-mix(in srgb, var(--text) 70%, transparent); filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
-.lkfind .lkfindin { flex: 1; min-width: 0; padding-left: 38px; padding-right: 110px; }
+/* отступы под лупу и счётчик — !important: темы задают полям поиска свой padding (.search { padding: … }),
+   и без этого лупа оказывалась поверх текста */
+.lkfind .lkfindin { flex: 1; min-width: 0; padding-left: 38px !important; padding-right: 110px !important; }
 /* счётчик — внутри поля, на том же тёмном фоне, левее крестика очистки */
 .lkfindcnt {
   position: absolute; right: 40px; top: 50%; transform: translateY(-50%); pointer-events: none;
@@ -2265,6 +2280,8 @@ body.room-guest #seek, body.room-guest #fSeek { cursor: default; }
 .card .subh { margin: 4px 0 -4px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: none; }
 .swrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .swrow .ccopen { flex: none; }
+.swbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+.swbtns #colorReset:disabled { opacity: .45; cursor: default; }
 
 /* ---------- статистика прослушиваний ---------- */
 .lsbody { display: flex; flex-direction: column; gap: 16px; }
@@ -2345,6 +2362,15 @@ body.cli-on .cli {
 .cli-in { flex: none; display: flex; align-items: center; gap: 8px; }
 .cli-ps { flex: none; color: var(--accent2); }
 .cli-in input { flex: 1; min-width: 0; border: 0; outline: none; padding: 0; background: transparent; color: inherit; font: inherit; caret-color: var(--accent); text-shadow: inherit; }
+/* скрытые команды: рисунки из символов (.cl.art), живые анимации (.cl.live), образцы цветов в fetch, режим party */
+.cli .cl.art { white-space: pre; overflow-wrap: normal; overflow: hidden; line-height: 1.2; }
+.cli .cl.live { color: var(--accent); line-height: 1.05; }
+.cli .cl .sw1 { color: var(--accent); } .cli .cl .sw2 { color: var(--accent2); }
+.cli .cl .sw3 { color: color-mix(in srgb, var(--accent) 50%, var(--accent2)); } .cli .cl .sw4 { color: #ff6b6b; }
+.cli-probe { position: absolute; visibility: hidden; white-space: pre; pointer-events: none; }
+.cli.party { animation: cliParty 4s linear infinite; }
+@keyframes cliParty { to { filter: hue-rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cli.party { animation-duration: 20s; } }
 
 /* Градиенты декора Lolitta (main.js, LO.defs): цвета из переменных задаются классами, а не атрибутом style —
    CSP приложения запрещает встроенные стили (аудит F-11). */
