@@ -152,7 +152,8 @@ mod imp {
             let _ = f.set_permissions(fs::Permissions::from_mode(0o600));
         }
         let mut t = String::new();
-        f.by_ref().take(MAX_SECRET).read_to_string(&mut t).ok()?;
+        // Read::by_ref явно: в области видимости и Read, и Write (у File оба трейта дают by_ref → E0034)
+        Read::by_ref(&mut f).take(MAX_SECRET).read_to_string(&mut t).ok()?;
         let t = t.trim().to_string();
         (!t.is_empty()).then_some(t)
     }
