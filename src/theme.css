@@ -22,6 +22,10 @@
 .tbnotice:hover { background: rgba(228, 104, 92, .98); }
 .tbnotice svg { flex: none; }
 .tbnotice span { overflow: hidden; text-overflow: ellipsis; }
+/* режим без интернета: своя плашка на том же месте, плашка о Плюсе в это время скрыта */
+.tbnotice.offnotice { background: rgba(92, 96, 120, .94); }
+.tbnotice.offnotice:hover { background: rgba(110, 114, 140, .98); }
+body.offline #plusNotice { display: none; }
 
 /* ---- заголовок списка стилей и переключатель вида ---- */
 .stylehead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

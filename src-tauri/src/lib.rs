@@ -1,8 +1,11 @@
+mod audiodev;
 mod auth;
 mod bg;
+mod deeplink;
 mod desktop;
 mod discord;
 mod download;
+mod engine;
 mod hotkeys;
 mod lyrics;
 mod mini;
@@ -135,6 +138,7 @@ fn no_autofill(_: &tauri::WebviewWindow) {}
 pub(crate) fn show_main(app: &tauri::AppHandle) {
     power::leave(app);
     if let Some(w) = app.get_webview_window("main") {
+        winstate::show_first(&w); // окно ещё не показывалось с запуска — показать как при запуске (с развёрнутостью)
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
@@ -163,7 +167,9 @@ pub fn run() {
         // а достаёт уже запущенное окно — в том числе из трея. В Linux это ещё и страховка:
         // в GNOME без расширения AppIndicator значка в трее не видно вовсе, и без этого
         // спрятанное окно было бы не вернуть.
+        // Ссылку whisper://, открытую при уже запущенном приложении, он же передаёт плагину deep-link (deeplink.rs).
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("nav-guard")
                 .on_navigation(|webview, url| nav_allowed(webview.label(), url))
@@ -216,10 +222,21 @@ pub fn run() {
             win_drag,
             win_set_fullscreen,
             tray_playing,
+            audiodev::audio_devices_unlock,
+            audiodev::audio_endpoints,
+            // свой звуковой движок (эксклюзивный WASAPI)
+            engine::engine_available,
+            engine::engine_load,
+            engine::engine_play,
+            engine::engine_pause,
+            engine::engine_seek,
+            engine::engine_stop,
+            engine::engine_gain,
             // Яндекс Музыка: только именованные операции (net.rs, OPS), без произвольных адресов и методов
             net::ym_read,
             net::ym_write,
             net::ym_track_url,
+            net::ym_track_format,
             net::ym_lyrics,
             net::fetch_bytes,
             desktop::desktop_wallpaper,
@@ -258,6 +275,7 @@ pub fn run() {
             whisper::wa_room_state,
             whisper::wa_room_suggest,
             whisper::wa_room_dismiss,
+            whisper::wa_room_transfer,
             discord::discord_config,
             discord::discord_status,
             discord::discord_retry,
@@ -277,15 +295,19 @@ pub fn run() {
             obs::obs_state,
             obs::obs_theme,
             update::update_check,
-            update::update_install
+            update::update_install,
+            deeplink::room_link_take,
+            winstate::app_ready
         ])
         .setup(|app| {
             secret::init(app.handle());
+            deeplink::init(app.handle()); // ссылки whisper://room/КОД (приглашения в комнату)
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_min_size(Some(tauri::LogicalSize::new(780.0, 540.0)));
                 let _ = w.set_decorations(false);
-                winstate::restore(&w); // размер и место с прошлого запуска; окно создано скрытым и показывается здесь
+                winstate::restore(&w); // размер и место с прошлого запуска; окно создано скрытым, показывает его страница (app_ready), когда применит стиль
                 no_autofill(&w);
+                audiodev::init(&w); // микрофон запрещён; разовое разрешение — только для списка устройств вывода
                 thumbbar::init(app.handle(), &w); // кнопки под миниатюрой окна на панели задач (Windows)
             }
             let prev = MenuItem::with_id(app, "prev", "Предыдущий", true, None::<&str>)?;

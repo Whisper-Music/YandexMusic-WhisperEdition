@@ -488,19 +488,54 @@ fn mp3_link(host: &str, path: &str, ts: &str, s: &str) -> Result<String, String>
     Ok(format!("https://{host}/get-mp3/{sign}/{ts}{path}"))
 }
 
+/// Какой файл трека играл последним (кодек, битрейт, сколько вариантов было) — для «Сведений о формате»
+/// во вкладке «Звук» и в меню «⋯». Запоминаются последние ~300 треков, без лишних запросов к Яндексу.
+#[derive(Clone, serde::Serialize)]
+pub struct TrackFormat {
+    codec: String,
+    bitrate: u64,
+    /// все MP3-варианты, которые отдал download-info (кбит/с, по убыванию)
+    options: Vec<u64>,
+}
+
+fn format_cache() -> &'static std::sync::Mutex<HashMap<String, TrackFormat>> {
+    static C: OnceLock<std::sync::Mutex<HashMap<String, TrackFormat>>> = OnceLock::new();
+    C.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
 /// Прямая ссылка на MP3 трека (лучшее качество): download-info → JSON с host/path → подпись.
 pub async fn track_mp3_url(id: &str) -> Result<String, String> {
+    track_url_q(id, false).await
+}
+
+/// То же, с выбором качества: low = самый маленький битрейт (экономия трафика), иначе самый большой.
+/// download-info отдаёт только MP3/AAC с публичной подписью; lossless (FLAC) идёт другим, защищённым каналом
+/// Яндекса, и здесь не поддерживается.
+pub async fn track_url_q(id: &str, low: bool) -> Result<String, String> {
     if !id_ok(Id::Item, id) {
         return Err("Некорректный номер трека".into());
     }
     let infos = api_result("track_download_info", id, None).await?;
-    let best = infos
+    let mp3: Vec<&serde_json::Value> = infos
         .as_array()
         .into_iter()
         .flatten()
         .filter(|i| i.get("codec").and_then(|c| c.as_str()) == Some("mp3"))
-        .max_by_key(|i| i.get("bitrateInKbps").and_then(|b| b.as_u64()).unwrap_or(0))
+        .collect();
+    let kbps = |i: &&serde_json::Value| i.get("bitrateInKbps").and_then(|b| b.as_u64()).unwrap_or(0);
+    let best = if low { mp3.iter().min_by_key(|i| kbps(i)) } else { mp3.iter().max_by_key(|i| kbps(i)) }
+        .copied()
         .ok_or("для этого трека нет MP3-версии")?;
+    {
+        let mut options: Vec<u64> = mp3.iter().map(kbps).collect();
+        options.sort_unstable_by(|a, b| b.cmp(a));
+        options.dedup();
+        let mut c = format_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if c.len() > 300 {
+            c.clear();
+        }
+        c.insert(id.to_string(), TrackFormat { codec: "mp3".into(), bitrate: kbps(&best), options });
+    }
     let raw = best.get("downloadInfoUrl").and_then(|u| u.as_str()).unwrap_or("");
     let mut url = checked_url(raw).map_err(|_| "сервер вернул неожиданный адрес файла".to_string())?;
     url.query_pairs_mut().append_pair("format", "json");
@@ -515,9 +550,16 @@ pub async fn track_mp3_url(id: &str) -> Result<String, String> {
 }
 
 /// Ссылка для плеера <audio> (подпись MD5 теперь считает Rust — команды md5_hex больше нет).
+/// quality: "low" — экономное (наименьший битрейт), иначе лучшее.
 #[tauri::command]
-pub async fn ym_track_url(id: String) -> Result<String, String> {
-    track_mp3_url(&id).await
+pub async fn ym_track_url(id: String, quality: Option<String>) -> Result<String, String> {
+    track_url_q(&id, quality.as_deref() == Some("low")).await
+}
+
+/// Формат файла, который играл у трека (из памяти, без запроса к Яндексу). None — трек не загружался из сети.
+#[tauri::command]
+pub fn ym_track_format(id: String) -> Option<TrackFormat> {
+    format_cache().lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
 }
 
 /// Текст песни: /tracks/{id}/lyrics (подпись sign считает интерфейс по открытому ключу протокола)
@@ -558,8 +600,22 @@ async fn read_limited(mut resp: reqwest::Response, max: usize) -> Result<Vec<u8>
     Ok(buf)
 }
 
+/// Сколько больших файлов (треки целиком: скачивание, свой движок, «Сохранить в архив», трек архива)
+/// может одновременно лежать в памяти. Каждый — до 120/400 МБ, поэтому без ограничения быстрые
+/// переключения треков или десятки параллельных вызовов могли съесть всю память.
+/// Лишние запросы ждут своей очереди (у каждой загрузки свой таймаут, так что очередь не встанет навсегда).
+const HEAVY_PARALLEL: usize = 3;
+
+pub struct HeavySlot(#[allow(dead_code)] tokio::sync::SemaphorePermit<'static>);
+
+pub async fn heavy_slot() -> Result<HeavySlot, String> {
+    static S: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(HEAVY_PARALLEL);
+    S.acquire().await.map(HeavySlot).map_err(|_| "Очередь загрузок закрыта".to_string())
+}
+
 async fn fetch_checked(url: &str) -> Result<Vec<u8>, String> {
     let url = checked_url(url)?;
+    let _slot = heavy_slot().await?;
     let resp = media_client()
         .get(url)
         .send()

@@ -22,6 +22,7 @@
       }
     ],
     "security": {
+      "capabilities": ["default", "yandex-read", "yandex-write", "secrets", "archive", "mini"],
       "csp": {
         "default-src": "'none'",
         "script-src": "'self'",
@@ -44,6 +45,11 @@
       ],
       "windows": {
         "installMode": "passive"
+      }
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["whisper"]
       }
     }
   },

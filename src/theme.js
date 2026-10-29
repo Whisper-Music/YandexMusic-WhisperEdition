@@ -520,7 +520,7 @@
   async function exportCurrent() {
     const st = cfg.style;
     try {
-      note("Собираю файл…");
+      note("Файл собирается…");
       const { manifest, data, archive } = await buildFile(st);
       // двоичные данные уходят в Rust одним куском, без перевода в JSON
       const path = await window.__TAURI__.core.invoke("theme_save", data, { headers: { "x-theme-name": encodeURIComponent(manifest.name) } });
@@ -627,7 +627,7 @@
       const f = file.files[0]; file.value = "";
       if (!f) return;
       if (f.size > WMT.MAX_FILE) { note(`Файл темы больше ${WMT.MAX_FILE / 1048576} МБ`); return; }
-      note("Загружаю тему…");
+      note("Тема загружается…");
       await importSafe(new Uint8Array(await f.arrayBuffer()));         // текст или архив — разберётся WMT.open
     };
     document.getElementById("wmtSave").onclick = exportCurrent;
@@ -704,6 +704,7 @@
     }
     if (changed) saveCfg();
     applyCfg(); renderCards();
+    window.bootMark?.("themes");      // boot.js: CSS своих тем подключены — можно показывать интерфейс
   })();
 
   window.wmtInternals = { splitTop, scopeSel, scopeCss, cssParse, extractCss, buildFile, importText };      // для отладки и тестов

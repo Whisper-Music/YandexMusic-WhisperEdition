@@ -42,7 +42,7 @@ fn clean(s: &str, max: usize) -> String {
 }
 
 async fn get_json(url: Url) -> Result<Option<Value>, String> {
-    let r = client().get(url).send().await.map_err(|e| format!("LRCLIB недоступен: {e}"))?;
+    let mut r = client().get(url).send().await.map_err(|e| format!("LRCLIB недоступен: {e}"))?;
     if r.status().as_u16() == 404 {
         return Ok(None);
     }
@@ -52,9 +52,13 @@ async fn get_json(url: Url) -> Result<Option<Value>, String> {
     if r.content_length().is_some_and(|n| n as usize > MAX_BODY) {
         return Err("LRCLIB: слишком большой ответ".into());
     }
-    let b = r.bytes().await.map_err(|e| e.to_string())?;
-    if b.len() > MAX_BODY {
-        return Err("LRCLIB: слишком большой ответ".into());
+    // кусками и с обрывом на лимите: без Content-Length (chunked) bytes() прочитал бы ответ любого размера
+    let mut b: Vec<u8> = Vec::new();
+    while let Some(chunk) = r.chunk().await.map_err(|e| e.to_string())? {
+        if b.len() + chunk.len() > MAX_BODY {
+            return Err("LRCLIB: слишком большой ответ".into());
+        }
+        b.extend_from_slice(&chunk);
     }
     serde_json::from_slice(&b).map(Some).map_err(|_| "LRCLIB: непонятный ответ".to_string())
 }

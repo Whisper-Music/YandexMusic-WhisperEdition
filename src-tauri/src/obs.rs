@@ -20,6 +20,13 @@ use std::time::Duration;
 
 const PORTS: [u16; 6] = [47821, 47822, 47823, 47824, 47825, 47826];
 const WIDGET: &str = include_str!("../obs/widget.html");
+const WIDGET_JS: &str = include_str!("../obs/widget.js");
+/// Политика страницы виджета. Название трека, исполнитель и CSS темы приходят извне (Яндекс, файлы .wmt
+/// из библиотеки тем): даже если в них окажется разметка или хитрый CSS, OBS не выполнит чужой скрипт
+/// (только /widget.js), а CSS не сможет «позвонить» на чужой адрес (картинки — только обложки Яндекса).
+const WIDGET_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+    img-src 'self' data: https://*.yandex.net https://*.yandex.ru; font-src 'self' data:; connect-src 'self'; \
+    base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const MAX_STATE: usize = 64 * 1024;
 const MAX_CSS: usize = 1024 * 1024;
 const MAX_CONN: usize = 8;
@@ -49,7 +56,7 @@ fn load_key(app: &tauri::AppHandle) -> Result<String, String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        o.mode(0o600);
+        o.mode(0o600).custom_flags(libc::O_NOFOLLOW); // подложенная ссылка не перезапишет чужой файл
     }
     o.open(&path).and_then(|mut f| f.write_all(k.as_bytes())).map_err(|e| e.to_string())?;
     Ok(k)
@@ -89,7 +96,7 @@ static STOP: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 fn respond(s: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) {
     let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: {WIDGET_CSP}\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n",
         body.len()
     );
     let _ = s.write_all(head.as_bytes());
@@ -150,6 +157,7 @@ fn handle(mut s: TcpStream, port: u16) {
     match path {
         // сама страница виджета секретов не содержит; данные она берёт по ключу из своего адреса
         "/" | "/widget" => respond(&mut s, "200 OK", "text/html; charset=utf-8", WIDGET.as_bytes()),
+        "/widget.js" => respond(&mut s, "200 OK", "text/javascript; charset=utf-8", WIDGET_JS.as_bytes()),
         "/state" => {
             let body = json!({
                 "state": *sh.state.lock().unwrap(),

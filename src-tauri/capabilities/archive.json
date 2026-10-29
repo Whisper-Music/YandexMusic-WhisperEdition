@@ -19,6 +19,8 @@
     "allow-wa-room-leave",
     "allow-wa-room-state",
     "allow-wa-room-suggest",
-    "allow-wa-room-dismiss"
+    "allow-wa-room-dismiss",
+    "allow-wa-room-transfer",
+    "allow-room-link-take"
   ]
 }

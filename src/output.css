@@ -1,0 +1,48 @@
+/* Устройство вывода (output.js): список во вкладке настроек «Звук» и подменю в «⋯» нижней панели */
+.outlist { display: flex; flex-direction: column; gap: 6px; }
+.outdev {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px;
+  border-radius: 12px; border: 1px solid transparent; background: rgba(0,0,0,.18);
+  color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.outdev:hover { background: rgba(255,255,255,.07); }
+.outdev.on { border-color: var(--accent); }
+.outdev .odot {
+  flex: none; display: grid; place-items: center; width: 16px; height: 16px;
+  border-radius: 50%; border: 2px solid var(--muted); box-sizing: border-box;
+}
+.outdev.on .odot { border-color: var(--accent); }
+.outdev.on .odot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.outdev .olbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outdev small { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+/* «i» рядом с заголовком карточки: пояснение при наведении (title) */
+.card h3 .hint {
+  display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 6px; vertical-align: 1px;
+  border-radius: 50%; border: 1px solid var(--muted); color: var(--muted);
+  font: italic 600 10px/1 Georgia, serif; cursor: help; opacity: .75;
+}
+.card h3 .hint:hover { opacity: 1; color: var(--text); border-color: var(--text); }
+/* предупреждение перед эксклюзивным режимом (engine.js) */
+.exclbox { max-width: 460px; }
+.excllist { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.excllist li::marker { color: var(--accent); }
+:root[data-style="royal"] .outdev { border-radius: 4px; }
+:root[data-style="steam"] .outdev { border-radius: 3px; }
+:root[data-style="lolitta"] .outdev { color: var(--l-ink, var(--text)); }
+
+/* нормализация (sound.js): настройки под режимом бледнеют, когда нормализация выключена */
+.nmbox { display: flex; flex-direction: column; gap: 14px; transition: opacity .15s; }
+.nmbox.off { opacity: .45; pointer-events: none; }
+#omSeg .chip[aria-disabled="true"] { opacity: .5; }
+
+/* сведения о формате: таблица «название — значение» (вкладка «Звук» и подменю «⋯») */
+.fmtlist, .tmenu .mfmt { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+.fmtlist dt, .tmenu .mfmt dt { color: var(--muted); }
+.fmtlist dd, .tmenu .mfmt dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.tmenu .mfmt { margin: 6px 10px 8px; font-size: 12px; gap: 4px 10px; max-width: 340px; }
+:root[data-style="lolitta"] .fmtlist dd, :root[data-style="lolitta"] .tmenu .mfmt dd { color: var(--l-ink, var(--text)); }
+
+/* меню «⋯»: текущее устройство серым справа от пункта, пустое место вместо галочки у невыбранных */
+.tmenu .mi .mosub { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.tmenu .mi .moempty { display: inline-block; width: 20px; height: 20px; flex: none; }

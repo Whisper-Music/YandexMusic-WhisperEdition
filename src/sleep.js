@@ -52,7 +52,7 @@
   function fadeTick() {
     if (!audio) return;
     const k = Math.max(0, Math.min(1, (fadeEnd - Date.now()) / Math.max(1, fadeEnd - fadeFrom)));
-    audio.volume = volume * k;           // и у следующего трека: новый плеер берёт полную громкость, тик её поправит
+    audio.volume = outVol() * k;           // и у следующего трека: новый плеер берёт полную громкость, тик её поправит
   }
   function fadeStart(secs) {
     clearInterval(fadeT);
@@ -62,7 +62,7 @@
   }
   function fadeStop() {
     clearInterval(fadeT); fadeT = 0;
-    if (audio) audio.volume = volume;       // громкость в настройках не трогали — возвращаем как была
+    if (audio) audio.volume = outVol();     // громкость в настройках не трогали — возвращаем как была
   }
 
   // ---------- включение / выключение ----------
@@ -77,7 +77,13 @@
   async function start() {
     let st;
     try { st = await invoke("sleep_start", { minutes: cfgS.min, shutdown: cfgS.act === "off" }); }
-    catch (e) { showToast("Не удалось включить режим сна: " + e.message, 6000); return; }
+    catch (e) {
+      const msg = String(e?.message ?? e);
+      // выключение подтверждает системное окно (sleep.rs); «Отмена» — не ошибка
+      if (/не подтверждено/.test(msg)) return;
+      showToast("Не удалось включить режим сна: " + msg, 6000);
+      return;
+    }
     setDeadline(st.deadline);
     showToast(`Режим сна на ${fmtMin(cfgS.min)}: ${cfgS.act === "off" ? "потом компьютер выключится" : "потом музыка остановится"}. Волна «${cfgS.name}»`, 5000, { kind: "ok" });
     await resolveCalm();
@@ -101,7 +107,7 @@
   ev?.listen("sleep-end", () => {
     clearInterval(fadeT); fadeT = 0;
     if (audio && !audio.paused) audio.pause();
-    if (audio) audio.volume = volume;
+    if (audio) audio.volume = outVol();
     setDeadline(0);
     if (cfgS.act === "off") {
       showToast("Режим сна: компьютер выключится через минуту", 60000, { action: { label: "Не выключать", fn: () => { invoke("sleep_cancel").catch(() => {}); showToast("Выключение отменено", 3000, { kind: "ok" }); } } });
@@ -151,7 +157,7 @@
     const box = $("#slStations");
     if (!box.hidden) { box.hidden = true; $("#slWavePick").textContent = "Выбрать…"; return; }
     box.hidden = false; $("#slWavePick").textContent = "Скрыть";
-    $("#slChips").innerHTML = ""; $("#slGrid").textContent = "Загружаю список…";
+    $("#slChips").innerHTML = ""; $("#slGrid").textContent = "Список загружается…";
     try { await loadStations(); renderPicker(); await resolveCalm(); renderPicker(); }
     catch (e) { $("#slGrid").textContent = "Не удалось загрузить список: " + e.message; }
   };

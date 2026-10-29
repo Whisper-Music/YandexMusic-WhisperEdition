@@ -10,6 +10,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:app:allow-version",
+    "core:window:allow-request-user-attention",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
@@ -30,6 +31,7 @@
         }
       ]
     },
+    "allow-app-ready",
     "allow-win-minimize",
     "allow-win-toggle-max",
     "allow-win-is-max",
@@ -37,6 +39,15 @@
     "allow-win-drag",
     "allow-win-set-fullscreen",
     "allow-tray-playing",
+    "allow-audio-devices-unlock",
+    "allow-audio-endpoints",
+    "allow-engine-available",
+    "allow-engine-load",
+    "allow-engine-play",
+    "allow-engine-pause",
+    "allow-engine-seek",
+    "allow-engine-stop",
+    "allow-engine-gain",
     "allow-tray-mode",
     "allow-mini-state",
     "allow-desktop-wallpaper",
