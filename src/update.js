@@ -27,7 +27,7 @@
   async function check(manual) {
     if (busy) return;
     $u("updCheck") && ($u("updCheck").disabled = true);
-    if (manual) note("Проверяю…");
+    if (manual) note("Идёт проверка…");
     try {
       info = await invoke("update_check");
       if (!info.version) { if (manual) note(`Установлена последняя версия (${info.current}).`); }
@@ -59,7 +59,7 @@
     busy = true; paint();
     const bar = $u("updBar");
     bar.hidden = false; bar.style.setProperty("--p", "0");
-    note(`Скачиваю версию ${info.version}…`);
+    note(`Скачивается версия ${info.version}…`);
     try {
       await invoke("update_install");          // при успехе приложение перезапускается само
     } catch (e) {
@@ -71,10 +71,10 @@
 
   window.__TAURI__.event?.listen("update-progress", (e) => {
     const p = e.payload || {}, bar = $u("updBar");
-    if (p.done) { note("Устанавливаю и перезапускаю…"); bar?.style.setProperty("--p", "1"); return; }
+    if (p.done) { note("Обновление устанавливается, затем приложение перезапустится…"); bar?.style.setProperty("--p", "1"); return; }
     if (bar && p.total) bar.style.setProperty("--p", String(Math.min(1, p.got / p.total)));
     const mb = (n) => (n / 1048576).toFixed(1);
-    note(p.total ? `Скачиваю… ${mb(p.got)} из ${mb(p.total)} МБ` : `Скачиваю… ${mb(p.got)} МБ`);
+    note(p.total ? `Скачивается… ${mb(p.got)} из ${mb(p.total)} МБ` : `Скачивается… ${mb(p.got)} МБ`);
   });
 
   if ($u("updBox")) {

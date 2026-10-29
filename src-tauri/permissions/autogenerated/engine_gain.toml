@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engine-gain"
+description = "Enables the engine_gain command without any pre-configured scope."
+commands.allow = ["engine_gain"]
+
+[[permission]]
+identifier = "deny-engine-gain"
+description = "Denies the engine_gain command without any pre-configured scope."
+commands.deny = ["engine_gain"]

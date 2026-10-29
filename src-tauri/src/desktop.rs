@@ -69,7 +69,7 @@ mod imp {
             if meta.len() > MAX_BYTES {
                 return Err("Файл обоев больше 50 МБ".into());
             }
-            return std::fs::read(&p).map_err(|e| e.to_string());
+            return super::read_capped(&p, MAX_BYTES);
         }
         Err("Не удалось найти картинку обоев: возможно, на рабочем столе однотонный цвет. Выбери картинку вручную.".into())
     }
@@ -264,7 +264,7 @@ mod imp {
                 if meta.len() > MAX_BYTES {
                     return Err("Файл обоев больше 50 МБ".into());
                 }
-                return std::fs::read(&p).map_err(|e| e.to_string());
+                return super::read_capped(&p, MAX_BYTES);
             }
         }
         Err("Не удалось найти картинку обоев: эта оболочка рабочего стола не сообщает, какие обои стоят, или на столе однотонный цвет. Выбери картинку вручную.".into())
@@ -276,6 +276,22 @@ mod imp {
     pub fn read_wallpaper() -> Result<Vec<u8>, String> {
         Err("В этой системе взять обои рабочего стола пока нельзя — выбери картинку вручную".into())
     }
+}
+
+/// Чтение не больше лимита: файл мог вырасти между проверкой размера и чтением (или это не файл вовсе).
+#[allow(dead_code)]
+fn read_capped(p: &std::path::Path, max: u64) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let f = std::fs::File::open(p).map_err(|e| e.to_string())?;
+    if !f.metadata().map_err(|e| e.to_string())?.is_file() {
+        return Err("Обои — не обычный файл".into());
+    }
+    let mut buf = Vec::new();
+    f.take(max + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    if buf.len() as u64 > max {
+        return Err(format!("Файл обоев больше {} МБ", max / (1024 * 1024)));
+    }
+    Ok(buf)
 }
 
 #[tauri::command]

@@ -2,6 +2,13 @@
 .tlmodal { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 12px; }
 .tlhead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .tlhead h2 { margin: 0; flex: none; }
+/* «Библиотека тем / Папка»: первое слово — ссылка назад к папкам */
+.tlcrumbs { display: flex; align-items: baseline; min-width: 0; white-space: nowrap; }
+.tlhere { color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.tlin .tlroot, .tlhead:has(.tlhere:not(:empty)) .tlroot { cursor: pointer; }
+.tlhead:has(.tlhere:not(:empty)) .tlroot:hover { text-decoration: underline; }
+.tlback { flex: none; width: 38px; height: 38px; padding: 0; display: grid; place-items: center; font-size: 18px; text-align: center; }
+.tlback[hidden] { display: none; }
 .tlhead .tlfind { flex: 1; min-width: 200px; }
 .tlnote { margin: 0; }
 .tlnote[hidden] { display: none; }
@@ -10,7 +17,52 @@
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); grid-auto-rows: max-content; gap: 14px; align-content: start;
 }
 .tlcard { display: flex; flex-direction: column; min-width: 0; border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
-.tlcard[hidden] { display: none; }
+.tlcard[hidden], .tlfolder[hidden], .tlgroup[hidden] { display: none; }
+
+/* ---------- папки (первый экран) ---------- */
+.tlgrid.tlroot { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.tlfolder {
+  position: relative; display: flex; flex-direction: column; min-width: 0; padding: 0; text-align: left; cursor: pointer;
+  color: var(--text); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 14px;
+  margin-top: 12px; transition: background .15s, border-color .15s, transform .15s;
+}
+/* «ушко» папки над карточкой */
+.tltab {
+  position: absolute; left: 14px; top: -11px; width: 74px; height: 12px; border-radius: 8px 8px 0 0;
+  background: inherit; border: 1px solid rgba(255,255,255,.08); border-bottom: 0; pointer-events: none;
+}
+.tlfolder:hover { background: rgba(255,255,255,.09); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+:root[data-anim="on"] .tlfolder:hover { transform: translateY(-2px); }
+.tlfolder.empty { opacity: .7; }
+/* обложка — до трёх превью веером: одно большое и два маленьких */
+.tlmosaic {
+  position: relative; aspect-ratio: 16 / 9; margin: 10px 10px 0; border-radius: 10px; overflow: hidden;
+  display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px;
+  background: rgba(255,255,255,.05);
+}
+.tlmosaic img { width: 100%; height: 100%; object-fit: cover; min-height: 0; opacity: 0; transition: opacity .25s; }
+.tlmosaic img.ok { opacity: 1; }
+.tlmosaic img:first-child { grid-row: 1 / 3; }
+.tlmosaic[data-n="1"] img:first-child { grid-column: 1 / 3; }
+.tlmosaic[data-n="2"] img:nth-child(2) { grid-row: 1 / 3; }
+.tlmosaic[data-n="0"]::after {     /* пустая папка — значок папки */
+  content: ""; position: absolute; inset: 0; margin: auto; width: 52px; height: 40px; opacity: .3;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5h7l2 2h9v12H3z' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5h7l2 2h9v12H3z' fill='none' stroke='black' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.tlfbody { display: flex; flex-direction: column; gap: 3px; padding: 10px 14px 14px; min-width: 0; }
+.tlfname { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tlfdesc { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.tlfcount { margin-top: 6px; align-self: flex-start; font-size: 11px; color: var(--muted); padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.06); }
+
+/* исполнитель — заголовок на всю ширину внутри папки «По артистам» */
+.tlgroup { grid-column: 1 / -1; margin: 6px 2px -4px; font-size: 14px; letter-spacing: .04em; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.08); padding-bottom: 6px; }
+.tlgroup:first-of-type { margin-top: 0; }
+/* в какой папке тема — видно только в результатах поиска */
+.tlmeta .tlcat { display: none; }
+.tlsearch .tlmeta .tlcat { display: inline; color: var(--text); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.tlmeta .tlartist { color: var(--text); }
 .tlpv { position: relative; aspect-ratio: 16 / 10; background: rgba(255,255,255,.06); }
 .tlpv::after {      /* пока картинка грузится — мягкая полоска «загрузки» */
   content: ""; position: absolute; inset: 0;

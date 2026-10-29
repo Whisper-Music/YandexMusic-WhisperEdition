@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Whisper Edition</title>
+  <!-- без defer, первым: стиль прошлого запуска и «шторка» до первой отрисовки (boot.js) -->
+  <script src="boot.js"></script>
   <link rel="stylesheet" href="styles.css" />
   <script src="imgguard.js" defer></script>
     <script src="main.js" defer></script>
@@ -30,6 +32,10 @@
   <script src="sleep.js" defer></script>
   <link rel="stylesheet" href="eq.css" />
   <script src="eq.js" defer></script>
+  <link rel="stylesheet" href="output.css" />
+  <script src="output.js" defer></script>
+  <script src="engine.js" defer></script>
+  <script src="sound.js" defer></script>
   <link rel="stylesheet" href="layout.css" />
   <link rel="stylesheet" href="mascot.css" />
   <script src="mascot.js" defer></script>
@@ -56,6 +62,10 @@
     <button id="plusNotice" class="tbnotice" type="button" hidden>
       <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 2L1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z"/></svg>
       <span id="plusNoticeText"></span>
+    </button>
+    <button id="offlineNotice" class="tbnotice offnotice" type="button" title="Проверить связь сейчас" hidden>
+      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M2.3 3.7l1.4-1.4 18 18-1.4 1.4-3.2-3.2-2.1 2.6L12 22 .6 7.6A17.9 17.9 0 0 1 5 5.1L2.3 3.7zm19.1 3.9L16.7 13.5 8.5 5.3A18 18 0 0 1 23.4 7.6z"/></svg>
+      <span>Без интернета — играют скачанные треки</span>
     </button>
     <div class="tbctl">
       <button id="wMin" title="Свернуть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 6h8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
@@ -101,6 +111,7 @@
           </div>
         </div>
         <button id="artistWaveBtn" class="nav pin" hidden>Моя волна по артисту</button>
+        <button id="dlAllBtn" class="nav pin dlall" hidden></button>
         <button id="pinBtn" class="nav pin" hidden>Закрепить</button>
         <button id="plCreateBtn" class="nav pin plcreate" hidden>＋ Создать плейлист</button>
       </div>
@@ -167,6 +178,7 @@
           <button type="button" class="chip" data-tab="look" role="tab">Оформление</button>
           <button type="button" class="chip" data-tab="ui" role="tab">Интерфейс</button>
           <button type="button" class="chip" data-tab="play" role="tab">Воспроизведение</button>
+          <button type="button" class="chip" data-tab="out" role="tab">Звук</button>
           <button type="button" class="chip" data-tab="app" role="tab">Приложение</button>
           <button type="button" class="chip" data-tab="int" role="tab">Интеграции</button>
         </nav>
@@ -270,6 +282,44 @@
             <button class="nav" id="dlReset">По умолчанию</button>
           </div>
           <p class="status" id="dlNote"></p>
+        </div>
+        <div class="card" id="outCard" data-tab="out">
+          <h3>Устройство вывода <i class="hint" title="Для названий устройств Windows просит доступ к микрофону — Whisper берёт его на мгновение и ничего не записывает.">i</i></h3>
+          <div id="outList" class="outlist" role="radiogroup" aria-label="Устройство вывода"></div>
+          <div class="row"><button type="button" class="nav" id="outRefresh">Обновить список</button></div>
+          <p class="status" id="outNote"></p>
+        </div>
+        <div class="card" id="modeCard" data-tab="out">
+          <h3>Режим вывода</h3>
+          <div class="lyrow"><span>Режим</span><div class="lyseg" id="omSeg"><button class="chip active" data-v="shared" title="Через микшер Windows, вместе со звуками других программ.">Общий</button><button class="chip" data-v="excl" title="Напрямую на устройство, в формате трека — мимо микшера Windows.">Эксклюзивный</button></div></div>
+          <p class="status" id="omNote"></p>
+        </div>
+        <div class="card" id="qualCard" data-tab="out">
+          <h3>Качество потока <i class="hint" title="Скачанные треки всегда в лучшем качестве. FLAC Яндекс сторонним программам не отдаёт.">i</i></h3>
+          <div class="lyrow"><span>Яндекс Музыка</span><div class="lyseg" id="qlSeg"><button class="chip" data-v="high" title="Самый высокий битрейт — обычно MP3 320 кбит/с.">Лучшее</button><button class="chip" data-v="low" title="Самый низкий битрейт — меньше трафика.">Экономное</button></div></div>
+        </div>
+        <div class="card colbreak" id="normCard" data-tab="out">
+          <h3>Нормализация громкости <i class="hint" title="Выравнивает громкость между треками по данным Яндекса (EBU R128).">i</i></h3>
+          <div class="lyrow"><span>Режим</span><div class="lyseg" id="nmMode">
+            <button class="chip" data-v="off">Выкл</button>
+            <button class="chip" data-v="track" title="Каждый трек — к одной громкости.">По трекам</button>
+            <button class="chip" data-v="album" title="Одна поправка на весь альбом — авторская динамика сохраняется.">По альбому</button>
+            <button class="chip" data-v="auto" title="Альбом по порядку — по альбому, остальное — по трекам.">Авто</button>
+          </div></div>
+          <div id="nmBox" class="nmbox">
+            <div class="lyrow"><span>Целевая громкость</span><div class="lyseg" id="nmTarget">
+              <button class="chip" data-v="-11" title="−11 LUFS.">Громко</button>
+              <button class="chip" data-v="-14" title="−14 LUFS — как у Spotify и YouTube.">Обычно</button>
+              <button class="chip" data-v="-16" title="−16 LUFS.">Тише</button>
+              <button class="chip" data-v="-18" title="−18 LUFS — больше запаса для динамичной музыки.">Тихо</button>
+            </div></div>
+            <label class="switch" title="Не выше пика трека — без искажений. В общем режиме трек сначала загружается целиком."><input type="checkbox" id="nmBoost" /><i></i><span>Поднимать тихие треки</span></label>
+          </div>
+        </div>
+        <div class="card" id="fmtCard" data-tab="out">
+          <h3>Сведения о формате</h3>
+          <dl id="fmtList" class="fmtlist"></dl>
+          <div class="row"><button type="button" class="nav" id="fmtRefresh">Обновить</button></div>
         </div>
         <div class="card" data-tab="app">
           <h3>Трей и горячие клавиши</h3>

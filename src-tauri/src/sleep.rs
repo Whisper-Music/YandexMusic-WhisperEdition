@@ -31,10 +31,35 @@ pub struct SleepState {
     shutdown: bool,
 }
 
+/// Выключение компьютера — действие с серьёзными последствиями, поэтому его подтверждает системное окно,
+/// которое показывает Rust, а не страница: чужой код в интерфейсе (XSS) сам «нажать» его не может.
+async fn confirm_shutdown(app: &AppHandle, minutes: u32) -> bool {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let when = if minutes.is_multiple_of(60) { format!("{} ч", minutes / 60) } else if minutes > 60 { format!("{} ч {} мин", minutes / 60, minutes % 60) } else { format!("{minutes} мин") };
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut d = a
+            .dialog()
+            .message(format!("Через {when} музыка остановится, а компьютер выключится. Включить?"))
+            .title("Режим сна")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom("Включить".into(), "Отмена".into()));
+        if let Some(w) = tauri::Manager::get_webview_window(&a, "main") {
+            d = d.parent(&w);
+        }
+        d.blocking_show()
+    })
+    .await
+    .unwrap_or(false)
+}
+
 #[tauri::command]
-pub fn sleep_start(app: AppHandle, minutes: u32, shutdown: bool) -> Result<SleepState, String> {
+pub async fn sleep_start(app: AppHandle, minutes: u32, shutdown: bool) -> Result<SleepState, String> {
     if !(1..=24 * 60).contains(&minutes) {
         return Err("Время должно быть от 1 минуты до 24 часов".into());
+    }
+    if shutdown && !confirm_shutdown(&app, minutes).await {
+        return Err("Выключение компьютера не подтверждено".into());
     }
     let deadline = now_ms() + minutes as u64 * 60_000;
     let gen = GEN.fetch_add(1, SeqCst) + 1;

@@ -84,7 +84,36 @@ pub fn changed(app: &AppHandle) {
     });
 }
 
-/// При запуске: вернуть окно на место и показать его.
+/// Окно было развёрнуто на весь экран — развернуть, когда его покажут (у скрытого окна maximize само показывает окно).
+static PENDING_MAX: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Первый показ окна при запуске. Зовёт страница (команда app_ready), когда уже применила сохранённый стиль, —
+/// так не видно, как интерфейс сначала рисуется встроенным «Неоном», а потом перекрашивается в свою тему.
+/// Страница не ответила за 5 с (сломалась, очень медленный компьютер) — окно всё равно показывается (show_fallback).
+pub fn show_first(w: &WebviewWindow) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if SHOWN.swap(true, SeqCst) {
+        return; // уже показано: повторный вызов после «Обновить» (F5) ничего не делает
+    }
+    if PENDING_MAX.swap(false, SeqCst) {
+        let _ = w.maximize();
+    }
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+
+/// Страховка: окно показывается через 5 с, даже если страница так и не сообщила, что готова.
+pub fn show_fallback(w: &WebviewWindow) {
+    let w = w.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let w2 = w.clone();
+        let _ = w.run_on_main_thread(move || show_first(&w2));
+    });
+}
+
+/// При запуске: вернуть окно на место (размер, позиция, развёрнутость). Показывает его show_first.
 pub fn restore(w: &WebviewWindow) {
     if let Some(s) = load(w.app_handle()) {
         // место — только если оно хоть на каком-то мониторе (монитор могли отключить)
@@ -100,9 +129,16 @@ pub fn restore(w: &WebviewWindow) {
             let _ = w.center();
         }
         if s.maximized {
-            let _ = w.maximize();
+            PENDING_MAX.store(true, std::sync::atomic::Ordering::SeqCst);
         }
     }
-    let _ = w.show();
-    let _ = w.set_focus();
+    show_fallback(w);
+}
+
+/// Страница применила сохранённый стиль — можно показывать окно (src/boot.js).
+#[tauri::command]
+pub fn app_ready(window: WebviewWindow) {
+    if window.label() == "main" {
+        show_first(&window);
+    }
 }

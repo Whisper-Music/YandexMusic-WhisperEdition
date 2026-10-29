@@ -85,15 +85,31 @@ fn sanitize_name(raw: &str) -> String {
     s
 }
 
-fn free_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
-    let first = dir.join(format!("{stem}.{ext}"));
-    if !first.exists() {
-        return first;
+/// Переложить готовый временный файл под свободным именем «Трек.mp3», «Трек (2).mp3», …
+/// Раньше имя выбиралось проверкой exists(), а потом делался rename, который молча заменяет файл:
+/// если между проверкой и переименованием там появлялся файл (или его подкладывали), он перезаписывался.
+/// Теперь имя занимается атомарно: жёсткая ссылка не создаётся поверх существующего файла.
+/// На дисках без жёстких ссылок (FAT32/exFAT, часть сетевых) — прежний способ.
+fn place_no_clobber(tmp: &Path, dir: &Path, stem: &str, ext: &str) -> std::io::Result<PathBuf> {
+    let names = std::iter::once(format!("{stem}.{ext}")).chain((2..10_000).map(|n| format!("{stem} ({n}).{ext}")));
+    for name in names {
+        let cand = dir.join(name);
+        match std::fs::hard_link(tmp, &cand) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(tmp);
+                return Ok(cand);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => {
+                if std::fs::symlink_metadata(&cand).is_ok() {
+                    continue;
+                }
+                std::fs::rename(tmp, &cand)?;
+                return Ok(cand);
+            }
+        }
     }
-    (2..10_000)
-        .map(|n| dir.join(format!("{stem} ({n}).{ext}")))
-        .find(|p| !p.exists())
-        .unwrap_or(first)
+    Err(std::io::Error::other("не нашлось свободного имени файла"))
 }
 
 fn sniff_ext(b: &[u8]) -> &'static str {
@@ -196,11 +212,31 @@ fn live_index(app: &AppHandle) -> Index {
     let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut index = read_index(app);
     let before = index.len();
-    index.retain(|_, e| Path::new(e.path()).is_file());
+    index.retain(|_, e| playable(Path::new(e.path())));
     if index.len() != before {
         let _ = write_index(app, &index);
     }
     index
+}
+
+const AUDIO_EXTS: [&str; 7] = ["mp3", "m4a", "mp4", "aac", "flac", "ogg", "opus"];
+
+/// Можно ли играть файл из индекса. Индекс — обычный JSON в папке настроек, его может переписать любая
+/// программа пользователя; без проверки ymlocal:// и свой движок отдали бы странице любой файл с диска
+/// (например, базу браузера или файл с секретами). Поэтому: абсолютный путь, расширение звукового файла,
+/// обычный файл, а не ссылка (symlink / reparse point), разумный размер.
+fn playable(p: &Path) -> bool {
+    let ext_ok = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| AUDIO_EXTS.contains(&e.to_ascii_lowercase().as_str()));
+    if !p.is_absolute() || !ext_ok {
+        return false;
+    }
+    match std::fs::symlink_metadata(p) {
+        Ok(m) => m.file_type().is_file() && m.len() > 0 && m.len() <= 1024 * 1024 * 1024,
+        Err(_) => false,
+    }
 }
 
 /// Путь к скачанному файлу трека (для локального воспроизведения).
@@ -210,7 +246,7 @@ pub fn local_path(app: &AppHandle, id: &str) -> Option<PathBuf> {
     }
     let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let p = PathBuf::from(read_index(app).get(id)?.path());
-    p.is_file().then_some(p)
+    playable(&p).then_some(p)
 }
 
 #[tauri::command]
@@ -370,12 +406,16 @@ pub async fn download_track(
     let (dir, _) = current_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("Не удалось создать папку: {e}"))?;
     let stem = sanitize_name(&name);
-    let path = free_path(&dir, &stem, sniff_ext(&bytes));
+    let ext = sniff_ext(&bytes);
     let tmp = write_temp(&dir, &bytes).map_err(|e| format!("Не удалось записать файл: {e}"))?;
-    if let Err(e) = std::fs::rename(&tmp, &path) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("Не удалось сохранить файл: {e}"));
-    }
+    drop(bytes);
+    let path = match place_no_clobber(&tmp, &dir, &stem, ext) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(format!("Не удалось сохранить файл: {e}"));
+        }
+    };
     let saved = path.to_string_lossy().into_owned();
     {
         let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -506,6 +546,27 @@ mod tests {
         let t = write_temp(&dir, b"new").unwrap();
         assert_ne!(t, link);
         assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn no_clobber_and_playable() {
+        let dir = std::env::temp_dir().join(format!("yd-test-nc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Трек.mp3"), b"old").unwrap();
+        let t = write_temp(&dir, b"new").unwrap();
+        let p = place_no_clobber(&t, &dir, "Трек", "mp3").unwrap();
+        assert_eq!(p, dir.join("Трек (2).mp3"));
+        assert_eq!(std::fs::read(dir.join("Трек.mp3")).unwrap(), b"old"); // старый файл цел
+        assert_eq!(std::fs::read(&p).unwrap(), b"new");
+        assert!(!t.exists());
+        // играть можно только звуковые файлы, а не что угодно из индекса
+        assert!(playable(&p));
+        std::fs::write(dir.join("secret.txt"), b"x").unwrap();
+        assert!(!playable(&dir.join("secret.txt")));
+        assert!(!playable(Path::new("relative.mp3")));
+        assert!(!playable(&dir.join("missing.mp3")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

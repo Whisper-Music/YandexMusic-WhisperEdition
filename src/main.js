@@ -156,25 +156,80 @@ const isNetErr = (e) => {
   return !navigator.onLine || /^HTTP 5\d\d\b/.test(m)
     || /error sending request|connect|dns|timed? ?out|network|unreachable|failed to lookup|no route|resolve/i.test(m);
 };
+// Офлайн-режим — только когда недоступно всё: и Яндекс Музыка, и Whisper Archive (если в нём есть вход).
+// Сбой одного запроса сам по себе офлайн не включает: сначала тихая проверка обоих (suspectOffline).
+// В офлайне: плашка в заголовке окна, плеер играет скачанное (play → offlineFallback), «Лайки» — только скачанные,
+// страницы, которым нужна сеть, показывают «Офлайн-режим», обложки не грузятся. Раз в минуту связь проверяется
+// молча; когда вернулась — открытая страница перерисовывается. В обычном режиме ни одна из этих надписей не видна.
 let offline = false, offlineTimer = 0;
+let resumeOnNet = false;        // трек не загрузился из-за сети и замены из скачанного не нашлось — включим его, когда связь вернётся
+let offlineShown = false;       // открытая страница нарисована в офлайн-виде — перерисовать, когда связь вернётся
+const PROBE_MS = 60000;
 function setOffline(on) {
   if (offline === on) return;
   offline = on;
   document.body.classList.toggle("offline", on);
+  const n = document.getElementById("offlineNotice");
+  if (n) n.hidden = !on;
   clearInterval(offlineTimer);
-  if (on) offlineTimer = setInterval(probeOnline, 30000);
+  if (on) {
+    offlineTimer = setInterval(probeOnline, PROBE_MS);
+    showToast("Нет связи с Яндекс Музыкой и архивом — офлайн-режим: доступны скачанные треки", 5000);
+    // открытая страница из сети (лайки, альбом, артист, плейлист, поиск, статистика) — сразу в офлайн-вид
+    const pg = document.querySelector(".main")?.dataset.page ?? "";
+    if (!offlineShown && ["likes", "album", "artist", "search", "statsBtn", ""].includes(pg) && typeof view === "function") setTimeout(() => view(), 0);
+  }
+  if (typeof paintDlAll === "function") paintDlAll();
+}
+// Есть ли связь хоть с чем-то: Яндекс ответил (любым статусом, кроме 5xx) или архив ответил на /auth/me.
+async function reachable() {
+  if (!navigator.onLine) return false;
+  if (!uid) return true;
+  try { await ym("account_status"); return true; } catch (e) { if (!isNetErr(e)) return true; }
+  try {
+    if (await invoke("wa_token_exists")) {
+      const r = await invoke("wa_me");
+      if (r && r.status > 0 && r.status < 500) return true;
+    }
+  } catch {}
+  return false;
+}
+// Запрос не прошёл из-за сети — проверяем, нет ли связи совсем. true — включён (или уже был) офлайн.
+let suspectP = null;
+function suspectOffline() {
+  if (offline) return Promise.resolve(true);
+  return (suspectP ||= reachable()
+    .then((ok) => { if (!ok) setOffline(true); return !ok; })
+    .finally(() => { suspectP = null; }));
 }
 let probing = false;
 async function probeOnline() {
-  if (!offline || probing || !uid) return;
+  if (!offline || probing) return;
   probing = true;
-  try { await ym("account_status"); } catch { return; } finally { probing = false; }
-  setOffline(false);
-  showToast("Связь с Яндекс Музыкой восстановлена", 3500, { kind: "ok" });
-  loadLikedIds(); loadDislikedIds();
-  if (document.querySelector(".main").dataset.page === "likes" && likesTab === "likes" && !likes.done) goTop(showLikes);
+  let ok = false;
+  try { ok = await reachable(); } finally { probing = false; }
+  if (ok) backOnline();
 }
-window.addEventListener("online", probeOnline);
+function backOnline() {
+  if (!offline) return;
+  setOffline(false);
+  showToast("Связь восстановлена", 3500, { kind: "ok" });
+  loadLikedIds(); loadDislikedIds();
+  // страница была нарисована в офлайн-виде (скачанные лайки, «Офлайн-режим») — открываем её заново, уже из сети
+  if (offlineShown && typeof view === "function") { offlineShown = false; view(); }
+  // плеер стоял на треке, который не смог загрузиться без сети, — включаем его
+  if (resumeOnNet && needLoad && queue[current]) {
+    resumeOnNet = false;
+    const p = resumePos; resumePos = 0;
+    $("#status").textContent = "";
+    play(current, p);
+  }
+}
+// система сообщила об обрыве — сразу в офлайн, не дожидаясь, пока сломается загрузка следующего трека
+window.addEventListener("offline", () => setOffline(true));
+// связь появилась — проверяем через пару секунд (сразу после подключения DNS и маршруты ещё не готовы)
+window.addEventListener("online", () => setTimeout(probeOnline, 2000));
+document.getElementById("offlineNotice")?.addEventListener("click", probeOnline);
 
 // Яндекс Музыка. Интерфейс называет только операцию и её параметры; адрес, метод, заголовки и токен
 // знает Rust (src-tauri/src/net.rs, список OPS). Чтение и изменение данных аккаунта — разные команды
@@ -662,7 +717,7 @@ async function dynArt(t) {
   const key = String(t.coverUri || "");
   let it = dynCache.get(key);
   if (it) { dynCache.delete(key); dynCache.set(key, it); return it; }          // свежие — в конец
-  const src = cover(t, "400x400");
+  const src = cover(t, "1000x1000");      // крупная: темы могут показывать обложку большой и чёткой (клякса в «Мелке»)
   if (!src) return null;
   const buf = await invoke("fetch_bytes", { url: src });
   const url = URL.createObjectURL(new Blob([buf], { type: "image/jpeg" }));
@@ -697,6 +752,8 @@ function dynShow(it) {
   const p = it.pal;
   if (p) {
     box.style.setProperty("--dyn-a", p.accent); box.style.setProperty("--dyn-b", p.accent2);
+    // и для всего окна: темы могут рисовать цветом обложки вне фона (например, клякса в «Мелке»)
+    document.documentElement.style.setProperty("--dyn-a", p.accent); document.documentElement.style.setProperty("--dyn-b", p.accent2);
     dynPal = { accent: p.accent, accent2: p.accent2 };
     if (dynColorsOn()) { $("#cAccent").value = p.accent; $("#cAccent2").value = p.accent2; }
   }
@@ -711,7 +768,8 @@ async function dynUpdate(t, force = false) {
     return;
   }
   syncBgVideo();
-  if (!t?.coverUri) { if (force) applyCfg(); return; }        // нет обложки (трек из файла) — остаётся прежний фон
+  // нет обложки (трек из файла) или офлайн (обложку не качаем) — остаётся прежний фон
+  if (!t?.coverUri || offline) { if (force) applyCfg(); return; }
   const key = String(t.coverUri);
   if (key === dynKey && !force) return;
   try {
@@ -753,6 +811,7 @@ function applyCfg() {
   applyCustom();
   applyViz();
   applyHooks();
+  saveBoot();
 }
 // ---------- возможности своих тем: ручка громкости, своя раскладка, кнопки-действия ----------
 // Кнопки темы: settings whisper-music → "buttons": { "power": "wave", … }. Приложение создаёт их всегда
@@ -823,6 +882,21 @@ function applyHooks() {
   renderThemeButtons(hook("buttons") || []);
   window.cliMount?.(hook("console") || null);          // стиль-консоль (cli.js)
 }
+// Снимок для следующего запуска (boot.js): какой стиль на <html> и какой цвет фона показать под «шторкой»,
+// пока стиль собирается. Пишется, только когда стиль уже собран целиком (свой стиль — после подключения его CSS).
+var bootSaveT = 0;        // var: applyCfg (а с ним saveBoot) зовут и раньше этой строки
+function saveBoot() {
+  clearTimeout(bootSaveT);
+  bootSaveT = setTimeout(() => {
+    const root = document.documentElement;
+    if (root.classList.contains("booting") || root.dataset.style !== cfg.style) return;
+    let bg = getComputedStyle(document.body).backgroundColor;
+    if (!bg || /^rgba\([^)]*,\s*0\)$/.test(bg) || bg === "transparent") bg = "";
+    const accent = getComputedStyle(root).getPropertyValue("--accent").trim();      // цвет индикатора загрузки
+    try { localStorage.setItem("ym_boot", JSON.stringify({ style: cfg.style, base: root.dataset.base || "", bg, accent })); } catch {}
+  }, 300);
+}
+window.saveBoot = saveBoot;
 function saveCfg() {
   try { localStorage.setItem("ym_cfg3", JSON.stringify(cfg)); $("#setNote").textContent = ""; return true; }
   catch { $("#setNote").textContent = "Не удалось сохранить настройки: закончилось место в хранилище приложения."; return false; }
@@ -1037,7 +1111,7 @@ async function loadNativeBg(list) {
   try {
     const pick = await pickBgFromFiles(nativeFiles(list));
     if (!pick) return await loadBg(null);
-    bgNote("Загружаю…");
+    bgNote("Загружается…");
     const ext = (pick.name.split(".").pop() || "").toLowerCase();
     const lim = /^(mp4|m4v|mov|webm|mkv)$/.test(ext) ? VIDEO_MAX_BYTES : BG_MAX_BYTES;      // лимит проверяет и Rust до чтения файла
     if (pick.size > lim) throw new Error(`Файл «${pick.name}» весит ${Math.round(pick.size / 1048576)} МБ — больше лимита в ${lim / 1048576} МБ.`);
@@ -1089,7 +1163,7 @@ async function loadBg(f) {
   const isVid = /^video\//.test(f.type) || /\.(mp4|webm|m4v|mov|mkv)$/i.test(f.name);
   if (!isVid && f.size > BG_MAX_BYTES) { bgNote(`Файл «${f.name}» весит ${Math.round(f.size / 1048576)} МБ — это больше лимита в ${BG_MAX_BYTES / 1048576} МБ. Выбери файл поменьше.`); return false; }
   const st = cfg.style;
-  bgNote("Загружаю…");
+  bgNote("Загружается…");
   let prep;
   try { prep = await prepareBg(f); }
   catch (e) { bgNote(e.message || "Не удалось прочитать файл."); return false; }
@@ -1118,8 +1192,14 @@ async function initBg() {
     }
   } catch {}
   cfg.bg = "";
-  for (const st of Object.keys(cfg.s)) {           // встроенные и свои стили
-    if (cfg.s[st].bg !== "idb") continue;
+  // Сначала фон текущего стиля — как только он готов, интерфейс можно показывать (boot.js, «bg»);
+  // фоны остальных стилей (с проверкой картинок это заметное время на больших обоях) догружаются уже после.
+  let marked = false;
+  const mark = () => { if (marked) return; marked = true; applyCfg(); window.bootMark?.("bg"); };
+  const order = [cfg.style, ...Object.keys(cfg.s).filter((s) => s !== cfg.style)];
+  for (const st of order) {           // встроенные и свои стили
+    if (st !== cfg.style) mark();
+    if (!cfg.s[st] || cfg.s[st].bg !== "idb") continue;
     let blob = null;
     try { blob = await IDB.get(bgKey(st)); } catch {}
     if (!blob) { cfg.s[st].bg = ""; continue; }
@@ -1131,6 +1211,7 @@ async function initBg() {
   }
   if (saveCfg()) localStorage.removeItem("ym_cfg2");
   applyCfg();
+  mark();          // boot.js: фон текущего стиля готов (если стиль один — только здесь)
 }
 $("#bgFile").onchange = async (e) => { const fs = [...e.target.files]; e.target.value = ""; await loadBgFiles(fs); };
 $("#bgDirBtn").onclick = async (e) => {
@@ -1398,7 +1479,8 @@ async function forgetAccountData() {
   } catch {}
 }
 
-const cover = (t, size = "100x100") => (t?.coverUri ? safeUrl("https://" + String(t.coverUri).replace("%%", size)) : "");
+// в офлайне обложки не запрашиваются вовсе — сразу заглушка «W» (mkImg и обработчик ошибок картинок)
+const cover = (t, size = "100x100") => (t?.coverUri && !offline ? safeUrl("https://" + String(t.coverUri).replace("%%", size)) : "");
 const plural = (n, f) => { const m = n % 100, d = n % 10; return f[m > 10 && m < 20 ? 2 : d === 1 ? 0 : d > 1 && d < 5 ? 1 : 2]; };
 function fmtDate(a) {
   const d = Date.parse(a.releaseDate);
@@ -1546,6 +1628,8 @@ function resetView() {
   $("#wavePage").hidden = true; $("#settingsPage").hidden = true; $("#statsPage").hidden = true;
   $("#plPage").hidden = true; $("#plBar").hidden = true; $("#plRecs").hidden = true; $("#plCreateBtn").hidden = true;
   curPl = null; recArr.length = 0; $("#plRecList").innerHTML = "";
+  dlCur = null; $("#dlAllBtn").hidden = true;
+  $("#status").classList.remove("offmsg"); offlineShown = false;
   document.querySelector(".main").scrollTop = 0;
 }
 function setActive(id, page) {        // page — имя страницы для CSS, когда в боковой панели ничего не подсвечено (артист, альбом)
@@ -1613,8 +1697,10 @@ function syncIcons() {
   document.body.classList.toggle("is-playing", playing);
   $("#play").innerHTML = playing ? ICON.pause : ICON.play;
   $("#fPlay").innerHTML = playing ? ICON.pause : ICON.play;
-  $("#waveBtn").innerHTML = wave.on && playing ? ICON.pause : ICON.play;
-  $("#waveBtn").classList.toggle("playing", wave.on && playing);
+  // у гостя комнаты кнопка волны управляет треком комнаты
+  const ri = window.roomInfo?.(), waveOwn = wave.on || (!!ri && !ri.host && ri.follow);
+  $("#waveBtn").innerHTML = waveOwn && playing ? ICON.pause : ICON.play;
+  $("#waveBtn").classList.toggle("playing", waveOwn && playing);
   waveOrbitsSync();
   window.discordPush?.();                 // Discord RPC (discord.js), если включён
   window.miniPush?.();                    // мини-плеер у значка в трее (traymini.js)
@@ -1669,6 +1755,8 @@ async function showLikes(tab = likesTab) {
   setChips([["likes", "♥ Лайки"], ["playlists", "≡ Мои плейлисты"]], likesTab, (t) => { if (t !== likesTab) { view = () => showLikes(t); view(); } });
   if (likesTab === "playlists") return showMyPlaylists(my);
   lkFindShow();
+  if (offline) return showOfflineLikes(my);           // офлайн — только скачанные
+  dlSetup({ key: "likes", label: "⤓ Скачать лайки", tracks: () => (likes.done ? likes.tracks : null), all: () => loadAllLikes(() => {}, () => false) });
   if (likes.done) { likesSrc = likes.tracks; return renderLikes(); }
   likesSrc = [];
   $("#status").textContent = "Загрузка…";
@@ -1809,15 +1897,28 @@ async function offlineLikes() {
   return items.map(offlineTrack);
 }
 async function showOfflineLikes(my) {
-  const tracks = await offlineLikes();
+  const [tracks, off] = await Promise.all([offlineLikes(), suspectOffline()]);
   if (my !== nav) return;
-  setOffline(true);
+  offlineShown = true;
+  dlCur = null; paintDlAll();
   likesSrc = tracks;
   renderLikes();
   if (tracks.length && normQ(likesQuery) && !shown.length) return;
-  $("#status").textContent = tracks.length
-    ? `Нет связи с Яндекс Музыкой — показаны скачанные треки (${tracks.length}).`
-    : "Нет связи с Яндекс Музыкой, а скачанных треков пока нет.";
+  if (off) offlineNote(tracks.length ? `Офлайн-режим — скачанные треки: ${tracks.length}` : "Офлайн-режим — скачанных треков пока нет");
+  else $("#status").textContent = tracks.length
+    ? `Яндекс Музыка не отвечает — показаны скачанные треки (${tracks.length}).`
+    : "Яндекс Музыка не отвечает, а скачанных треков пока нет.";
+}
+// Надпись для страницы, которой нужна сеть (только в офлайне). Когда связь вернётся, страница перерисуется (backOnline).
+function offlineNote(text) {
+  offlineShown = true;
+  const s = $("#status");
+  s.classList.add("offmsg");
+  s.textContent = text;
+}
+// Скачанные треки, подходящие под условие (артист, альбом) — что можно показать на странице без сети.
+async function offlinePick(test) {
+  return (await offlineLikes()).filter(test);
 }
 
 async function loadAllLikes(onProgress, stale) {
@@ -1922,15 +2023,24 @@ async function showStats() {
   if (window.lstatsShow && (await window.lstatsShow(my))) return;
   if (my !== nav) return;
   const note = $("#stNote");
-  note.textContent = "Загружаю понравившиеся треки…";
+  // офлайн: если лайки уже загружались в этом запуске — считаем по ним (без обложек), иначе надпись
+  const offNote = () => { offlineShown = true; note.textContent = "Вы в офлайн-режиме — статистика появится, когда вернётся связь"; note.classList.add("offmsg"); };
+  note.classList.remove("offmsg");
+  if (offline && !likes.done) return offNote();
+  note.textContent = "Понравившиеся треки загружаются…";
   let tracks;
-  try { tracks = await loadAllLikes((n, total) => { note.textContent = `Загружаю понравившиеся: ${n} из ${total}…`; }, () => my !== nav); }
-  catch (e) { if (my === nav) note.textContent = "Ошибка: " + e.message; return; }
+  try { tracks = await loadAllLikes((n, total) => { note.textContent = `Понравившиеся треки загружаются: ${n} из ${total}…`; }, () => my !== nav); }
+  catch (e) {
+    if (isNetErr(e) && (await suspectOffline())) { if (my === nav) offNote(); return; }
+    if (my === nav) note.textContent = "Ошибка: " + e.message;
+    return;
+  }
   if (!tracks || my !== nav) return;
   if (!tracks.length) { note.textContent = "Пока нет понравившихся треков — статистика считается по ним."; return; }
+  if (offline) offlineShown = true;          // посчитано без сети — с обложками перерисуем, когда связь вернётся
 
   const s = computeStats(tracks);
-  const genre = s.topGenre ? await genreTitle(s.topGenre) : null;
+  const genre = s.topGenre ? (offline ? s.topGenre.replace(/[-_]+/g, " ").replace(/^./, (ch) => ch.toUpperCase()) : await genreTitle(s.topGenre)) : null;
   if (my !== nav) return;
 
   const cards = $("#statCards"); cards.innerHTML = "";
@@ -2047,21 +2157,37 @@ function fitHead() {
 window.addEventListener("resize", fitHead);
 if (document.fonts) document.fonts.ready.then(fitHead);
 
+// «Слушать вместе» (together.js): гость в комнате — страница волны показывает трек комнаты, а не свою волну
+function inRoomNow() { return !!window.roomInfo?.(); }
+function roomGuest() { const r = window.roomInfo?.(); return !!r && !r.host; }
+function waveHead() {
+  $("#title").textContent = roomGuest() ? "Слушать вместе" : "Моя волна";
+  if ((wave.on || inRoomNow()) && queue[current]) showNow(queue[current]);
+  else if (roomGuest()) setHint("Ожидается трек от ведущего…");
+  else if (offline) setHint("Офлайн-режим — нажми, чтобы слушать скачанное");
+  else setHint("Нажми, чтобы включить " + (wave.album ? `Мою волну по «${wave.album.title}»` : wave.name ? `волну «${wave.name}»` : "Мою волну"));
+  updateStBtn();
+}
+// together.js зовёт при входе/выходе из комнаты и при «отошёл/вернулся к ведущему»
+window.waveRefresh = () => {
+  updateStBtn(); if (audio) syncIcons();
+  if ($("#wavePage").hidden) return;
+  if (roomGuest()) setStations(false);
+  waveHead(); fitHead();
+};
 function showWave() {
   ++nav;
   setHead({ title: "Моя волна" }); setActive("wave"); renderTabs(false); resetView();
   $("#list").hidden = true; $("#wavePage").hidden = false; $("#stWrap").hidden = false; $("#waveInfo").hidden = false;
   document.querySelector(".main").classList.add("wavemode");
-  if (wave.on && queue[current]) showNow(queue[current]);
-  else setHint("Нажми, чтобы включить " + (wave.album ? `Мою волну по «${wave.album.title}»` : wave.name ? `волну «${wave.name}»` : "Мою волну"));
-  updateStBtn();
+  waveHead();
   syncIcons();
   applyViz();
   fitHead();
   requestAnimationFrame(fitHead);
 }
 function waveFeedback(type, t, extra = {}) {
-  if (!wave.on || !wave.session || !t) return;
+  if (!wave.on || !wave.session || !t || t._room) return;      // трек из комнаты, вставленный в волну, — не волны
   ym("rotor_feedback", {
     id: wave.session,
     json: { event: { type, timestamp: new Date().toISOString(), trackId: String(t.id), ...extra }, batchId: wave.batch },
@@ -2139,7 +2265,14 @@ async function waveStart(autoplay = true) {
 }
 
 $("#waveBtn").onclick = async () => {
+  if (roomGuest()) { window.roomCli?.waveBtn?.(); return; }     // гость: пауза/играть трек комнаты или «вернуться к ведущему»
   if (wave.on) { togglePlay(); return; }
+  if (offline) {
+    // волна без сети не загрузится: играет / ставится на паузу скачанное
+    if (queue === offQueue && queue[current]) { togglePlay(); return; }
+    if (!(await offlineFallback(queue.length, playSeq))) setHint("Офлайн-режим — скачанных треков пока нет");
+    return;
+  }
   try {
     if (wave.session && wave.queue.length) {
       wave.on = true; queue = wave.queue; playCtx = "wave";
@@ -2188,7 +2321,7 @@ function stationsMessage(text, retry) {
   if (retry) { const b = document.createElement("button"); b.className = "pill"; b.textContent = "Повторить"; b.onclick = retry; g.append(b); }
 }
 async function openStationsList() {
-  stationsMessage("Загружаю список…");
+  stationsMessage("Список загружается…");
   try { await loadStations(true); renderStations(); }
   catch (e) { stationsMessage("Не удалось загрузить список: " + e.message, openStationsList); }
   fitStations();
@@ -2218,6 +2351,20 @@ function renderStations() {
   }
 }
 function updateStBtn() {
+  const r = window.roomInfo?.();
+  $("#stWrap").classList.toggle("room", !!r && !r.host);
+  $("#stWrap").classList.toggle("away", !!r && !r.host && !r.follow);
+  if (r && !r.host) {
+    // гость: вместо жанров — комната (жанр включил бы свою волну и увёл от ведущего)
+    const lbl = document.createElement("span"); lbl.className = "lbl";
+    lbl.textContent = r.follow ? `Комната ${r.code} · ты гость` : "⟲ Вернуться в комнату";
+    $("#stBtn").replaceChildren(lbl);
+    $("#stBtn").title = r.follow ? "Открыть окно «Слушать вместе»" : "";
+    $("#stBtn").classList.remove("album");
+    $("#stWrap").classList.remove("album", "has-reset");
+    $("#stReset").hidden = true;
+    return;
+  }
   const open = !$("#stations").hidden;
   const label = wave.album ? `Моя волна по «${wave.album.title || "альбому"}»` : wave.name ? `${wave.name} · сменить` : "Жанры и настроения";
   const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = open ? "Закрыть список" : label;
@@ -2257,8 +2404,16 @@ $("#artistWaveBtn").onclick = () => {
 };
 $("#stReset").onclick = () => pickStation(DEFAULT_SEED, "");
 
+// Очередь кончилась. Альбом → «Моя волна по альбому»; любая другая очередь (лайки, плейлист, трек из поиска,
+// трек комнаты) → обычная Моя волна. Гость в комнате ничего не включает: следующий трек пришлёт ведущий.
 async function onQueueEnd() {
-  if (wave.on || playCtx !== "album" || !playAlbum?.id) { setTransit(false); return; }
+  if (wave.on || roomGuest()) { setTransit(false); return; }
+  if (playCtx !== "album" || !playAlbum?.id) {
+    playAlbum = null;
+    try { await waveStart(); } catch { wave.on = false; setTransit(false); }
+    updateStBtn();
+    return;
+  }
   const al = playAlbum; playAlbum = null;
   const prev = { seed: wave.seed, name: wave.name, album: wave.album };
   Object.assign(wave, { seed: "album:" + al.id, name: "", album: { id: al.id, title: al.title || "" }, session: null, queue: [], pos: -1, on: false });
@@ -2268,6 +2423,7 @@ async function onQueueEnd() {
   updateStBtn();
 }
 $("#stBtn").onclick = async () => {
+  if (roomGuest()) { window.roomCli?.stBtn?.(); return; }
   const open = $("#stations").hidden;
   setStations(open);
   if (!open) return;
@@ -2318,6 +2474,7 @@ function showLastAlbum(a) {
 async function showArtist(id, tab = "tracks") {
   const my = ++nav;
   setHead({ title: "Загрузка…", back: true }); setActive(null, "artist"); renderTabs(pinKey("artist", id)); resetView();
+  if (offline) return showArtistOffline(id, my);
   setChips([["tracks", "Треки"], ["albums", "Альбомы"]], tab, (t) => showArtist(id, t));
 
   loadArtist(id).then(({ info, albums }) => {
@@ -2335,6 +2492,9 @@ async function showArtist(id, tab = "tracks") {
       renderAlbums(albums);
       $("#status").textContent = albums.length ? "" : "Альбомов нет";
     } else if (albums.length) showLastAlbum(albums[0]);
+  }).catch(async (e) => {
+    // вкладка «Треки» сама разберётся в loadMore; на «Альбомах» сеть нужна только здесь
+    if (tab === "albums" && isNetErr(e) && (await suspectOffline()) && my === nav) showArtist(id, tab);
   });
   if (tab === "albums") return;
 
@@ -2346,15 +2506,28 @@ async function showArtist(id, tab = "tracks") {
       renderList(r.tracks, page > 0); page++;
       $("#more").hidden = !(r.pager && page * 50 < r.pager.total);
       $("#status").textContent = r.tracks.length || page > 1 ? "" : "Треков нет";
-    } catch (e) { if (my === nav) $("#status").textContent = "Ошибка: " + e.message; }
+    } catch (e) {
+      if (page === 0 && isNetErr(e) && (await suspectOffline())) { if (my === nav) showArtist(id, tab); return; }
+      if (my === nav) $("#status").textContent = "Ошибка: " + e.message;
+    }
   };
   $("#more").onclick = loadMore;
   loadMore();
+}
+// офлайн: скачанные треки артиста, имя — из их описания
+async function showArtistOffline(id, my) {
+  const tracks = await offlinePick((t) => (t.artists || []).some((a) => String(a.id ?? "") === String(id)));
+  if (my !== nav) return;
+  const name = tracks[0]?.artists?.find((a) => String(a.id ?? "") === String(id))?.name;
+  setHead({ title: name || "Артист", back: true });
+  if (tracks.length) renderList(tracks);
+  offlineNote(tracks.length ? `Офлайн-режим — скачанные треки артиста: ${tracks.length}` : "Офлайн-режим — страница артиста откроется, когда вернётся связь");
 }
 
 async function showAlbum(id) {
   const my = ++nav;
   setHead({ title: "Загрузка…", back: true }); setActive(null, "album"); renderTabs(pinKey("album", id)); resetView();
+  if (offline) return showAlbumOffline(id, my);
   try {
     const a = await ym("album", { id });
     if (my !== nav) return;
@@ -2367,11 +2540,26 @@ async function showAlbum(id) {
       },
     });
     const tracks = (a.volumes || []).flat();
-    tracks.forEach((t) => { if (!t.coverUri) t.coverUri = a.coverUri; });
+    tracks.forEach((t) => {
+      if (!t.coverUri) t.coverUri = a.coverUri;
+      if (!t.albums?.length) t.albums = [{ id: a.id, title: a.title }];     // чтобы скачанный трек знал свой альбом (офлайн)
+    });
     renderList(tracks, false, { noAlbumLink: true, ctx: "album", album: { id: a.id, title: a.title } });
+    dlSetup({ key: "album:" + a.id, label: "⤓ Скачать альбом", tracks: () => tracks });
     $("#status").textContent = tracks.length ? "" : "Треков нет";
     loadSimilar(a, my);
-  } catch (e) { if (my === nav) $("#status").textContent = "Ошибка: " + e.message; }
+  } catch (e) {
+    if (isNetErr(e) && (await suspectOffline())) { if (my === nav) showAlbumOffline(id, my); return; }
+    if (my === nav) $("#status").textContent = "Ошибка: " + e.message;
+  }
+}
+// офлайн: скачанные треки этого альбома (альбом записан в описании скачанного трека)
+async function showAlbumOffline(id, my) {
+  const tracks = await offlinePick((t) => String(t.albums?.[0]?.id ?? "") === String(id));
+  if (my !== nav) return;
+  setHead({ title: tracks[0]?.albums?.[0]?.title || "Альбом", back: true, round: false });
+  if (tracks.length) renderList(tracks, false, { noAlbumLink: true });
+  offlineNote(tracks.length ? `Офлайн-режим — скачанные треки альбома: ${tracks.length}` : "Офлайн-режим — альбом откроется, когда вернётся связь");
 }
 
 async function loadSimilar(a, my) {
@@ -2442,6 +2630,15 @@ function searchChips(active) {
   });
 }
 
+// офлайн: поиск по скачанным трекам (название, версия, исполнители, альбом)
+async function searchOffline(q, my) {
+  const words = normQ(q).split(" ").filter(Boolean);
+  const found = await offlinePick((t) => { const h = trackHay(t); return words.every((w) => h.includes(w)); });
+  if (my !== nav) return;
+  $("#chips").hidden = true;
+  if (found.length) renderList(found);
+  offlineNote(found.length ? `Офлайн-режим — найдено среди скачанных: ${found.length}` : "Офлайн-режим — среди скачанных ничего не найдено");
+}
 async function showSearch(q, historyTab = false) {
   const my = ++nav;
   searchQ = q;
@@ -2450,8 +2647,9 @@ async function showSearch(q, historyTab = false) {
   setActive("search"); renderTabs(false); resetView();
   searchChips(tab);
   if (tab === "history") { renderSearchHist(); return; }
+  if (offline) return searchOffline(q, my);
 
-  $("#status").textContent = "Ищу…";
+  $("#status").textContent = "Идёт поиск…";
   const type = searchType, key = SEARCH_KEYS[type];
   // type=all возвращает best — лучшее совпадение, которое Яндекс ставит первым; второй запрос — полный список по фильтру
   const [allR, listR] = await Promise.allSettled([
@@ -2461,7 +2659,11 @@ async function showSearch(q, historyTab = false) {
   if (my !== nav) return;
   const all = allR.status === "fulfilled" ? allR.value : null;
   const list = listR.status === "fulfilled" ? listR.value : null;
-  if (!all && !list) { $("#status").textContent = "Ошибка: " + (listR.reason?.message || allR.reason?.message || "нет ответа"); return; }
+  if (!all && !list) {
+    if (isNetErr(listR.reason) && (await suspectOffline())) { if (my === nav) searchOffline(q, my); return; }
+    $("#status").textContent = "Ошибка: " + (listR.reason?.message || allR.reason?.message || "нет ответа");
+    return;
+  }
 
   let items = (list || all)?.[key]?.results || [];
   const best = all?.best;
@@ -2678,6 +2880,8 @@ function buildOrder() {
 }
 function nextIndex(auto) {
   if (auto && effRepeat() === 2) return current;
+  // ведущий комнаты с галочкой «Ставить в очередь»: предложенный трек встаёт сразу за текущим (together.js)
+  window.roomTake?.();
   if (!modesActive()) return current + 1;
   if (shuffle) {
     if (orderFor !== queue || order.length !== queue.length || order[ordPos] !== current) buildOrder();
@@ -2955,7 +3159,12 @@ function menuHead(text, back) {
   h.append(b, s); tmenu.append(h);
 }
 function menuNote(text, to = tmenu) { const p = document.createElement("p"); p.className = "mnote"; p.textContent = text; to.append(p); return p; }
-function menuSep() { const i = document.createElement("hr"); i.className = "msep"; tmenu.append(i); }
+// разделитель не ставится первым и два подряд (пункты в меню добавляются по условиям)
+function menuSep() {
+  const last = tmenu.lastElementChild;
+  if (!last || last.classList.contains("msep")) return;
+  const i = document.createElement("hr"); i.className = "msep"; tmenu.append(i);
+}
 function placeMenu() {
   if (tmenu.hidden || !tmenuBtn) return;
   const r = tmenuBtn.getBoundingClientRect(), m = tmenu.getBoundingClientRect();
@@ -3086,8 +3295,14 @@ function menuSpeed() {
 function openTrackMenu(t, btn, ctx = null) { openMenu(btn, () => trackMenuMain(t, ctx)); }
 function trackMenuMain(t, ctx) {
   menuReset();
+  const bottom = tmenuBtn?.id === "pMore";                       // меню нижней панели
+  // сверху: «Слушать вместе» отдельным блоком (только в комнате, together.js), под ним — скорость
+  const roomed = !!window.roomTrackMenu?.(t);
+  if (bottom) menuSpeed();
+  if (roomed || bottom) menuSep();
   if (window.playNext && String(t.id) !== String(queue[current]?.id)) menuItem(ICON.playNext, "Играть следующим", () => window.playNext(t));
   menuItem(ICON.plAdd, "Добавить в плейлист", () => trackMenuPlaylists(t, ctx), { keep: true, arrow: true });
+  window.waTrackMenu?.(t, ctx);         // «Сохранить в архив» (whisper.js) — в одной группе с плейлистами
   if (ctx) {
     const p = PL.full.get(ctx.kind), n = p ? p.items.length : 0;
     menuSep();
@@ -3096,12 +3311,16 @@ function trackMenuMain(t, ctx) {
     if (cover(t)) menuItem(ICON.image, "Сделать обложкой плейлиста", () => plCoverFromTrack(ctx.kind, t));
     menuItem(ICON.remove, "Удалить из плейлиста", () => plRemoveTrack(ctx.kind, ctx.index, t), { danger: true });
   }
+  // звук одной группой: эквалайзер, устройство вывода, «Звук и формат»
+  menuSep();
+  if (window.eqOpen) menuItem(ICON.eq || "", "Эквалайзер", () => window.eqOpen());    // eq.js
+  if (bottom) {                                                   // только в меню нижней панели:
+    window.outMenu?.(t, ctx);                                      // устройство вывода (output.js)
+    window.soundMenu?.(t, ctx);                                    // нормализация, качество, формат (sound.js)
+  }
+  // в самом низу — скачать
   menuSep();
   menuItem(got.has(String(t.id)) ? ICON.got : ICON.download, got.has(String(t.id)) ? "Уже скачан" : "Скачать трек", () => downloadTrack(t));
-  window.waTrackMenu?.(t, ctx);         // «Сохранить в архив» (whisper.js)
-  window.roomTrackMenu?.(t);            // «Предложить в комнату» (together.js), если ты гость в комнате
-  if (window.eqOpen) { menuSep(); menuItem(ICON.eq || "", "Эквалайзер", () => window.eqOpen()); }    // eq.js
-  if (tmenuBtn?.id === "pMore") { menuSep(); menuSpeed(); }       // скорость — только в меню нижней панели
   placeMenu();
 }
 async function trackMenuPlaylists(t, ctx) {
@@ -3112,7 +3331,7 @@ async function trackMenuPlaylists(t, ctx) {
     if (pl) plAddTrack(pl.kind, t);
   });
   const box = document.createElement("div"); box.className = "mscroll"; tmenu.append(box);
-  const wait = menuNote("Загружаю плейлисты…", box);
+  const wait = menuNote("Плейлисты загружаются…", box);
   placeMenu();
   let list;
   try { list = await plLoadList(); }
@@ -3225,7 +3444,7 @@ const plTrackIndex = (p, index, id) => (p.items[index]?.id === String(id) ? inde
 async function plAddTrack(kind, t, { at = null, force = false, verb = "добавлен в" } = {}) {
   kind = String(kind);
   const name = () => plName(kind);
-  showToast(`Добавляю «${t.title}» в «${name()}»…`, 0);
+  showToast(`«${t.title}» добавляется в «${name()}»…`, 0);
   try {
     const ref = trackRef(t);
     const cur = PL.full.get(kind) || await plFetch(kind);
@@ -3399,7 +3618,7 @@ async function plCoverFromTrack(kind, t) {
   catch (e) { showToast("Не удалось поставить обложку: " + (e?.message || e), 7000, { kind: "err" }); }
 }
 async function plCoverReset(kind) {
-  try { await plSetLocalCover(kind, null); plCoverChanged(kind, "Вернул обложку Яндекса"); }
+  try { await plSetLocalCover(kind, null); plCoverChanged(kind, "Обложка Яндекса возвращена"); }
   catch (e) { showToast("Не удалось сбросить обложку: " + (e?.message || e), 7000, { kind: "err" }); }
 }
 function plCoverChanged(kind, msg) {
@@ -3421,12 +3640,16 @@ $("#plCoverFile").onchange = (e) => { if (curPl) plCoverFromFile(curPl, e.target
 
 async function showMyPlaylists(my) {
   setHead({ title: "Мои плейлисты" });
+  if (offline) return offlineNote("Офлайн-режим — плейлисты откроются, когда вернётся связь");
   $("#plCreateBtn").hidden = false;
   $("#plPage").hidden = false; $("#list").hidden = true;
   $("#status").textContent = PL.list ? "" : "Загрузка…";
   if (PL.list) renderPlGrid();
   try { await plLoadList(true); if (my === nav) renderPlGrid(); }
-  catch (e) { if (my === nav) $("#status").textContent = "Не удалось загрузить плейлисты: " + plErr(e); }
+  catch (e) {
+    if (isNetErr(e) && !PL.list && (await suspectOffline())) { if (my === nav) { $("#plCreateBtn").hidden = true; offlineNote("Офлайн-режим — плейлисты откроются, когда вернётся связь"); } return; }
+    if (my === nav) $("#status").textContent = "Не удалось загрузить плейлисты: " + plErr(e);
+  }
 }
 function renderPlGrid() {
   const g = $("#plGrid"); g.innerHTML = "";
@@ -3451,6 +3674,7 @@ async function showPlaylist(kind) {
   setHead({ title: "Загрузка…", back: true }); setActive(null); renderTabs(pinKey("playlist", kind)); resetView();
   curPl = kind;
   if (!kindOk(kind)) { $("#status").textContent = "Неверный плейлист"; return; }
+  if (offline) return showPlaylistOffline(kind);
   try {
     const p = await plFetch(kind);
     if (my !== nav) return;
@@ -3458,7 +3682,18 @@ async function showPlaylist(kind) {
     $("#plBar").hidden = false;
     plRenderTracks();
     plLoadRecs(kind, my);
-  } catch (e) { if (my === nav) { setHead({ title: "Плейлист", back: true }); $("#status").textContent = "Не удалось открыть плейлист: " + plErr(e); } }
+  } catch (e) {
+    if (isNetErr(e) && (await suspectOffline())) { if (my === nav) showPlaylistOffline(kind); return; }
+    if (my === nav) { setHead({ title: "Плейлист", back: true }); $("#status").textContent = "Не удалось открыть плейлист: " + plErr(e); }
+  }
+}
+// офлайн: если плейлист уже открывали в этом запуске — его скачанные треки, иначе надпись
+function showPlaylistOffline(kind) {
+  const p = PL.full.get(kind);
+  setHead({ title: p?.title || "Плейлист", back: true });
+  const list = (p?.list || []).filter((t) => t && got.has(String(t.id)));
+  if (list.length) renderList(list);
+  offlineNote(list.length ? `Офлайн-режим — скачанные треки плейлиста: ${list.length}` : "Офлайн-режим — плейлист откроется, когда вернётся связь");
 }
 function plRenderHead(p) {
   const local = PL.covers.get(p.kind);
@@ -3495,7 +3730,7 @@ $("#plCoverBtn").onclick = (e) => curPl && plCoverMenu(e.currentTarget);
 $("#plDelete").onclick = () => curPl && plDelete(curPl);
 
 async function plLoadRecs(kind, my) {
-  $("#plRecs").hidden = false; $("#plRecNote").textContent = "Подбираю рекомендации…"; $("#plRecList").innerHTML = "";
+  $("#plRecs").hidden = false; $("#plRecNote").textContent = "Рекомендации подбираются…"; $("#plRecList").innerHTML = "";
   try {
     const r = await ym("playlist_recs", { id: kind });
     if (my !== nav) return;
@@ -3589,6 +3824,7 @@ function syncGotRow(li) {
 function syncGot() {
   document.querySelectorAll(".list li").forEach(syncGotRow);
   refreshPlayerBtns();
+  if (typeof paintDlAll === "function") paintDlAll();
 }
 async function loadGot() {
   try { const ids = await invoke("downloaded_ids"); got.clear(); for (const i of ids) got.add(String(i)); syncGot(); } catch {}
@@ -3599,7 +3835,12 @@ const trackMin = (x) => ({
   id: x.id, title: x.title, version: x.version || undefined, coverUri: x.coverUri, durationMs: x.durationMs,
   artists: (x.artists || []).map((a) => ({ id: a.id, name: a.name })),
   albums: (x.albums || []).slice(0, 1).map((a) => ({ id: a.id, title: a.title })),
+  r128: r128Min(x),               // громкость для нормализации (sound.js) — работает и без сети
 });
+function r128Min(x) {
+  const r = x?.r128;
+  return r && Number.isFinite(r.i) ? { i: r.i, tp: Number.isFinite(r.tp) ? r.tp : 0 } : undefined;
+}
 // Трекам, скачанным до появления офлайн-режима, описание дописывается, когда их данные есть под рукой (раз за запуск).
 const metaSent = new Set();
 function backfillMeta(tracks) {
@@ -3620,18 +3861,112 @@ async function downloadTrack(t, force = false) {
   if (got.has(id) && !force) {
     return showToast(`«${t.title}» уже скачан`, 6000, { kind: "ok", action: { label: "Скачать ещё раз", fn: () => downloadTrack(t, true) } });
   }
-  downloading.add(id); refreshPlayerBtns();
-  const artists = (t.artists || []).map((a) => a.name).filter(Boolean).join(", ");
-  const name = artists ? `${artists} — ${t.title}` : String(t.title || id);
-  showToast(`Скачиваю «${t.title}»…`, 0);
+  refreshPlayerBtns();
+  showToast(`«${t.title}» скачивается…`, 0);
   try {
-    const path = await invoke("download_track", { name, id, meta: trackMin(t) });      // ссылку на файл Rust берёт сам по id
-    got.add(id); metaSent.add(id); syncGot();
+    const path = await dlOne(t);
+    syncGot();
     showToast(`Сохранено: ${path}`, 5000, { kind: "ok" });
   } catch (e) {
     showToast("Не удалось скачать: " + e.message, 6000);
-  } finally { downloading.delete(id); refreshPlayerBtns(); }
+  } finally { refreshPlayerBtns(); }
 }
+// Один трек на диск. Файл называется «Исполнители — Название»; ссылку на файл Rust берёт сам по id.
+async function dlOne(t) {
+  const id = String(t.id);
+  const artists = (t.artists || []).map((a) => a.name).filter(Boolean).join(", ");
+  const name = artists ? `${artists} — ${t.title}` : String(t.title || id);
+  downloading.add(id);
+  try {
+    const path = await invoke("download_track", { name, id, meta: trackMin(t) });
+    got.add(id); metaSent.add(id);
+    return path;
+  } finally { downloading.delete(id); }
+}
+
+// ---------- «Скачать альбом» / «Скачать лайки» ----------
+// Кнопка в шапке страницы. Качает по два трека сразу, уже скачанные пропускает; повторное нажатие — остановить.
+// Пока идёт скачивание, можно уходить на другие страницы — прогресс виден на кнопке, когда вернёшься.
+// var: syncGot/resetView могут сработать раньше этих строк
+var dlCur = null;       // { key, label, tracks(): массив или null, all(): Promise<массив> } — для открытой страницы
+var bulk = null;        // { key, done, total, fail, stop }
+const dlOk = (t) => t?.id != null && t.available !== false;
+function dlSetup(cfg) { dlCur = cfg; paintDlAll(); }
+function paintDlAll() {
+  const b = $("#dlAllBtn");
+  if (!b) return;
+  if (!dlCur || offline) { b.hidden = true; return; }
+  b.hidden = false;
+  const running = !!bulk && bulk.key === dlCur.key;
+  b.classList.toggle("busy", running);
+  if (running) {
+    b.textContent = `Скачано ${bulk.done} из ${bulk.total} · ✕`;
+    b.title = "Остановить скачивание";
+    return;
+  }
+  const list = dlCur.tracks?.();
+  const all = !!list?.length && list.every((t) => !dlOk(t) || got.has(String(t.id)));
+  b.classList.toggle("done", all);
+  b.textContent = all ? "✓ Скачано" : dlCur.label;
+  b.title = all ? "Все треки уже на диске" : "Скачать все треки, которых ещё нет на диске";
+}
+$("#dlAllBtn").onclick = async () => {
+  const cur = dlCur;
+  if (!cur) return;
+  if (bulk) {
+    if (bulk.key === cur.key) { bulk.stop = true; $("#dlAllBtn").textContent = "Останавливается…"; }
+    else showToast("Уже идёт скачивание — дождись его или останови", 3500);
+    return;
+  }
+  const btn = $("#dlAllBtn");
+  let list;
+  try { list = cur.tracks?.() || (await cur.all()); }
+  catch (e) { showToast("Не удалось получить список треков: " + e.message, 5000); return; }
+  list = (list || []).filter(dlOk);
+  const need = (arr) => arr.filter((t) => !got.has(String(t.id)) && !downloading.has(String(t.id)));
+  if (!need(list).length) { showToast("Всё уже скачано", 3000, { kind: "ok" }); paintDlAll(); return; }
+  if (list.length <= 10) return dlBulk(cur, need(list));
+  // Сколько скачать: первые 10 / 50 / 100 / 200 сверху списка (в лайках — самые новые) или все.
+  // Уже скачанные среди них пропускаются — справа видно, сколько реально осталось.
+  openMenu(btn, () => {
+    menuReset();
+    menuNote("Сколько скачать — с начала списка");
+    const opt = (label, part) => {
+      const k = need(part).length;
+      const it = menuItem(k ? ICON.download : ICON.got, label, () => { if (k) dlBulk(cur, need(part)); });
+      const s = document.createElement("small"); s.className = "mosub";
+      s.textContent = k ? (k < part.length ? `ещё ${k}` : "") : "скачано";
+      it.querySelector(".mt")?.after(s);
+      if (!k) it.disabled = true;
+    };
+    for (const n of [10, 50, 100, 200]) if (n < list.length) opt(`Первые ${n}`, list.slice(0, n));
+    opt(`Все (${list.length})`, list);
+    placeMenu();
+  });
+};
+async function dlBulk(cur, todo) {
+  if (bulk || !todo.length) return;
+  const job = bulk = { key: cur.key, done: 0, total: todo.length, fail: 0, stop: false, net: false };
+  paintDlAll();
+  const q = todo.slice();
+  const worker = async () => {
+    while (q.length && !job.stop) {
+      const t = q.shift();
+      try { await dlOne(t); }
+      catch (e) { job.fail++; if (isNetErr(e)) { job.stop = true; job.net = true; } }
+      job.done++;
+      syncGot();
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  bulk = null;
+  paintDlAll(); syncGot();
+  const ok = job.done - job.fail;
+  if (job.net) showToast(`Связь пропала — скачано ${ok} из ${job.total}. Нажми ещё раз, когда связь вернётся`, 6000);
+  else if (job.stop) showToast(`Скачивание остановлено: ${ok} из ${job.total}`, 4000);
+  else if (job.fail) showToast(`Скачано ${ok} из ${job.total}, не удалось: ${job.fail}`, 6000);
+  else showToast(`Скачано треков: ${ok}`, 4000, { kind: "ok" });
+};
 
 $("#disBtn").onclick = () => toggleDislike(queue[current]);
 // «⋯» в нижней панели: то же меню, что у треков в списках, для играющего трека
@@ -3673,8 +4008,9 @@ $("#dlOpen").onclick = async () => {
 };
 
 // Прямая ссылка на MP3: download-info, адрес файла и подпись (MD5 по протоколу Яндекса) получает Rust (net.rs).
+// Качество — из настроек «Звук» (sound.js): лучшее (MP3 320) или экономное.
 async function directLink(id) {
-  return await invoke("ym_track_url", { id: String(id) });
+  return await invoke("ym_track_url", { id: String(id), quality: window.ymQuality?.() || "high" });
 }
 function markPlaying() {
   document.querySelectorAll(".list li").forEach((li) => li.classList.toggle("playing", li.dataset.id === String(playingId)));
@@ -3686,6 +4022,7 @@ function markPlaying() {
 let coverSeq = 0;
 const newAnims = (el, before) => el.getAnimations?.().filter((a) => !before.includes(a)) || [];
 async function swapCover(src) {
+  src = src || COVER_W;           // нет обложки (или офлайн) — сразу заглушка, без запроса
   const el = $("#cover"), my = ++coverSeq;
   el.classList.remove("flip-out", "flip-in");
   if (!el.getAttribute("src") || el.getAttribute("src") === src || document.hidden || !el.getAnimations) { el.src = src; return; }
@@ -3726,7 +4063,8 @@ function showTrack(t, pos = 0) {
   const dur = (t.durationMs || 0) / 1000;
   $("#tCur").textContent = fmtTime(pos); $("#tDur").textContent = fmtTime(dur);
   $("#seek").value = dur ? (pos / dur) * 1000 : 0; fill($("#seek"));
-  if (wave.on) showNow(t);
+  if (wave.on || window.roomInfo?.()) showNow(t);
+  else if (!$("#wavePage").hidden) waveHead();         // волна выключилась — не оставлять наверху старое название
   refreshHearts(); updateModes();
   if (!$("#full").hidden) fillFull(t);
   window.qRefresh?.();                    // панель очереди (queue.js), если открыта
@@ -3740,6 +4078,7 @@ function saveLast(pos = 0) {
     id: x.id, title: x.title, coverUri: x.coverUri, durationMs: x.durationMs,
     artists: (x.artists || []).map((a) => ({ id: a.id, name: a.name })),
     albums: (x.albums || []).slice(0, 1).map((a) => ({ id: a.id })),
+    r128: r128Min(x),
   });
   try { localStorage.setItem("ym_last", JSON.stringify({ q: queue.slice(current, current + 50).map(min), pos: Math.floor(pos), ctx: playCtx, album: playAlbum, wave: wave.on ? { seed: wave.seed, name: wave.name, album: wave.album } : null })); } catch {}
 }
@@ -3771,13 +4110,20 @@ async function restorePlayer() {
 }
 
 let playFail = 0;       // подряд неудачных загрузок трека
-async function play(i, resumeAt = 0, isRetry = false) {
+// hold — загрузить трек, но не включать (гость «Слушать вместе», пока ведущий сам ещё грузит этот трек)
+async function play(i, resumeAt = 0, isRetry = false, hold = false) {
   if (i < 0) return;
   setTransit(true);
   loadAt = Date.now(); loadPos = resumeAt;
   if (i >= queue.length && wave.on && !isRetry) {
     const seq0 = playSeq;
-    if (!(await waveMore())) { if (seq0 === playSeq) { loadAt = 0; setTransit(false); } return; }
+    if (!(await waveMore())) {
+      if (seq0 !== playSeq) return;
+      // волна не подгрузилась из-за сети — переходим на скачанное
+      if (offline || !navigator.onLine) { setOffline(true); if (await offlineFallback(queue.length - 1, playSeq)) return; }
+      if (seq0 === playSeq) { loadAt = 0; setTransit(false); }
+      return;
+    }
   }
   if (i >= queue.length) { loadAt = 0; setTransit(false); return; }
   current = i; needLoad = false;
@@ -3795,11 +4141,13 @@ async function play(i, resumeAt = 0, isRetry = false) {
     if (queue.length - i <= 3) waveMore();
   }
   const my = ++playSeq;
-  const wantViz = vizWanted();
-  if (!audio || audioViz !== wantViz) {
+  // эксклюзивный режим (engine.js / engine.rs): плеер — свой движок, без звукового графа страницы
+  const nat = !!window.engine?.on();
+  const wantViz = nat ? false : vizWanted();
+  if (!audio || audioViz !== wantViz || !!audio._native !== nat) {
     const old = audio;
     if (old) { old.pause(); old._src?.disconnect(); old.removeAttribute("src"); old.load(); }
-    audio = makeAudio(wantViz); audioViz = wantViz;
+    audio = makeAudio(wantViz, nat); audioViz = wantViz;
     if (!wantViz) {
       // визуализатор больше не нужен: звуковой граф засыпает (не крутит аудиопоток вхолостую),
       // а целиком скачанный прошлый трек освобождается из памяти
@@ -3807,17 +4155,31 @@ async function play(i, resumeAt = 0, isRetry = false) {
       if (curBlob) { URL.revokeObjectURL(curBlob); curBlob = null; }
     }
   }
+  // Прошлый трек замолкает сразу, а не когда загрузится новый: иначе при сбое загрузки он продолжал играть
+  // (или снова включался кнопкой «Играть»), хотя в плеере уже название и обложка нового.
+  if (!audio.paused) audio.pause();
+  resumeOnNet = false;
+  curLocal = false; curFromWa = false;      // флаги прошлого трека не должны влиять на разбор ошибки этого
   try {
     // Скачанный трек играет с диска (ymlocal://, Rust отдаёт файл кусками) — без единого запроса в сеть.
     // Иначе Whisper Archive (whisper.js): трек есть в архиве — играет поток оттуда (wa://, кусками), иначе версия Яндекса.
     const local = got.has(String(t.id)) ? LOCAL_BASE + "track/" + encodeURIComponent(String(t.id)) : "";
+    // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
+    if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");
     if (local) backfillMeta([t]);
     const wa = local ? null : window.waSource ? await window.waSource(t, queue[i + 1]) : null;
     if (my !== playSeq) return;
     window.waBadge?.(!!wa);
     curFromWa = !!wa; curLocal = !!local;
-    let src;
-    if (local || wa) {
+    let src = null;
+    if (audio._native) {
+      // свой движок сам берёт файл по номеру: скачанный, из архива или у Яндекса (в выбранном качестве)
+      audio.setTrack(
+        local ? { kind: "local", id: String(t.id) }
+          : wa ? { kind: "wa", id: String(wa.id) }
+          : { kind: "ym", id: String(t.id), quality: window.ymQuality?.() || "high" },
+        resumeAt, (t.durationMs || 0) / 1000);
+    } else if (local || wa) {
       if (curBlob) { URL.revokeObjectURL(curBlob); curBlob = null; }
       audio.crossOrigin = "anonymous";       // свои протоколы отдают CORS — визуализатор может анализировать поток
       src = local || wa.url;
@@ -3834,10 +4196,21 @@ async function play(i, resumeAt = 0, isRetry = false) {
         await ctxReady();
       }
     }
-    audio.src = src;
+    if (src !== null) audio.src = src;
     if (!wa && !wantViz && curBlob) { URL.revokeObjectURL(curBlob); curBlob = null; }   // файл прошлого трека больше не нужен
     const seekResume = () => { if (resumeAt) audio.addEventListener("loadedmetadata", () => { audio.currentTime = resumeAt; }, { once: true }); };
     seekResume();
+    // звук не должен «мелькнуть» на системном устройстве, пока переключается выбранное (output.js)
+    if (audio._sinkP) { await audio._sinkP; if (my !== playSeq) return; }
+    window.normApply?.();           // усиление нормализации для этого трека (sound.js)
+    // загрузить без звука: файл уже буферизуется, play() потом стартует почти мгновенно
+    // (если за время загрузки ведущий уже включил трек — не держим, играем сразу)
+    if (hold && !window.roomWantsPlay?.()) {
+      if (my !== playSeq) return;
+      if (!audio._native) audio.preload = "auto";
+      playFail = 0; loadAt = 0; setTransit(false);
+      return;
+    }
     try { await audio.play(); playFail = 0; }
     catch (err) {
       if (my !== playSeq) return;
@@ -3864,27 +4237,70 @@ async function play(i, resumeAt = 0, isRetry = false) {
     }
     if (my !== playSeq) return;
     playFail = 0; loadAt = 0; setTransit(false);
-    if (/пробую ещё раз|перезапускаю/.test($("#status").textContent)) $("#status").textContent = "";
+    if (/повторная попытка|перезапускается|Нет связи|Нет интернета/.test($("#status").textContent)) $("#status").textContent = "";
+    if (offline && !curLocal && !curFromWa) backOnline();      // трек загрузился из сети — значит, связь есть
+    window.soundRefresh?.();        // «Сведения о формате», если вкладка «Звук» открыта
   } catch (e) {
     if (my !== playSeq) return;
+    // эксклюзивный режим не удался (устройство занято, формат не тот) — engine.js уже вернулся в общий режим,
+    // играем этот же трек обычным путём
+    if (e?.name === "EngineFallback") return play(i, resumeAt, true);
+    const net = !curLocal && !curFromWa && isNetErr(e);
     // Сбой загрузки (ссылка протухла, сеть мигнула): два повтора с новой ссылкой, потом в волне — следующий трек.
-    if (!curLocal && ++playFail <= 2) {
-      $("#status").textContent = "Не удалось загрузить трек — пробую ещё раз…";
+    // Уже известно, что сети нет, — не повторяем, сразу ищем замену среди скачанного.
+    if (!curLocal && !(net && (offline || !navigator.onLine)) && ++playFail <= 2) {
+      $("#status").textContent = "Не удалось загрузить трек — повторная попытка…";
       setTimeout(() => { if (my === playSeq) play(i, resumeAt, true); }, playFail * 2000);
       return;
     }
-    if (!curLocal && wave.on && !isNetErr(e) && i + 1 < queue.length) {
-      playFail = 0;
-      $("#status").textContent = `«${t.title}» не загрузился — пропускаю`;
+    playFail = 0;
+    if (!curLocal && wave.on && !net && i + 1 < queue.length) {
+      $("#status").textContent = `«${t.title}» не загрузился — пропущен`;
       play(i + 1);
       return;
     }
-    loadAt = 0; setTransit(false);
-    if (isNetErr(e) && !curLocal && !curFromWa) {
-      setOffline(true);
-      $("#status").textContent = `Нет связи с Яндекс Музыкой — «${t.title}» не скачан, сыграть его нельзя.`;
+    if (net) {
+      await suspectOffline();          // офлайн включится, только если недоступен и архив
+      if (my !== playSeq) return;
+      if (await offlineFallback(i, my)) return;
+      if (my !== playSeq) return;
+    }
+    // Ничего не играет: плеер очищается, а «Играть» заново загружает именно этот трек (а не включает прошлый).
+    stopForRetry(resumeAt);
+    if (net) {
+      resumeOnNet = true;
+      $("#status").textContent = `Нет связи с Яндекс Музыкой — «${t.title}» не скачан, а скачанных треков нет. Он включится, когда связь вернётся.`;
     } else $("#status").textContent = "Не удалось воспроизвести: " + e.message;
   }
+}
+function stopForRetry(pos = 0) {
+  loadAt = 0;
+  if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); }
+  if (curBlob) { URL.revokeObjectURL(curBlob); curBlob = null; }
+  needLoad = true; resumePos = pos;
+  setTransit(false);
+}
+// Без сети: вместо трека, которого нет на диске, — ближайший следующий скачанный из текущей очереди;
+// таких нет — очередь из всех скачанных (лайкнутые первыми, как «Лайки» без сети). Волна при этом ставится на паузу:
+// её очередь сохраняется, и кнопка «Моя волна» продолжит её, когда связь вернётся.
+let offQueue = null;
+async function offlineFallback(i, my) {
+  for (let k = i + 1; k < queue.length; k++) {
+    if (got.has(String(queue[k].id))) {
+      $("#status").textContent = offline ? "" : "Трек не загрузился — играет следующий скачанный";
+      play(k);
+      return true;
+    }
+  }
+  if (queue === offQueue) return false;           // уже играем скачанное и оно кончилось — не крутимся по кругу
+  const tracks = await offlineLikes();
+  if (my !== playSeq || !tracks.length) return false;
+  if (wave.on) { wave.on = false; updateStBtn(); }
+  playCtx = "likes"; playAlbum = null;
+  queue = offQueue = tracks;
+  $("#status").textContent = offline ? "" : `Трек не загрузился — играют скачанные треки (${tracks.length})`;
+  play(0);
+  return true;
 }
 // Адрес скачанных треков по правилам Tauri: http://ymlocal.localhost/… в Windows, ymlocal://localhost/… в Linux и macOS.
 const LOCAL_BASE = (() => {
@@ -3919,17 +4335,17 @@ function recoverPlayback(stalled) {
   if (!t) return;
   const pos = stalled ? audio.currentTime || 0 : loadPos;
   if (++playFail <= 2) {
-    $("#status").textContent = stalled ? "Трек перестал грузиться — перезапускаю…" : "Трек не загружается — пробую ещё раз…";
+    $("#status").textContent = stalled ? "Трек перестал грузиться — перезапускается…" : "Трек не загружается — повторная попытка…";
     play(i, pos, true);
     return;
   }
   playFail = 0;
   if (wave.on || i + 1 < queue.length) {
-    $("#status").textContent = `«${t.title}» не загрузился — пропускаю`;
+    $("#status").textContent = `«${t.title}» не загрузился — пропущен`;
     const n = nextIndex(false);
     if (n >= 0) { play(n); return; }
   }
-  loadAt = 0; setTransit(false);
+  stopForRetry(pos);        // «Играть» загрузит этот трек заново, а не включит прошлый
   $("#status").textContent = `«${t.title}» не загрузился — нажми «Играть», чтобы повторить.`;
 }
 setInterval(() => {
@@ -3945,15 +4361,29 @@ setInterval(() => {
   if (now - wdAt > 20000) { wdAt = 0; wdPos = -1; recoverPlayback(true); }
 }, 5000);
 
-function makeAudio(useViz) {
-  const a = new Audio();
+// Громкость плеера: громкость пользователя × приглушение нормализации (sound.js). Когда трек идёт через звуковой граф,
+// нормализация работает узлом усиления, и плеер играет с громкостью пользователя.
+// Свой движок (эксклюзивный режим) — цифровая громкость: нормализация может и поднимать (до ×4), без графа.
+function outVol(a = audio) {
+  const v = volume * (window.normElK ? window.normElK(a) : 1);
+  return Math.max(0, Math.min(a?._native ? 4 : 1, v));
+}
+function makeAudio(useViz, nat = false) {
+  const a = nat && window.engine ? window.engine.create() : new Audio();
+  if (a._native) useViz = false;
   a.volume = volume;
   applySpeed(a);
   a.onplay = syncIcons;
   // конец трека: браузер сначала шлёт pause, потом ended. Этот pause — не остановка: ended сразу включит следующий
   // трек, а сообщи мы в Rust «не играет» — в трее страницу заморозило бы раньше, чем следующий трек загрузится.
   a.onpause = () => { if (!a.ended) syncIcons(); };
-  a.onplaying = () => { applySpeed(a); if (a === audio) { loadAt = 0; wdPos = -1; wdAt = 0; if (transit) setTransit(false); } };
+  a.onplaying = () => {
+    applySpeed(a);
+    if (a === audio) {
+      loadAt = 0; wdPos = -1; wdAt = 0; if (transit) setTransit(false);
+      window.roomOnPlaying?.();           // «Слушать вместе»: ведущий сообщает старт, гость догоняет (together.js)
+    }
+  };
   a.onseeked = () => { if (a === audio) { window.discordPush?.(true); window.miniPush?.(true); } };
   a.onended = () => {
     if (a !== audio) return;
@@ -3964,15 +4394,25 @@ function makeAudio(useViz) {
     if (n >= queue.length && wave.on) {
       // очередь волны кончилась раньше, чем успела пополниться — ждём подгрузку, а не останавливаемся
       const cur = current;
-      $("#status").textContent = "Загружаю следующие треки волны…";
+      $("#status").textContent = "Следующие треки волны загружаются…";
       waveMore().then((ok) => {
         if (a !== audio || current !== cur) return;
-        if (ok && cur + 1 < queue.length) { $("#status").textContent = ""; play(cur + 1); }
-        else { setTransit(false); $("#status").textContent = "Не удалось получить следующие треки волны — нажми «Играть», чтобы повторить."; }
+        if (ok && cur + 1 < queue.length) { $("#status").textContent = ""; play(cur + 1); return; }
+        suspectOffline().then((off) => {
+          if (a !== audio || current !== cur) return;
+          if (!off) { setTransit(false); $("#status").textContent = "Не удалось получить следующие треки волны — нажми «Играть», чтобы повторить."; return; }
+          // без сети волна не пополнится — играем скачанное
+          const seq = playSeq;
+          offlineFallback(cur, seq).then((ok2) => {
+            if (ok2 || seq !== playSeq) return;
+            setTransit(false);
+            $("#status").textContent = "Офлайн-режим: скачанных треков нет — волна продолжится, когда связь вернётся.";
+          });
+        });
       });
       return;
     }
-    if (n >= 0) play(n); else onQueueEnd();
+    if (n >= 0 && n < queue.length) play(n); else onQueueEnd();
   };
   a.ontimeupdate = () => {
     if (a === audio && a.duration) {
@@ -3988,12 +4428,14 @@ function makeAudio(useViz) {
     if (!analyser) {
       analyser = actx.createAnalyser();
       analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.35;      // меньше сглаживания — удары не «размазываются»
-      analyser.connect(actx.destination);
+      analyser.connect(window.normNode ? window.normNode() : actx.destination);      // → усиление нормализации (sound.js) → динамики
       freq = new Uint8Array(analyser.frequencyBinCount);
     }
     a._src = actx.createMediaElementSource(a);
     a._src.connect(window.eqInput ? window.eqInput() : analyser);      // источник → эквалайзер → анализатор → динамики
   }
+  a.volume = outVol(a);           // с учётом нормализации (без графа она приглушает через громкость плеера)
+  if (!a._native) window.outBind?.(a);   // выбранное устройство вывода (output.js); свой движок открывает его сам
   return a;
 }
 
@@ -4002,7 +4444,12 @@ const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.s
 // Звуковой граф (Web Audio) нужен ещё и эквалайзеру (eq.js): с ним трек идёт через фильтры. Без визуализатора
 // и с выключенным эквалайзером граф не создаётся вовсе — звук играет напрямую, без лишней работы.
 // консольный визуализатор (cli.js → visual, cat vibe) тоже просит анализ звука: window.cliVizOn
-function vizWanted() { return (cfg.viz && (wave.on || !$("#wavePage").hidden)) || !!window.eqActive?.() || !!window.cliVizOn; }
+// подъём тихих треков нормализацией (sound.js) тоже работает узлом усиления в графе
+// в эксклюзивном режиме графа нет: звук идёт мимо страницы
+function vizWanted() {
+  if (window.engine?.on()) return false;
+  return (cfg.viz && (wave.on || !$("#wavePage").hidden)) || !!window.eqActive?.() || !!window.cliVizOn || !!window.normWantsGraph?.();
+}
 function applyViz() {
   waveOrbitsSync();
   $("#viz").hidden = !cfg.viz;
@@ -4043,6 +4490,7 @@ async function ensureVizAudio() {
     na.currentTime = old.currentTime || 0;
     if (curBlob && curBlob !== blob) URL.revokeObjectURL(curBlob);
     curBlob = blob; audio = na; audioViz = true; na = null;
+    window.normApply?.();           // теперь усиление делает узел графа, громкость плеера — без приглушения
     if (wasPlaying) await audio.play();
     old.pause(); old._src?.disconnect(); old.removeAttribute("src"); old.load();
     syncIcons();
@@ -4381,7 +4829,7 @@ $("#play").onclick = togglePlay;
 $("#next").onclick = () => {
   if (wave.on) waveFeedback("skip", queue[current], { totalPlayedSeconds: Math.round(audio.currentTime) });
   const n = nextIndex(false);
-  if (n >= 0) play(n); else onQueueEnd();
+  if (n >= 0 && (n < queue.length || wave.on)) play(n); else onQueueEnd();
 };
 $("#prev").onclick = () => {
   if (!needLoad && audio.currentTime > 3) { audio.currentTime = 0; return; }
@@ -4392,7 +4840,7 @@ let lastVol = parseFloat(localStorage.getItem("ym_lastvol")) || 0.8;
 function setVol(v) {
   volume = Math.max(0, Math.min(1, v));
   try { localStorage.setItem("ym_vol", String(volume)); } catch {}
-  if (audio) audio.volume = volume;
+  if (audio) audio.volume = outVol();
   const pct = Math.round(volume * 100);
   $("#vol").value = pct; fill($("#vol"));
   $("#volVal").textContent = pct;
@@ -4539,12 +4987,12 @@ syncIcons();
   else showLogin(migMsg);
 })();
 
-// ---------- вкладки настроек: Оформление / Интерфейс / Воспроизведение / Приложение / Интеграции ----------
+// ---------- вкладки настроек: Оформление / Интерфейс / Воспроизведение / Звук / Приложение / Интеграции ----------
 // Карточки остаются прямыми детьми .settings (на это опираются стили и темы); видна вкладка из data-tab.
 // Два столбца: карточки вкладки идут в порядке разметки, первая карточка правого столбца помечена .colbreak.
 // Карточка без data-tab (её добавил другой модуль) попадает в «Интеграции».
 (() => {
-  const page = $("#settingsPage"), TABS = ["look", "ui", "play", "app", "int"];
+  const page = $("#settingsPage"), TABS = ["look", "ui", "play", "out", "app", "int"];
   const OLD = { player: "play", services: "int" };      // вкладки до перестановки
   let tab = "look";
   try { let v = localStorage.getItem("ym_set_tab"); v = OLD[v] || v; if (TABS.includes(v)) tab = v; } catch {}

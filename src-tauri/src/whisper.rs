@@ -188,17 +188,22 @@ pub async fn wa_me() -> Result<WaResponse, String> {
 /// Файл трека из архива (/api/tracks/{id}/stream) «сырыми» байтами — в JS это ArrayBuffer.
 #[tauri::command]
 pub async fn wa_stream(id: String) -> Result<tauri::ipc::Response, String> {
-    if !is_uuid(&id) {
+    Ok(tauri::ipc::Response::new(wa_track_bytes(&id).await?))
+}
+
+/// Файл трека из архива целиком (и для wa_stream, и для своего звукового движка — engine.rs).
+pub async fn wa_track_bytes(id: &str) -> Result<Vec<u8>, String> {
+    if !is_uuid(id) {
         return Err("Некорректный id трека".into());
     }
     let token = read_token()?;
     let url = api_url(&format!("/api/tracks/{id}/stream"))?;
+    let _slot = crate::net::heavy_slot().await?; // до 400 МБ в памяти — не больше трёх таких загрузок сразу
     let resp = send_get(media_client(), url, &token).await?;
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status().as_u16()));
     }
-    let bytes = read_limited(resp, MAX_AUDIO_BODY).await?;
-    Ok(tauri::ipc::Response::new(bytes))
+    read_limited(resp, MAX_AUDIO_BODY).await
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +237,52 @@ async fn post_json(path: &str, body: serde_json::Value) -> Result<WaResponse, St
     })
 }
 
+// Частота входа по почте на стороне приложения: даже если в интерфейс попадёт чужой код, он не сможет
+// засыпать почту письмами или перебирать коды. Это не замена ограничениям на сервере архива —
+// там они обязательны (запрос к API можно отправить и в обход приложения).
+const CODE_MIN_GAP: Duration = Duration::from_secs(60); // письмо с кодом — не чаще раза в минуту
+const CODE_WINDOW: Duration = Duration::from_secs(3600);
+const CODE_PER_WINDOW: usize = 5; // и не больше пяти в час
+const TRY_WINDOW: Duration = Duration::from_secs(600);
+const TRY_PER_WINDOW: usize = 5; // попыток ввести код — пять за 10 минут
+
+type Attempts = std::sync::Mutex<std::collections::VecDeque<std::time::Instant>>;
+
+fn code_attempts() -> &'static Attempts {
+    static A: OnceLock<Attempts> = OnceLock::new();
+    A.get_or_init(Default::default)
+}
+
+fn try_attempts() -> &'static Attempts {
+    static A: OnceLock<Attempts> = OnceLock::new();
+    A.get_or_init(Default::default)
+}
+
+/// Записать попытку, если лимит позволяет. `gap` — минимальная пауза после предыдущей попытки.
+fn rate_take(
+    q: &mut std::collections::VecDeque<std::time::Instant>,
+    now: std::time::Instant,
+    window: Duration,
+    max: usize,
+    gap: Option<Duration>,
+) -> Result<(), String> {
+    while q.front().is_some_and(|t| now.duration_since(*t) > window) {
+        q.pop_front();
+    }
+    if let (Some(g), Some(last)) = (gap, q.back()) {
+        let since = now.duration_since(*last);
+        if since < g {
+            return Err(format!("Новый код можно запросить через {} с", (g - since).as_secs().max(1)));
+        }
+    }
+    if q.len() >= max {
+        let wait = q.front().map(|t| window.saturating_sub(now.duration_since(*t))).unwrap_or(window);
+        return Err(format!("Слишком много попыток — попробуй через {} мин", wait.as_secs().div_ceil(60).max(1)));
+    }
+    q.push_back(now);
+    Ok(())
+}
+
 /// Шаг 1: отправить код на почту. Никнейм нужен только для регистрации нового аккаунта.
 #[tauri::command]
 pub async fn wa_auth_request_code(email: String, nickname: Option<String>) -> Result<WaResponse, String> {
@@ -245,6 +296,15 @@ pub async fn wa_auth_request_code(email: String, nickname: Option<String>) -> Re
             return Err("Никнейм слишком длинный".into());
         }
     }
+    rate_take(
+        &mut code_attempts().lock().unwrap_or_else(|e| e.into_inner()),
+        std::time::Instant::now(),
+        CODE_WINDOW,
+        CODE_PER_WINDOW,
+        Some(CODE_MIN_GAP),
+    )?;
+    // новый код — новые попытки ввода
+    try_attempts().lock().unwrap_or_else(|e| e.into_inner()).clear();
     post_json(
         "/api/auth/request-code",
         serde_json::json!({ "email": email, "nickname": nickname }),
@@ -272,6 +332,13 @@ pub async fn wa_auth_issue(email: String, code: String) -> Result<WaLogin, Strin
     if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
         return Err("Код должен состоять из 6 цифр".into());
     }
+    rate_take(
+        &mut try_attempts().lock().unwrap_or_else(|e| e.into_inner()),
+        std::time::Instant::now(),
+        TRY_WINDOW,
+        TRY_PER_WINDOW,
+        None,
+    )?;
     let r = post_json(
         "/api/auth/token",
         serde_json::json!({ "email": email, "code": code, "deviceName": DEVICE_NAME }),
@@ -710,15 +777,64 @@ async fn fetch_range(id: &str, token: &str, start: u64, end: u64) -> Result<Chun
         .get(reqwest::header::CONTENT_RANGE)
         .and_then(|v| v.to_str().ok())
         .and_then(parse_content_range);
-    let limit = if status == 206 { (end - start + 1) as usize + 4096 } else { MAX_AUDIO_BODY };
-    let bytes = if status == 200 || status == 206 { read_limited(resp, limit).await? } else { Vec::new() };
-    Ok(Chunk {
-        status,
-        start: range.map(|r| r.0).unwrap_or(0),
-        total: range.map(|r| r.1),
-        ctype,
-        bytes,
-    })
+    let want = end - start + 1;
+    match status {
+        206 => {
+            let bytes = read_limited(resp, want as usize).await?;
+            // ответ должен быть ровно про запрошенный кусок и не выходить за длину файла:
+            // иначе плееру ушли бы противоречивые Content-Range (и куски «склеились» бы не туда)
+            let Some((s, total)) = range else { return Err("сервер не прислал Content-Range".into()) };
+            if s != start || bytes.is_empty() || s.saturating_add(bytes.len() as u64) > total {
+                return Err("сервер прислал не тот кусок трека".into());
+            }
+            Ok(Chunk { status, start: s, total: Some(total), ctype, bytes })
+        }
+        // Сервер проигнорировал Range и шлёт файл целиком: не держим в памяти весь трек (до 400 МБ на каждый
+        // такой запрос), а пропускаем начало и берём только нужный кусок — дальше это обычный ответ 206.
+        200 => {
+            let Some(total) = resp.content_length() else {
+                // размер неизвестен — как раньше, целиком (но не больше трёх таких загрузок сразу)
+                let _slot = crate::net::heavy_slot().await?;
+                let all = read_limited(resp, MAX_AUDIO_BODY).await?;
+                let total = all.len() as u64;
+                if start >= total {
+                    return Ok(Chunk { status: 416, start, total: Some(total), ctype, bytes: Vec::new() });
+                }
+                let to = total.min(start + want) as usize;
+                return Ok(Chunk { status: 206, start, total: Some(total), ctype, bytes: all[start as usize..to].to_vec() });
+            };
+            if total > MAX_AUDIO_BODY as u64 {
+                return Err("Ответ слишком большой".into());
+            }
+            if start >= total {
+                return Ok(Chunk { status: 416, start, total: Some(total), ctype, bytes: Vec::new() });
+            }
+            let bytes = read_slice(resp, start, want).await?;
+            if bytes.is_empty() {
+                return Err("сервер оборвал передачу".into());
+            }
+            Ok(Chunk { status: 206, start, total: Some(total), ctype, bytes })
+        }
+        _ => Ok(Chunk { status, start, total: None, ctype, bytes: Vec::new() }),
+    }
+}
+
+/// Из тела ответа — только байты [skip, skip + len): остальное читается и сразу выбрасывается.
+async fn read_slice(mut resp: reqwest::Response, skip: u64, len: u64) -> Result<Vec<u8>, String> {
+    let mut pos = 0u64;
+    let mut out = Vec::with_capacity(len.min(NEXT_CHUNK) as usize);
+    while (out.len() as u64) < len {
+        let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? else { break };
+        let c_end = pos + chunk.len() as u64;
+        if c_end > skip {
+            let from = skip.saturating_sub(pos) as usize;
+            let need = (len - out.len() as u64) as usize;
+            let to = chunk.len().min(from + need);
+            out.extend_from_slice(&chunk[from..to]);
+        }
+        pos = c_end;
+    }
+    Ok(out)
 }
 
 fn cors(mut b: tauri::http::response::Builder, origin: &Option<String>) -> tauri::http::response::Builder {
@@ -762,6 +878,10 @@ pub async fn serve_stream(req: Request<Vec<u8>>) -> Response<Vec<u8>> {
         return plain(StatusCode::NOT_FOUND, "not found", &origin);
     };
     let (start, want_end) = parse_range(req.headers().get(header::RANGE).and_then(|v| v.to_str().ok()));
+    // файлов больше MAX_AUDIO_BODY не бывает; заодно start + step ниже не переполнится
+    if start >= MAX_AUDIO_BODY as u64 {
+        return plain(StatusCode::RANGE_NOT_SATISFIABLE, "range", &origin);
+    }
 
     // начало трека, взятое заранее, — отдаём сразу, без сети
     if start == 0 {
@@ -838,6 +958,29 @@ mod stream_tests {
         assert_eq!(parse_range(None), (0, None));
         assert_eq!(parse_content_range("bytes 0-524287/30511652"), Some((0, 30511652)));
         assert_eq!(parse_content_range("bytes */100"), None);
+    }
+
+    #[test]
+    fn auth_rate_limits() {
+        let t0 = std::time::Instant::now();
+        let mut q = std::collections::VecDeque::new();
+        let min = Duration::from_secs(60);
+        assert!(rate_take(&mut q, t0, CODE_WINDOW, CODE_PER_WINDOW, Some(min)).is_ok());
+        // второй код сразу — нельзя, через минуту — можно
+        assert!(rate_take(&mut q, t0 + Duration::from_secs(5), CODE_WINDOW, CODE_PER_WINDOW, Some(min)).is_err());
+        for i in 1..CODE_PER_WINDOW as u64 {
+            assert!(rate_take(&mut q, t0 + Duration::from_secs(61 * i), CODE_WINDOW, CODE_PER_WINDOW, Some(min)).is_ok());
+        }
+        // лимит за час исчерпан
+        assert!(rate_take(&mut q, t0 + Duration::from_secs(61 * 6), CODE_WINDOW, CODE_PER_WINDOW, Some(min)).is_err());
+        // через час окно освобождается
+        assert!(rate_take(&mut q, t0 + CODE_WINDOW + Duration::from_secs(1), CODE_WINDOW, CODE_PER_WINDOW, Some(min)).is_ok());
+
+        let mut tries = std::collections::VecDeque::new();
+        for _ in 0..TRY_PER_WINDOW {
+            assert!(rate_take(&mut tries, t0, TRY_WINDOW, TRY_PER_WINDOW, None).is_ok());
+        }
+        assert!(rate_take(&mut tries, t0, TRY_WINDOW, TRY_PER_WINDOW, None).is_err());
     }
 
     /// Проверка на настоящем сервере (публичный трек, без ключа):
@@ -968,6 +1111,20 @@ pub async fn wa_room_dismiss(code: String, id: String) -> Result<WaResponse, Str
         return Err("Некорректный id предложения".into());
     }
     room_request(true, format!("/api/rooms/{}/suggestions/{id}/dismiss", room_code(&code)?), None, None).await
+}
+
+/// Ведущий передаёт управление другому участнику (POST /api/rooms/{code}/host, тело {"memberId": "…"}).
+/// Комната и код остаются прежними; бывший ведущий становится гостем.
+#[tauri::command]
+pub async fn wa_room_transfer(code: String, member_id: String) -> Result<WaResponse, String> {
+    // id участника может быть UUID — разрешаем ещё «-» и «_»
+    let ok = (1..=64).contains(&member_id.len())
+        && member_id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    if !ok {
+        return Err("Некорректный id участника".into());
+    }
+    let body = serde_json::json!({ "memberId": member_id });
+    room_request(true, format!("/api/rooms/{}/host", room_code(&code)?), Some(body), None).await
 }
 
 #[cfg(test)]

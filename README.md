@@ -118,8 +118,8 @@
 
 | | | |
 |:---:|:---:|:---:|
-| <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/chalk.jpg" width="260" alt="Мел"><br>**Мел** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/retro-tv.jpg" width="260" alt="Телевизор"><br>**Телевизор** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/windows-98.jpg" width="260" alt="Windows 98"><br>**Windows 98** |
-| <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/axiom.jpg" width="260" alt="Аксиома"><br>**Аксиома** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/cartoon.jpg" width="260" alt="Cartoon"><br>**Cartoon** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/terminal.jpg" width="260" alt="Терминал"><br>**Терминал** |
+| <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/whisper/chalk.jpg" width="260" alt="Мел"><br>**Мел** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/whisper/retro-tv.jpg" width="260" alt="Телевизор"><br>**Телевизор** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/whisper/windows-98.jpg" width="260" alt="Windows 98"><br>**Windows 98** |
+| <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/whisper/axiom.jpg" width="260" alt="Аксиома"><br>**Аксиома** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/whisper/cartoon.jpg" width="260" alt="Cartoon"><br>**Cartoon** | <img src="https://raw.githubusercontent.com/Whisper-Music/whisper-themes/main/previews/whisper/terminal.jpg" width="260" alt="Терминал"><br>**Терминал** |
 
 Хочешь сделать свою? Сохрани любой стиль в файл («Сохранить стиль в файл…»), поправь — и загрузи обратно.
 Как устроены темы — [docs/THEMES.md](docs/THEMES.md), строгое описание формата — [docs/WMT-FORMAT.md](docs/WMT-FORMAT.md),
@@ -163,31 +163,36 @@
 <details>
 <summary><b>Сборка под Linux</b></summary>
 
-Нужны Rust, Node.js и системные библиотеки.
+Нужны Rust и Node.js. Команда ниже ставит системные библиотеки и сразу собирает приложение —
+запускай её в папке проекта (после `git clone`).
 
 Debian / Ubuntu / Mint:
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
-  libayatana-appindicator3-dev librsvg2-dev gstreamer1.0-plugins-good gstreamer1.0-libav
+  libayatana-appindicator3-dev librsvg2-dev gstreamer1.0-plugins-good gstreamer1.0-libav \
+  && npm install \
+  && npm run tauri build
 ```
 
 Fedora:
 
 ```bash
 sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libxdo-devel \
-  libappindicator-gtk3-devel librsvg2-devel gstreamer1-plugins-good
-sudo dnf group install "c-development"
+  libappindicator-gtk3-devel librsvg2-devel gstreamer1-plugins-good \
+  && sudo dnf group install "c-development" \
+  && npm install \
+  && npm run tauri build
 ```
 
 Arch / Manjaro:
 
 ```bash
 sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl xdotool \
-  libappindicator-gtk3 librsvg gst-plugins-good gst-libav
+  libappindicator-gtk3 librsvg gst-plugins-good gst-libav \
+  && npm install \
+  && npm run tauri build
 ```
-
-Затем `npm install` и `npm run tauri build`.
 
 Особенности Linux:
 

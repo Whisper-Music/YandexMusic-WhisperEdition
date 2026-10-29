@@ -150,7 +150,7 @@
   def("search s", "<запрос>", "поиск: треки, альбомы, исполнители", "Музыка", async (a) => {
     const q = a.join(" ").trim();
     if (!q) return err("Пример: search космос");
-    dim("Ищу…");
+    dim("Идёт поиск…");
     const r = await searchApi(q, "all");
     const tracks = (r?.tracks?.results || []).slice(0, 10), albums = (r?.albums?.results || []).slice(0, 5), artists = (r?.artists?.results || []).slice(0, 5);
     lastList = [];
@@ -191,7 +191,7 @@
     if (autoplay && p.list.length) playList(p.list, 0);
   }
   def("likes", "[страница]", "понравившиеся треки (по 50)", "Музыка", async (a) => {
-    dim("Загружаю лайки…");
+    dim("Лайки загружаются…");
     const t = await loadAllLikes(() => {}, () => false);
     if (!t) return;
     const page = Math.max(1, parseInt(a[0] || "1", 10) || 1);
@@ -678,7 +678,7 @@
     liveStart(20, () => {
       const t = performance.now();
       const mark = t - flash < 120 ? "●" : "○";
-      return taps.length < 2 ? `${mark}  жду ударов…` : `${mark}  ${bpmNow} BPM  (${taps.length} ударов)`;
+      return taps.length < 2 ? `${mark}  ожидание ударов…` : `${mark}  ${bpmNow} BPM  (${taps.length} ударов)`;
     }, {
       onKey: (e) => {
         if ((e.key !== " " && e.key !== "Enter") || inp.value.trim()) return false;
@@ -726,7 +726,7 @@
   egg("hello hi привет", "", "поздороваться", () => {
     const h = new Date().getHours();
     ok(`${h < 5 ? "Доброй ночи" : h < 12 ? "Доброе утро" : h < 18 ? "Добрый день" : "Добрый вечер"}, ${userName()}!`);
-    dim(isPlaying() ? "Хороший трек, кстати." : pick(["Может, wave?", "Включим что-нибудь? search <запрос>", "Котик тоже здоровается: cat"]));
+    dim(isPlaying() ? "Хороший трек, кстати." : pick(["Может, wave?", "Включить что-нибудь? search <запрос>", "Котик тоже здоровается: cat"]));
   });
 
   async function accountName() {

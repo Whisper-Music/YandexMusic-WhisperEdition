@@ -27,9 +27,13 @@ tauri-plugin-http = "2"
 md5 = "0.8.1"
 keyring = "3"
 getrandom = "0.3"
+# семафор для тяжёлых загрузок (net.rs::heavy_slot); tokio уже есть в сборке через Tauri
+tokio = { version = "1", default-features = false, features = ["sync"] }
 # второй запуск приложения не открывает новую копию, а показывает уже запущенное окно
 # (в Linux это единственный способ вернуть окно из трея, если в оболочке нет значков трея)
-tauri-plugin-single-instance = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# ссылки whisper://room/КОД — приглашения в комнату «Слушать вместе» (deeplink.rs)
+tauri-plugin-deep-link = "2"
 tauri-plugin-global-shortcut = "2"
 # обновления из GitHub Releases (update.rs): проверка подписи minisign, установка новой версии.
 # Без функции «zip»: она нужна только для старого формата обновлений в архивах (.nsis.zip, .AppImage.tar.gz),
@@ -41,7 +45,9 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["r
 # режим экономии в трее: доступ к движку окна WebView2 (версии те же, что уже тянет Tauri — ничего нового не скачивается)
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem", "Win32_Security"] }
+# свой звуковой движок (engine.rs, эксклюзивный WASAPI): декодер MP3 / AAC (M4A) / FLAC / WAV, чистый Rust
+symphonia = { version = "0.5.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "pcm", "wav"] }
 keyring = { version = "3", features = ["windows-native"] }
 
 # Unix: O_NOFOLLOW при чтении выбранных файлов (bg.rs) и проверка владельца сокета Discord (discord.rs).

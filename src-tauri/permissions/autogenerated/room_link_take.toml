@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-room-link-take"
+description = "Enables the room_link_take command without any pre-configured scope."
+commands.allow = ["room_link_take"]
+
+[[permission]]
+identifier = "deny-room-link-take"
+description = "Denies the room_link_take command without any pre-configured scope."
+commands.deny = ["room_link_take"]

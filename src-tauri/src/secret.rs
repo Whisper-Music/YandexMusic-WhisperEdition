@@ -127,32 +127,67 @@ mod imp {
         DIR.get().map(|d| d.join(slot.file))
     }
 
+    const MAX_SECRET: u64 = 16 * 1024;
+
+    /// Файл с секретом читается, только если это обычный файл (не ссылка), он наш и закрыт от других:
+    /// иначе чужой процесс мог подложить свой «токен» или ссылку на другой файл. O_NOFOLLOW — проверка
+    /// делается по открытому дескриптору, а не по пути, так что подменить файл между проверкой и чтением нельзя.
     fn file_read(slot: Slot) -> Option<String> {
+        use std::io::Read;
+        use std::os::unix::fs::MetadataExt;
         let p = file(slot)?;
-        let t = fs::read_to_string(p).ok()?;
+        let mut f = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(&p)
+            .ok()?;
+        let m = f.metadata().ok()?;
+        // SAFETY: geteuid не имеет побочных эффектов и не может завершиться ошибкой
+        let me = unsafe { libc::geteuid() };
+        if !m.is_file() || m.uid() != me || m.len() > MAX_SECRET {
+            return None;
+        }
+        if m.mode() & 0o077 != 0 {
+            // права открыты шире, чем нужно (скопировали, распаковали из архива) — закрываем
+            let _ = f.set_permissions(fs::Permissions::from_mode(0o600));
+        }
+        let mut t = String::new();
+        f.by_ref().take(MAX_SECRET).read_to_string(&mut t).ok()?;
         let t = t.trim().to_string();
         (!t.is_empty()).then_some(t)
     }
 
+    /// Запись через новый временный файл (O_EXCL, 0600) и атомарное переименование: старый файл никогда
+    /// не открывается на запись, поэтому подложенная на его место ссылка не приведёт к записи токена
+    /// в чужой файл, а прерванная запись не оставит половину токена.
     fn file_write(slot: Slot, token: &str) -> Result<(), String> {
         let p = file(slot).ok_or("Не удалось найти папку настроек приложения")?;
-        if let Some(dir) = p.parent() {
-            fs::DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(dir)
-                .map_err(|e| e.to_string())?;
-        }
-        let mut f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&p)
+        let dir = p.parent().ok_or("Не удалось найти папку настроек приложения")?;
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)
             .map_err(|e| e.to_string())?;
-        // файл мог существовать раньше с другими правами
-        let _ = fs::set_permissions(&p, fs::Permissions::from_mode(0o600));
-        f.write_all(token.as_bytes()).map_err(|e| e.to_string())
+        // папка могла существовать раньше с правами 0755 — секреты в ней видны по именам, закрываем
+        let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o700));
+        let mut r = [0u8; 8];
+        getrandom::fill(&mut r).map_err(|e| e.to_string())?;
+        let tmp = dir.join(format!(".{}.{}.tmp", slot.file, r.iter().map(|b| format!("{b:02x}")).collect::<String>()));
+        let res = (|| -> std::io::Result<()> {
+            let mut f = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(&tmp)?;
+            f.write_all(token.as_bytes())?;
+            f.sync_all()?;
+            fs::rename(&tmp, &p)
+        })();
+        if res.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        res.map_err(|e| e.to_string())
     }
 
     fn file_remove(slot: Slot) {
