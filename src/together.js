@@ -158,13 +158,20 @@
   };
 
   // гость сам поставил паузу или включил другой трек — перестаём тянуть его за ведущим
+  let rejoinAt = 0;               // момент «Вернуться в комнату»: пару секунд не считаем паузу/смену трека уходом
   function detach(why) {
     if (!inRoom() || isHost() || !follow || syncing) return;
+    if (Date.now() - rejoinAt < 3000) return;
     follow = false;
     showToast(why + " — комната играет дальше без тебя", 6000, { action: { label: "Вернуться", fn: rejoin } });
     paint();
   }
-  function rejoin() { follow = true; paint(); guestApply(); }
+  function rejoin() {
+    if (!inRoom() || isHost()) return;
+    follow = true; rejoinAt = Date.now();
+    paint();
+    guestApply(300).catch(() => {});
+  }
 
   // ---------- связь с сервером ----------
   async function pollLoop(gen) {
@@ -403,7 +410,8 @@
     const t = curTrack(), pb = room.playback;
     if (!follow || syncing || !pb) return;
     if (t && String(t.id) !== String(pb.track.id)) detach("Ты включил свой трек");
-    else if (audio && audio.paused && pb.playing && !needLoad) {
+    // трек комнаты ещё грузится (audio пока на паузе) — это не пауза гостя
+    else if (audio && audio.paused && pb.playing && !needLoad && !(typeof loadAt === "number" && loadAt > 0)) {
       // трек просто доиграл раньше, чем пришёл следующий от ведущего, — это не пауза
       const nearEnd = audio.ended || (isFinite(audio.duration) && audio.duration - audio.currentTime < 2);
       if (!nearEnd) detach("Пауза у тебя");
@@ -565,20 +573,29 @@
     r.append(lv, done); box.append(r);
   }
 
-  // ---------- режим комнаты: ярлык на верхней рамке нижней панели ----------
-  // Ведущий: «★ Ты ведущий · КОД». Гость: «● Слушать вместе · КОД». Гость отошёл: крупная светящаяся
+  // ---------- режим комнаты: ярлык под названием трека в плеере ----------
+  // Ведущий: «◆ Ты ведущий · КОД». Гость: «● Ты гость · КОД». Гость отошёл: заливная светящаяся
   // «Вернуться в комнату» — её видно с любой страницы, и она возвращает в один клик.
   const ROOM_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 19c.6-3.3 3-5 6-5s5.4 1.7 6 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17 8v6M14 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   const REJOIN_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // Ярлык — не <button>: на кнопки внутри .player действует «.player button { 38×38, круг }», из-за чего
+  // ярлык сжимался в кружок и клик по нему не срабатывал. Живёт в потоке под названием трека — ничего не перекрывает.
   let tab = null;
+  function tabClick(e) {
+    e?.preventDefault(); e?.stopPropagation();
+    if (!inRoom()) return;
+    if (!isHost() && !follow) rejoin(); else if (!panel) open();
+  }
   function paintTab() {
-    const player = $t(".player");
+    const meta = $t(".player .meta");
     if (!inRoom()) { tab?.remove(); tab = null; document.body.classList.remove("room-away"); return; }
-    if (!tab && player) {
-      tab = el("button", "roomtab"); tab.type = "button";
-      tab.onclick = () => { if (!isHost() && !follow) rejoin(); else if (!panel) open(); };
-      player.append(tab);
+    if (!tab && meta) {
+      tab = el("div", "roomtab");
+      tab.setAttribute("role", "button"); tab.tabIndex = 0;
+      tab.addEventListener("click", tabClick);
+      tab.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") tabClick(e); });
     }
+    if (tab && meta && tab.parentNode !== meta) meta.append(tab);
     const away = !isHost() && !follow;
     document.body.classList.toggle("room-away", away);
     if (!tab) return;
@@ -586,10 +603,10 @@
     tab.textContent = "";
     if (away) {
       tab.insertAdjacentHTML("beforeend", REJOIN_ICON);
-      tab.append(el("b", "", "Вернуться в комнату"), el("span", "rtsub", `${code} · ты слушаешь своё`));
+      tab.append(el("b", "", "Вернуться в комнату"), el("span", "rtsub", `· ${code}`));
       tab.title = "Снова слушать то же, что ведущий";
     } else {
-      tab.append(el("i", "rtdot"), el("span", "", (isHost() ? "Ты ведущий" : "Слушать вместе") + ` · ${code} · ${room.members.length}`));
+      tab.append(el("i", "rtdot"), el("span", "", (isHost() ? "Ты ведущий" : "Ты гость") + ` · ${code} · ${room.members.length}`));
       tab.title = "Открыть окно «Слушать вместе»";
     }
   }
