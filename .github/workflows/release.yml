@@ -1,4 +1,7 @@
 name: release
+# Запуск: вручную (Actions → release → Run workflow) или тегом vX.Y.Z.
+# Когда публикуешь черновик выпуска, GitHub сам создаёт тег vX.Y.Z — и это тоже «push тега». Такой запуск
+# ничего не собирает (выпуск уже опубликован) и завершается без ошибки, см. guard.
 on:
   workflow_dispatch:
   push:
@@ -15,6 +18,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.v.outputs.version }}
+      skip: ${{ steps.v.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
       - name: Версия и существующий релиз
@@ -38,6 +42,12 @@ jobs:
             exit 1
           fi
           draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          # тег появился, потому что выпуск только что опубликовали — собирать нечего
+          if [ "$draft" = "false" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "::notice::Выпуск $tag уже опубликован — тег создан публикацией, сборка не нужна"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$draft" = "false" ]; then
             echo "::error::Релиз $tag уже опубликован. Подними версию (tauri.conf.json, package.json, Cargo.toml + cargo update -p yandex-desktop) и запусти снова."
             exit 1
@@ -49,6 +59,7 @@ jobs:
 
   build:
     needs: guard
+    if: needs.guard.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +73,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with: { submodules: true }      # ядро Whisper (src/core) — подмодуль whisper-core
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable

@@ -21,6 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with: { submodules: true }      # ядро Whisper (src/core) — подмодуль whisper-core
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with: { workspaces: src-tauri }
@@ -38,7 +39,7 @@ jobs:
         with: { node-version: 22 }
       - name: Синтаксис JavaScript
         shell: bash
-        run: for f in src/*.js; do node --check "$f"; done
+        run: for f in src/*.js src/core/*.js; do node --check "$f"; done
 
   audit:
     runs-on: ubuntu-22.04
