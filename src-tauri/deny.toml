@@ -15,4 +15,5 @@ ignore = [
   { id = "RUSTSEC-2026-0370", reason = "unmaintained zvariant: D-Bus через zbus 4 (keyring/secret-service) и zbus 5 (tauri-plugin-opener), Linux; zbus 5.19 — последняя" },
   { id = "RUSTSEC-2026-0371", reason = "unmaintained zbus_names: то же, что zvariant" },
   { id = "RUSTSEC-2026-0372", reason = "unmaintained zvariant_derive: то же, что zvariant" },
+  { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser через fontdb (fonts.rs): только заголовки шрифтов самой системы, без чужих файлов; исправления нет, замена — skrifa или список шрифтов средствами ОС" },
 ]
