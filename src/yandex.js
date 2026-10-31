@@ -208,6 +208,9 @@
         paused: !audio || audio.paused, ended: !!audio?.ended,
         duration: audio && isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0,
         pending: !!needLoad, loading, startAt: needLoad ? resumePos : loading ? (typeof loadPos === "number" ? loadPos : 0) : null,
+        // сам элемент плеера: Discord по ним понимает, идёт ли звук на самом деле (не завис ли на загрузке)
+        has: !!audio, time: audio?.currentTime || 0, rate: audio?.playbackRate > 0 ? audio.playbackRate : 1,
+        buffering: !!audio && audio.readyState < 3, error: !!audio?.error,
       };
     },
     toggle: () => togglePlay(),
@@ -335,13 +338,20 @@
     // значок «скачан» — перед временем и кнопками строки, а не в самом конце
     decorateRow: (li, t, before) => { syncGotRow(li); const gm = li.querySelector(".gotmark"); if (gm && before) li.insertBefore(gm, before); },
     icon: (name) => ICON[name] || "",
+    // виджет OBS (core/obs.js): цвета стиля — при динамическом фоне из обложки (getComputedStyle не годится:
+    // --accent зарегистрирован как <color> и читается как rgb(), а виджету нужен #rrggbb); оформление — секции
+    // whisper-obs своего стиля (theme.js → wmtObs); заливка ползунков рисуется main.js (fill)
+    accentColors: () => { const p = cfg.dyn === true && dynPal ? dynPal : sty(); return { accent: p.accent, accent2: p.accent2 }; },
+    obsTheme: () => ({ key: cfg.style, ...(window.wmtObs?.(cfg.style) || {}) }),
+    rangeFill: (el) => fill(el),
     secretSaved: () => window.warnPlainSecrets?.(),         // main.js: предупредить, если ключ лёг в незащищённое хранилище
     // карточка общего модуля в настройках; «integrations» — вкладка «Интеграции» (first — первой, в левый столбец:
-    // Discord и OBS — правый, у Discord стоит .colbreak)
-    settingsCard: (card, { section, first } = {}) => {
+    // Whisper Archive; Discord и OBS — правый, Discord с colbreak — с него начинается правый столбец)
+    settingsCard: (card, { section, first, colbreak } = {}) => {
       const page = document.getElementById("settingsPage");
       if (!page) return false;
       card.classList.add("card");
+      if (colbreak) card.classList.add("colbreak");
       card.dataset.tab = { integrations: "int", playback: "play", sound: "out", look: "look", interface: "ui", app: "app" }[section] || "int";
       const firstOf = page.querySelector(`:scope > .card[data-tab="${card.dataset.tab}"]`);
       if (first && firstOf) firstOf.before(card); else page.append(card);

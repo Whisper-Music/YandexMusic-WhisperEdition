@@ -27,10 +27,12 @@
   <script src="core/theme-css.js" defer></script>
   <script src="theme.js" defer></script>
   <script src="themelib.js" defer></script>
-  <link rel="stylesheet" href="discord.css" />
-  <script src="discord.js" defer></script>
+  <!-- общие модули ядра: Discord и виджет OBS — свои карточки в «Интеграциях» ставят сами (kit.settingsCard в yandex.js) -->
+  <link rel="stylesheet" href="core/discord.css" />
+  <script src="core/discord.js" defer></script>
   <script src="traymini.js" defer></script>
-  <script src="obs.js" defer></script>
+  <link rel="stylesheet" href="core/obs.css" />
+  <script src="core/obs.js" defer></script>
   <script src="update.js" defer></script>
   <script src="core/together.js" defer></script>
   <script src="listenstats.js" defer></script>
@@ -376,26 +378,6 @@
           <h3>Сброс</h3>
           <p class="status">Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.</p>
           <div class="row"><button class="nav danger" id="cfgReset">Сбросить оформление…</button></div>
-        </div>
-        <div class="card colbreak" data-tab="int">
-          <h3>Discord</h3>
-          <label class="switch" title="Показывает в профиле Discord, что сейчас играет. Подключается само, когда Discord запущен"><input type="checkbox" id="dcOn" /><i></i><span>Использовать Discord RPC</span></label>
-          <div class="dcline">
-            <span class="dcdot" id="dcDot"></span>
-            <span class="dcnote" id="dcNote">Выключено</span>
-            <button class="nav" id="dcSetup">Настроить…</button>
-          </div>
-        </div>
-        <div class="card" data-tab="int">
-          <h3>Виджет для OBS</h3>
-          <label class="switch" title="Полупрозрачная карточка «Сейчас играет» — источник «Браузер» в OBS"><input type="checkbox" id="obsOn" /><i></i><span>Мини-плеер для стрима</span></label>
-          <div id="obsBox" class="obsbox" hidden>
-            <div class="obsurl"><input id="obsUrl" class="field" readonly spellcheck="false" /><button type="button" class="nav" id="obsCopy">Копировать</button></div>
-            <div class="lyrow"><span>Вид</span><div class="lyseg obsseg"><button class="chip" data-v="style" title="Как задано в стиле (секция whisper-obs файла темы), иначе — карточка">Как в стиле</button><button class="chip" data-v="card">Карточка</button><button class="chip" data-v="compact">Компактный</button><button class="chip" data-v="bar">Полоска</button></div></div>
-            <label class="slide" title="Двойной щелчок — как в стиле"><span>Непрозрачность фона <small id="obsAlphaVal" class="obsval"></small></span><input type="range" id="obsAlpha" min="0" max="100" /></label>
-            <label class="switch"><input type="checkbox" id="obsHide" /><i></i><span>Прятать на паузе</span></label>
-            <p id="obsNote" class="status"></p>
-          </div>
         </div>
       </section>
     </main>

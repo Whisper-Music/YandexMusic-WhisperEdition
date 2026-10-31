@@ -15,7 +15,7 @@
   // общая секция для всех приложений Whisper: CSS по ролям ([data-w="search"], [data-w="player.volume"]),
   // ядро (core/whisper-core.js) переводит роли в селекторы этого приложения. Секция приложения идёт после неё и главнее.
   const CORE = window.Whisper?.CORE_SECTION || "whisper-core";
-  const OBS = "whisper-obs";        // виджет для OBS (obs.js): своя секция css/settings в том же файле темы
+  const OBS = "whisper-obs";        // виджет для OBS (core/obs.js): своя секция css/settings в том же файле темы
   const KEY = (id) => "theme:" + id;
   const NAMES = { neon: "Неон", royal: "Королевский", steam: "Стимпанк", lolitta: "Lolitta" };
   const AUTHOR = "Whisper Music";                       // автор встроенных стилей (в настройках: «Автор · Название»)

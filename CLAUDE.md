@@ -56,8 +56,9 @@ src/                      фронтенд (без сборки, файлы от
   styles.css              общее оформление + встроенные стили (:root[data-style="neon|royal|steam|lolitta"])
   theme.js / theme.css    свои темы в этом приложении: загрузка, хранение, фон, сохранение в файл, карточки стилей
   themelib.js/.css        «Библиотека тем» (репозиторий Whisper-Music/whisper-themes)
-  discord.js/.css         Discord Rich Presence
-  obs.js                  виджет «Сейчас играет» для OBS
+  core/discord.js/.css    ОБЩИЙ модуль Discord Rich Presence (Rust — core/rust/discord.rs); карточку в «Интеграциях» ставит сам
+  core/obs.js/.css        ОБЩИЙ виджет «Сейчас играет» для OBS (Rust — core/rust/obs.rs, страница — core/rust/obs/widget.*);
+                          цвета и секции whisper-obs стиля берёт из kit.accentColors / kit.obsTheme (yandex.js)
   cli.js                  консоль вместо интерфейса (тема с "console") + скрытые команды
   hotkeys.js/.css         ГЛОБАЛЬНЫЕ сочетания (регистрирует Rust, работают в свёрнутом окне)
   keynav.js               навигация клавиатурой ВНУТРИ окна (стрелки, Пробел, Ctrl+F, F1 — список клавиш)
@@ -70,10 +71,11 @@ src/                      фронтенд (без сборки, файлы от
 src-tauri/
   src/lib.rs              регистрация модулей и команд (generate_handler!), трей, окно
   src/*.rs                net (запросы к Яндексу), auth/secret (токен в keyring), download, engine (WASAPI),
-                          theme/themelib, obs (локальный HTTP), discord, hotkeys,
+                          theme/themelib, hotkeys,
                           fonts (список шрифтов), desktop (обои), power (экономия в трее), update, …
-  src/whisper_host.rs     что приложение даёт общему Whisper Archive (src/core/rust/whisper): хранилище ключа,
-                          heavy_slot, app_origin, подпись ключа — единственное своё у приложения
+  src/whisper_host.rs     что приложение даёт общему Rust ядра (src/core/rust: whisper/, discord.rs, obs.rs): хранилище
+                          ключа, heavy_slot, app_origin, подпись ключа, приложение Discord и кнопка, обложки для OBS —
+                          единственное своё у приложения
   src/whisper_yandex.rs   Whisper Archive и Яндекс: wa_save_track (скачать трек с Яндекса → whisper::upload)
   build.rs                СПИСОК КОМАНД (AppManifest) — без строки здесь команда не вызывается
   capabilities/*.json     права окон на команды (default.json — главное окно)
@@ -180,7 +182,7 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
 
 Полное описание — `docs/WMT-FORMAT.md`, гайд с примерами — `docs/THEMES.md`. Здесь — всё нужное для работы.
 Код: `src/core/wmt.js` (формат), `src/core/theme-css.js` (привязка CSS, безопасность, tokens, OBS — общее ядро),
-`src/theme.js` (применение в этом приложении), `src/obs.js` (виджет).
+`src/theme.js` (применение в этом приложении), `src/core/obs.js` (виджет).
 
 ### Два вида файла
 - **Текст** (UTF-8): секции `@@`. Фона нет.

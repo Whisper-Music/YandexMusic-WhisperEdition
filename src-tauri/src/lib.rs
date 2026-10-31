@@ -3,6 +3,8 @@ mod auth;
 mod bg;
 mod deeplink;
 mod desktop;
+// Discord и виджет OBS — общие, из ядра (подмодуль src/core); своё у приложения — в whisper_host.rs
+#[path = "../../src/core/rust/discord.rs"]
 mod discord;
 mod download;
 mod engine;
@@ -11,6 +13,7 @@ mod hotkeys;
 mod lyrics;
 mod mini;
 mod net;
+#[path = "../../src/core/rust/obs.rs"]
 mod obs;
 mod power;
 mod secret;

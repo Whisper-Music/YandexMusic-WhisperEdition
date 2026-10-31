@@ -2244,13 +2244,7 @@ body:has(#full:not([hidden])) .dynbg * { animation-play-state: paused; }
 #updNote.err { color: #ff8a8a; }
 :root[data-style="royal"] .updbox, :root[data-style="steam"] .updbox { border-radius: 3px; }
 
-/* ---------- настройки: виджет для OBS ---------- */
-.obsbox { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-.obsurl { display: flex; gap: 8px; align-items: center; }
-.obsurl .field { flex: 1; min-width: 0; font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; padding: 8px 12px; }
-.obsurl .nav { flex: none; }
-.obsval { font-size: 12px; color: var(--muted); margin-left: 4px; }
-#obsNote.err { color: #ff8a8a; }
+/* настройки: виджет для OBS — core/obs.css (общий модуль ядра) */
 
 /* ---------- «Слушать вместе»: то, что относится к разметке этого приложения ----------
    Оформление самого модуля (кнопка, ярлык в плеере, блок в меню «⋯», окно комнаты) — core/together.css. */
