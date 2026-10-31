@@ -74,6 +74,7 @@ const COMMANDS: &[&str] = &[
     "sleep_status",
     "lyrics_lrclib",
     "thumbbar_state",
+    "system_fonts",
     "obs_config",
     "obs_state",
     "obs_theme",

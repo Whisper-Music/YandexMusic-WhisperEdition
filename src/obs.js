@@ -1,7 +1,9 @@
 // Виджет «Сейчас играет» для OBS: переключатель и параметры в настройках, передача состояния в Rust
 // (src-tauri/src/obs.rs держит маленький сервер на 127.0.0.1 и отдаёт страницу виджета src-tauri/obs/widget.html).
 // Оформление виджета под стиль: секции «@@ css whisper-obs» и «@@ settings whisper-obs» файла темы (theme.js → wmtObs).
+// «Что играет» — из ядра Whisper (Whisper.player); цвета и стиль — из настроек оформления этого приложения.
 (() => {
+  const W = window.Whisper;
   const KEY = "ym_obs";
   const LAYOUTS = ["style", "card", "compact", "bar"];
   const DEF = { enabled: false, layout: "style", alpha: null, hideOnPause: false };
@@ -30,18 +32,18 @@
   }
 
   function snapshot() {
-    const t = typeof current === "number" && current >= 0 ? queue?.[current] : null;
+    const p = W.player.state(), t = p.track;
     const c = colors();
     return {
       has: !!t,
-      id: t ? String(t.id ?? "") : "",
-      title: t ? String(t.title || "") : "",
-      artist: t ? (t.artists || []).map((a) => a?.name).filter(Boolean).join(", ") : "",
-      cover: t ? cover(t, "200x200") || "" : "",
-      playing: !!(audio && !audio.paused),
-      pos: audio?.currentTime || 0,
-      dur: audio && isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (t?.durationMs || 0) / 1000,
-      rate: audio?.playbackRate > 0 ? audio.playbackRate : 1,
+      id: t ? t.id : "",
+      title: t ? t.title : "",
+      artist: t ? t.artists.map((a) => a.name).filter(Boolean).join(", ") : "",
+      cover: t ? W.cover(t, 200) : "",
+      playing: p.playing,
+      pos: p.position,
+      dur: p.duration,
+      rate: p.rate,
       at: Date.now(),
       accent: c.accent, accent2: c.accent2,
       base: document.documentElement.dataset.base || "neon",
@@ -78,11 +80,10 @@
     return { layouts, size };
   }
 
-  // main.js сообщает о смене трека, паузе, перемотке и скорости через miniPush — подключаемся туда же
-  const prevPush = window.miniPush;
-  window.miniPush = (force) => { prevPush?.(force); push(force); };
+  // смена трека, пауза, перемотка, скорость — от ядра
+  W.player.watch(push);
   window.obsPush = push;
-  // цвета (динамический фон) и стиль меняются без miniPush — проверяем изредка, отправляется только изменившееся
+  // цвета (динамический фон) и стиль ядру не известны — проверяем изредка, отправляется только изменившееся
   setInterval(() => { push(false); pushTheme(false); }, 1500);
 
   // ---------- настройки ----------

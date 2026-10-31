@@ -164,7 +164,8 @@
 <summary><b>Сборка под Linux</b></summary>
 
 Нужны Rust и Node.js. Команда ниже ставит системные библиотеки и сразу собирает приложение —
-запускай её в папке проекта (после `git clone`).
+запускай её в папке проекта (после `git clone --recurse-submodules`: ядро Whisper лежит подмодулем в `src/core`;
+если склонировал без ключа — `git submodule update --init`).
 
 Debian / Ubuntu / Mint:
 

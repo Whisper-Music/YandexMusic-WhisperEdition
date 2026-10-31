@@ -28,28 +28,29 @@
   const nominal = () => !!audio && !audio.paused && !audio.ended && !audio.error;
   const isPlaying = () => nominal() && !stuck;
 
+  // трек — из ядра Whisper (общая сущность Track); время и «не завис ли плеер» — по самому audio этого приложения
   function snapshot() {
-    const t = typeof current === "number" && current >= 0 ? queue?.[current] : null;
+    const t = window.Whisper.player.state().track;
     if (!t || !started || !audio) return null;
-    const al = t.albums?.[0];
+    const al = t.album;
     // Discord отсчитывает время по обычным часам, поэтому при скорости ≠ 1× длительность и позиция
     // пересчитываются в «настоящие» секунды: полоска и время окончания совпадают с тем, что слышно.
     const r = audio.playbackRate > 0 ? audio.playbackRate : 1;
     const dur = audio.duration > 0 && isFinite(audio.duration) ? audio.duration * 1000 : t.durationMs || 0;
     return {
-      id: String(t.id ?? ""),
-      title: String(t.title || "Без названия"),
-      artist: (t.artists || []).map((a) => a?.name).filter(Boolean).join(", "),
-      album: String(al?.title || ""),
-      albumId: al?.id != null ? String(al.id) : "",
-      cover: cover(t, "400x400") || "",
+      id: t.id,
+      title: t.title || "Без названия",
+      artist: t.artists.map((a) => a.name).filter(Boolean).join(", "),
+      album: al?.title || "",
+      albumId: al?.id || "",
+      cover: window.Whisper.cover(t, 400),
       durationMs: Math.round(dur / r),
       positionMs: Math.round(((audio.currentTime || 0) * 1000) / r),
       playing: isPlaying(),
     };
   }
-  // вызывается из main.js при смене трека, паузе/воспроизведении и перемотке
-  window.discordPush = (force) => {
+  // смена трека, пауза/воспроизведение, перемотка, скорость — от ядра (Whisper.player.watch)
+  function push(force) {
     if (audio && !audio.paused) started = true;
     if (!dc.enabled) return;
     const s = snapshot();
@@ -58,7 +59,9 @@
     last = key;
     sent = s; sentAt = Date.now();
     call("discord_update", { track: s }).catch(() => {});
-  };
+  }
+  window.Whisper.player.watch(push);
+  window.discordPush = push;           // для совместимости: кто-то снаружи может попросить отправить заново
 
   // Страховка от пропущенных событий: зависание/буферизация, ошибка загрузки, смена плеера,
   // а также расхождение времени (трек долго грузился, система «спала») — всё это ловится здесь.
@@ -72,13 +75,13 @@
       s = now - stuckSince >= STUCK_MS;
     } else stuckSince = 0;
     lastCt = ct;
-    if (s !== stuck) { stuck = s; window.discordPush(true); return; }
+    if (s !== stuck) { stuck = s; push(true); return; }
     const cur = snapshot();
-    if (!cur) { if (sent) window.discordPush(true); return; }
-    if (!sent || cur.playing !== sent.playing || cur.id !== sent.id) { window.discordPush(true); return; }
+    if (!cur) { if (sent) push(true); return; }
+    if (!sent || cur.playing !== sent.playing || cur.id !== sent.id) { push(true); return; }
     if (cur.playing) {
       const expected = sent.positionMs + (now - sentAt);
-      if (Math.abs(cur.positionMs - expected) > DRIFT_MS) window.discordPush(true);
+      if (Math.abs(cur.positionMs - expected) > DRIFT_MS) push(true);
     }
   }, 1000);
 
@@ -86,7 +89,7 @@
   async function apply() {
     try { st = await call("discord_config", { cfg: dc }); } catch {}
     paint();
-    if (dc.enabled) { last = ""; window.discordPush(true); }
+    if (dc.enabled) { last = ""; push(true); }
   }
   function set(patch) { Object.assign(dc, patch); save(); apply(); }
 

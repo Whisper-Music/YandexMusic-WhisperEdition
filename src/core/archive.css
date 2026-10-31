@@ -1,4 +1,4 @@
-/* ---------- Whisper Archive: настройки «Для разработчиков» ---------- */
+/* ---------- Whisper Archive (core/archive.js — общий модуль приложений Whisper): настройки ---------- */
 #waCard [hidden] { display: none !important; }
 .wabox { display: grid; gap: 10px; margin-top: 12px; }
 .warow { display: flex; gap: 8px; align-items: stretch; }

@@ -1,14 +1,22 @@
-// «Слушать вместе»: комнаты совместного прослушивания через сервер Whisper Archive (/api/rooms, Rust: whisper::wa_room).
+// core/together.js — «Слушать вместе»: комнаты совместного прослушивания через сервер Whisper Archive
+// (/api/rooms, Rust: whisper::rooms::wa_room_*). Общий модуль ядра (docs/CORE.md «Общие модули»): работает только через
+// window.Whisper — плеер, очередь, роли, набор интерфейса; формат трека для сервера — у провайдера (toRoom / fromRoom).
 //
 // * Ведущий создаёт комнату и даёт друзьям код. Что у него играет (трек, позиция, пауза, скорость), уходит на сервер.
-// * Гости ждут изменений (long-poll) и включают тот же трек у себя — каждый со своего аккаунта Яндекса,
+// * Гости ждут изменений (long-poll) и включают тот же трек у себя — каждый со своего аккаунта сервиса,
 //   звук никуда не передаётся. Позиция выравнивается по времени сервера; расхождение больше 1,5 с — перемотка.
 // * Гость может отойти: поставить паузу или включить своё — тогда он перестаёт следовать за ведущим,
 //   пока не нажмёт «Вернуться к ведущему». Перемотка и «вперёд/назад» у гостя отключены.
 // * Гости предлагают треки (меню «⋯» → «Предложить в комнату»), ведущий включает их сразу, ставит следующими или убирает.
 (() => {
+  const W = window.Whisper;
+  if (!W) { console.error("together.js: нет ядра Whisper — подключи core/whisper-core.js раньше"); return; }
+  const kit = W.ui.kit, P = W.player;
+  const { invoke } = window.__TAURI__.core;
+  const showToast = (...a) => kit.toast(...a), modal = (o) => kit.confirm(o);
   const $t = (s, el = document) => el.querySelector(s);
-  // Каждое действие с комнатой — своя команда Rust (whisper.rs: wa_room_*); путь к API собирает Rust из кода комнаты.
+  const roleEl = (r) => W.ui.all(r)[0] || null;
+  // Каждое действие с комнатой — своя команда Rust (whisper/rooms.rs: wa_room_*); путь к API собирает Rust из кода комнаты.
   const ROOM_RE = /^\/api\/rooms(?:\/([A-Z0-9]{4,12})(?:\/(join|leave|state|suggest|host)|\/suggestions\/([A-Za-z0-9]{1,32})\/dismiss)?)?$/;
   function call(method, path, body, since) {
     const m = ROOM_RE.exec(path);
@@ -58,37 +66,37 @@
   }
 
   // ---------- трек ↔ формат сервера ----------
-  const toRoomTrack = (t) => ({
-    id: String(t.id),
-    albumId: t.albums?.[0]?.id != null ? String(t.albums[0].id) : null,
-    title: String(t.title || "Без названия").slice(0, 300),
-    version: t.version ? String(t.version).slice(0, 200) : null,
-    artists: (t.artists || []).slice(0, 10).filter((a) => a?.name).map((a) => ({ id: a.id != null ? String(a.id) : null, name: String(a.name).slice(0, 200) })),
-    coverUri: t.coverUri ? String(t.coverUri).slice(0, 300) : null,
-    durationMs: Math.max(0, Math.round(t.durationMs || 0)),
-  });
-  const fromRoomTrack = (r) => ({
-    id: r.id, title: r.title, version: r.version || undefined, coverUri: r.coverUri || undefined, durationMs: r.durationMs,
-    artists: (r.artists || []).map((a) => ({ id: a.id || undefined, name: a.name })),
-    albums: r.albumId ? [{ id: r.albumId }] : [],
-  });
-  const curTrack = () => (typeof current === "number" && current >= 0 ? queue?.[current] : null);
+  // Как трек сервиса записать для сервера комнат и обратно — знает провайдер (toRoom / fromRoom). Нет — общие поля.
+  const toRoomTrack = (t) => {
+    const e = W.to("track", t), p = W.provider();
+    if (p?.toRoom) return p.toRoom(e);
+    return { id: e.id, albumId: e.album?.id || null, title: (e.title || "Без названия").slice(0, 300), version: e.version || null,
+      artists: e.artists.slice(0, 10).map((a) => ({ id: a.id || null, name: a.name })), coverUri: null, durationMs: Math.round(e.durationMs) };
+  };
+  // → трек сервиса («сырой», как его понимает приложение)
+  const fromRoomTrack = (r) => {
+    const p = W.provider();
+    if (p?.fromRoom) return p.fromRoom(r);
+    return { id: r.id, title: r.title, version: r.version || undefined, durationMs: r.durationMs, artists: (r.artists || []).map((a) => ({ id: a.id || undefined, name: a.name })) };
+  };
+  const roomEntity = (r, extra) => W.to("track", { ...fromRoomTrack(r), ...extra });
+  const curTrack = () => P.state().track;
+  const account = () => W.provider()?.accountLabel || "аккаунта";
 
   // ---------- ведущий: что играет → на сервер ----------
-  // Пока у ведущего грузится новый трек (loadAt в main.js), в audio ещё позиция прошлого трека. Раньше она уходила
+  // Пока у ведущего грузится новый трек (Whisper.player.media().loading), у плеера ещё позиция прошлого трека. Раньше она уходила
   // гостям вместе с новым треком — и гость начинал новый трек с середины, а потом прыгал в начало.
   // Теперь на время загрузки: «новый трек, позиция старта, пауза». Гость в это время грузит трек без звука,
   // а когда у ведущего заиграет (roomOnPlaying ниже), гостю приходит «играет» — и трек у него уже готов.
   function hostState() {
-    const t = curTrack();
-    if (!t || !audio) return null;
-    const loading = !needLoad && typeof loadAt === "number" && loadAt > 0;
-    const pos = needLoad ? resumePos : loading ? (typeof loadPos === "number" ? loadPos : 0) : audio.currentTime || 0;
+    const ps = P.state(), md = P.media(), t = ps.track;
+    if (!t) return null;
+    const pos = md.startAt != null ? md.startAt : ps.position;
     return {
       track: toRoomTrack(t),
       positionMs: Math.max(0, pos * 1000),
-      playing: !loading && !audio.paused,
-      rate: audio.playbackRate > 0 ? audio.playbackRate : 1,
+      playing: !md.loading && !md.paused,
+      rate: ps.rate > 0 ? ps.rate : 1,
     };
   }
   function hostPush(force) {
@@ -121,41 +129,38 @@
     if (!pb) return;
     syncing++;
     try {
-      if (Math.abs((audio?.playbackRate || 1) - (pb.rate || 1)) > 0.001 && typeof setSpeed === "function") setSpeed(pb.rate || 1);
+      if (Math.abs((P.state().rate || 1) - (pb.rate || 1)) > 0.001) P.setRate(pb.rate || 1);
       const t = curTrack();
-      if (!t || String(t.id) !== String(pb.track.id)) {
-        wave.on = false;
-        queue = [fromRoomTrack(pb.track)]; playCtx = "room"; playAlbum = null;
-        // ведущий ещё грузит трек или на паузе — грузим без звука (4-й аргумент play: hold), иначе включаем сразу
-        await play(0, Math.max(0, expectedMs(pb) / 1000), false, !pb.playing);
+      if (!t || t.id !== String(pb.track.id)) {
+        // ведущий ещё грузит трек или на паузе — грузим без звука (hold), иначе включаем сразу
+        await P.playTrack(roomEntity(pb.track), { at: Math.max(0, expectedMs(pb) / 1000), hold: !pb.playing, context: "room" });
         return;
       }
-      if (needLoad) { await play(current, Math.max(0, expectedMs(pb) / 1000), false, !pb.playing); return; }
-      if (!audio) return;
-      // этот трек ещё грузится: play() сам решит, стартовать ли (roomWantsPlay), а время догонит roomOnPlaying
-      if (typeof loadAt === "number" && loadAt > 0) return;
+      let md = P.media();
+      if (md.pending) { await P.reload(Math.max(0, expectedMs(pb) / 1000), !pb.playing); return; }
+      // этот трек ещё грузится: плеер сам решит, стартовать ли (wantsPlay), а время догонит событие «audible»
+      if (md.loading) return;
       const want = expectedMs(pb);
-      const starting = pb.playing && audio.paused;        // трек уже загружен без звука — стартуем точно с нужного места
-      const known = isFinite(audio.duration);
-      if ((known || starting) && Math.abs(audio.currentTime * 1000 - want) > (starting ? 250 : tol)) {
-        audio.currentTime = Math.min(Math.max(0, want / 1000), known ? Math.max(0, audio.duration - 0.25) : Infinity);
-      }
-      if (pb.playing && audio.paused) await audio.play().catch(() => {});
-      else if (!pb.playing && !audio.paused) audio.pause();
+      const starting = pb.playing && md.paused;          // трек уже загружен без звука — стартуем точно с нужного места
+      const known = md.duration > 0;
+      if ((known || starting) && Math.abs(P.state().position * 1000 - want) > (starting ? 250 : tol)) P.seek(Math.max(0, want / 1000));
+      md = P.media();
+      if (pb.playing && md.paused) await P.play();
+      else if (!pb.playing && !md.paused) P.pause();
     } finally {
       setTimeout(() => { syncing = Math.max(0, syncing - 1); }, 400);   // события pause/play от синхронизации ещё долетают
     }
   }
   setInterval(() => { if (inRoom() && !isHost() && follow && !syncing) guestApply(); }, 3000);
 
-  // main.js: трек загружался «без звука», а ведущий тем временем уже включил — тогда не держать, а играть
-  window.roomWantsPlay = () => inRoom() && !isHost() && follow && !!room.playback?.playing;
-  // main.js: у этого клиента трек реально заиграл (событие playing)
-  window.roomOnPlaying = () => {
+  // плеер приложения: трек загружался «без звука», а ведущий тем временем уже включил — тогда не держать, а играть
+  const wantsPlay = () => inRoom() && !isHost() && follow && !!room.playback?.playing;
+  // у этого клиента трек реально заиграл (report({ audible }) — событие «audible»)
+  W.on("audible", () => {
     if (!inRoom()) return;
     if (isHost()) { hostPush(true); return; }        // гостям — «играет» с точной позицией, как только звук пошёл
     if (follow) setTimeout(() => guestApply(500), 120);     // догнать ведущего на время своей загрузки
-  };
+  });
 
   // гость сам поставил паузу или включил другой трек — перестаём тянуть его за ведущим
   let rejoinAt = 0;               // момент «Вернуться в комнату»: пару секунд не считаем паузу/смену трека уходом
@@ -218,11 +223,11 @@
       showToast("Теперь ты ведущий — музыкой в комнате управляешь ты", 4000, { kind: "ok" });
       hostPush(true);
     } else {
-      mySpeed = typeof speed === "number" ? speed : null;
+      mySpeed = P.state().rate;
       const h = (room.members || []).find((m) => m.isHost);
       showToast(`Ведущий теперь — ${h?.nickname || "другой участник"}`, 3500, { kind: "ok" });
     }
-    window.updateModes?.();
+    W.emit("room", { ...roomEvent(), roleChanged: true });
   }
   async function transfer(m) {
     const id = memberId(m);
@@ -248,7 +253,7 @@
     for (const s of fresh) seenSug.add(s.id);
     if (!fresh.length) return;
     // ничего не играет (очередь пуста) — с галочкой включаем предложенное сразу
-    if (autoQ && (typeof current !== "number" || current < 0 || !queue?.length)) window.roomTake?.();
+    if (autoQ && W.queue.index() < 0) take();
     const s = fresh[fresh.length - 1];
     const who = s.from || "Гость";
     const title = `«${s.track.title}»`;
@@ -269,15 +274,15 @@
   }
   // поставить предложение сразу за текущим треком и убрать его из списка
   function queueSug(s, quiet = false) {
-    if (!s || taken.has(s.id) || typeof window.playNext !== "function") return false;
+    if (!s || taken.has(s.id)) return false;
     taken.add(s.id);
-    window.playNext({ ...fromRoomTrack(s.track), _room: true }, true);
+    W.queue.playNext(roomEntity(s.track, { _room: true }), { quiet: true });      // _room — трек из комнаты (не «волны»)
     dismiss(s.id);
     if (!quiet) showToast(`«${s.track.title}» заиграет следующим`, 2500, { kind: "ok" });
     return true;
   }
-  // main.js зовёт из nextIndex: перед переходом к следующему треку берём самое раннее предложение
-  window.roomTake = () => {
+  // плеер приложения зовёт перед переходом к следующему треку: берём самое раннее предложение
+  const take = () => {
     if (!autoQ || !inRoom() || !isHost()) return false;
     const s = sugList().find((x) => !taken.has(x.id));
     return s ? queueSug(s, true) : false;
@@ -294,7 +299,7 @@
     seenSug.clear(); taken.clear();
     for (const s of snap.suggestions || []) if (s?.id) seenSug.add(s.id);
     offset = (snap.serverNow || Date.now()) - Date.now();
-    if (!isHost()) mySpeed = typeof speed === "number" ? speed : null;
+    if (!isHost()) mySpeed = P.state().rate;
     document.body.classList.add("in-room");
     document.body.classList.toggle("room-guest", !isHost());
     const gen = ++pollGen;
@@ -307,7 +312,7 @@
     const wasGuest = room && !room.isHost;
     room = null; code = ""; follow = true;
     document.body.classList.remove("in-room", "room-guest");
-    if (wasGuest && mySpeed != null && typeof setSpeed === "function") setSpeed(mySpeed);
+    if (wasGuest && mySpeed != null) P.setRate(mySpeed);
     mySpeed = null;
     if (msg) showToast(msg, 3500);
     paint();
@@ -351,12 +356,13 @@
       if (!hasKey) {
         // комнаты работают через Whisper Archive: без входа в архив сначала вход, потом сразу в комнату
         const go = await modal({ title: "Слушать вместе", text: `Тебя пригласили в комнату ${c}. Комнаты работают через Whisper Archive — сначала войди в архив.`, ok: "Войти в архив" });
-        if (!go || typeof window.waLogin !== "function") return;
-        await window.waLogin("Чтобы войти в комнату по приглашению");
+        const login = W.modules.archive?.login;
+        if (!go || typeof login !== "function") return;
+        await login("Чтобы войти в комнату по приглашению");
         try { hasKey = await invoke("wa_token_exists"); } catch {}
         if (!hasKey) return;
       } else {
-        const text = !inRoom() ? `Тебя пригласили слушать вместе: комната ${c}. Музыкой управляет ведущий, каждый слушает со своего аккаунта Яндекса.`
+        const text = !inRoom() ? `Тебя пригласили слушать вместе: комната ${c}. Музыкой управляет ведущий, каждый слушает со своего ${account()}.`
           : isHost() ? `Ты ведёшь комнату ${code} — она закроется для всех. Перейти в комнату ${c}?`
           : `Ты сейчас в комнате ${code}. Перейти в комнату ${c}?`;
         const ok = await modal({ title: "Слушать вместе", text, ok: inRoom() ? "Перейти" : "Войти" });
@@ -384,53 +390,57 @@
 
   // ---------- кнопки плеера у гостя ----------
   // «Вперёд», «назад», перемотка и режимы у гостя не работают: музыкой управляет ведущий
+  // какие кнопки — по ролям интерфейса: в любом приложении это его «вперёд», «назад», повтор и перемешивание
   const guestBlocked = () => inRoom() && !isHost();
+  const BLOCKED = ["player.next", "player.prev", "fullplayer.next", "fullplayer.prev", "player.mode"];
   document.addEventListener("click", (e) => {
     if (!guestBlocked()) return;
-    if (e.target.closest?.("#next, #prev, #fNext, #fPrev, #shuffleBtn, #repeatBtn")) {
+    const sel = BLOCKED.map((r) => W.ui.selector(r)).filter(Boolean).join(", ");
+    if (sel && e.target.closest?.(sel)) {
       e.stopImmediatePropagation(); e.preventDefault();
       showToast("Музыкой в комнате управляет ведущий — предложи трек через «⋯»", 3000);
     }
   }, true);
-  for (const id of ["#seek", "#fSeek"]) {
-    const el = $t(id);
-    el?.addEventListener("input", (e) => { if (guestBlocked() && follow) { e.stopImmediatePropagation(); guestApply(); } }, true);
+  for (const el of [...W.ui.all("player.seek"), ...W.ui.all("fullplayer.seek")]) {
+    el.addEventListener("input", (e) => { if (guestBlocked() && follow) { e.stopImmediatePropagation(); guestApply(); } }, true);
   }
-  window.__TAURI__.event?.listen("tray-ctl", (e) => {
-    if (guestBlocked() && ["seek_fwd", "seek_back"].includes(e.payload)) setTimeout(guestApply, 50);
-  });
+  // гость перемотал не ползунком (горячие клавиши, стрелки) — сразу обратно к ведущему; свои перемотки синхронизации не в счёт
+  W.on("seek", () => { if (guestBlocked() && follow && !syncing) setTimeout(guestApply, 50); });
 
   // ---------- события плеера ----------
-  const prevPush = window.miniPush;
-  window.miniPush = (force) => {
-    prevPush?.(force);
+  // от ядра Whisper: смена трека, пауза/воспроизведение, перемотка, скорость, режимы (Whisper.player.watch)
+  P.watch((force) => {
     if (!inRoom()) return;
     if (isHost()) return hostPush(force);
     // гость: сам включил другой трек или поставил паузу
     const t = curTrack(), pb = room.playback;
     if (!follow || syncing || !pb) return;
-    if (t && String(t.id) !== String(pb.track.id)) detach("Ты включил свой трек");
-    // трек комнаты ещё грузится (audio пока на паузе) — это не пауза гостя
-    else if (audio && audio.paused && pb.playing && !needLoad && !(typeof loadAt === "number" && loadAt > 0)) {
+    const md = P.media();
+    if (t && t.id !== String(pb.track.id)) detach("Ты включил свой трек");
+    // трек комнаты ещё грузится (плеер пока на паузе) — это не пауза гостя
+    else if (md.paused && pb.playing && !md.pending && !md.loading) {
       // трек просто доиграл раньше, чем пришёл следующий от ведущего, — это не пауза
-      const nearEnd = audio.ended || (isFinite(audio.duration) && audio.duration - audio.currentTime < 2);
+      const nearEnd = md.ended || (md.duration > 0 && md.duration - P.state().position < 2);
       if (!nearEnd) detach("Пауза у тебя");
     }
-  };
+  });
 
   // пункт меню трека «⋯»: гость — предложить, ведущий — ничего (он и так управляет)
-  // Отдельный блок в самом верху меню, только когда ты в комнате гостем. Возвращает true, если блок добавлен.
-  window.roomTrackMenu = (t) => {
-    if (!inRoom() || isHost() || typeof tmenu === "undefined") return false;
-    const box = el("div", "mroom" + (follow ? "" : " away"));
-    const head = el("div", "mroomhead");
-    head.append(el("i", "mroomdot"), el("span", "", `Слушать вместе · ${code}`));
-    box.append(head);
-    menuItem(ROOM_ICON, "Предложить в комнату", () => suggest(t), { to: box });
-    if (!follow) menuItem(REJOIN_ICON, "Вернуться в комнату", rejoin, { to: box });
-    tmenu.append(box);
-    return true;
-  };
+  // Отдельный блок в самом верху меню (slot "top"), только когда ты в комнате гостем.
+  W.ui.trackMenu.add({
+    id: "together", slot: "top",
+    build(t, m) {
+      if (!inRoom() || isHost()) return false;
+      const box = el("div", "mroom" + (follow ? "" : " away"));
+      const head = el("div", "mroomhead");
+      head.append(el("i", "mroomdot"), el("span", "", `Слушать вместе · ${code}`));
+      box.append(head);
+      m.item(ROOM_ICON, "Предложить в комнату", () => suggest(t), { to: box });
+      if (!follow) m.item(REJOIN_ICON, "Вернуться в комнату", rejoin, { to: box });
+      m.append(box);
+      return true;
+    },
+  });
 
   // ---------- окно «Слушать вместе» ----------
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -455,7 +465,7 @@
 
   async function paintSetup(box) {
     box.append(el("h2", "", "Слушать вместе"));
-    box.append(el("p", "rmlead", "Одна и та же музыка у всех в комнате в один и тот же момент. Каждый слушает со своего аккаунта Яндекса, ведущий управляет, остальные могут предлагать треки."));
+    box.append(el("p", "rmlead", `Одна и та же музыка у всех в комнате в один и тот же момент. Каждый слушает со своего ${account()}, ведущий управляет, остальные могут предлагать треки.`));
     let hasKey = false;
     try { hasKey = await invoke("wa_token_exists"); } catch {}
     if (!panel || panel.box !== box) return;
@@ -478,7 +488,7 @@
 
   function trackLine(t) {
     const d = el("div", "rmtrack");
-    const img = el("img"); img.alt = ""; const src = cover(fromRoomTrack(t), "100x100"); if (src) img.src = src;
+    const img = el("img"); img.alt = ""; const src = W.cover(roomEntity(t), 100); if (src) img.src = src;
     const tx = el("div", "rmtx");
     tx.append(el("b", "", t.title), el("span", "", (t.artists || []).map((a) => a.name).join(", ")));
     d.append(img, tx);
@@ -560,8 +570,8 @@
       const acts = el("div", "rmacts");
       const btn = (label, title, fn) => { const b = el("button", "rmact", label); b.type = "button"; b.title = title; b.onclick = fn; acts.append(b); };
       if (isHost() && !taken.has(s.id)) {
-        btn("▶", "Включить сейчас", () => { taken.add(s.id); wave.on = false; queue = [{ ...fromRoomTrack(s.track), _room: true }]; playCtx = "room"; playAlbum = null; play(0); dismiss(s.id); });
-        if (window.playNext) btn("＋", "Играть следующим", () => queueSug(s));
+        btn("▶", "Включить сейчас", () => { taken.add(s.id); P.playTrack(roomEntity(s.track, { _room: true }), { context: "room" }); dismiss(s.id); });
+        btn("＋", "Играть следующим", () => queueSug(s));
       }
       btn("✕", isHost() ? "Убрать" : "Отозвать", () => dismiss(s.id));
       row.append(acts); sb.append(row);
@@ -587,7 +597,7 @@
     if (!isHost() && !follow) rejoin(); else if (!panel) open();
   }
   function paintTab() {
-    const meta = $t(".player .meta");
+    const meta = roleEl("player.info");                // под названием и исполнителем в плеере
     if (!inRoom()) { tab?.remove(); tab = null; document.body.classList.remove("room-away"); return; }
     if (!tab && meta) {
       tab = el("div", "roomtab");
@@ -613,7 +623,7 @@
 
   function paint() {
     // кнопка в плеере: подсвечена в комнате, на ней — сколько слушают
-    const b = $t("#togetherBtn");
+    const b = btn;
     if (b) {
       b.classList.toggle("on", inRoom());
       b.classList.toggle("detached", inRoom() && !isHost() && !follow);
@@ -623,7 +633,7 @@
       b.title = inRoom() ? `Слушать вместе · комната ${code} · ${room.members.length} чел.` + (waiting ? ` · предложений: ${waiting}` : "") : "Слушать вместе";
     }
     paintTab();
-    window.waveRefresh?.();          // страница «Моя волна»: у гостя — трек комнаты и кнопка комнаты (main.js)
+    W.emit("room", roomEvent());     // приложению: у Whisper Yandex — страница «Моя волна» у гостя (yandex.js)
     if (!panel) return;
     const keepStatus = $t(".rmstatus", panel.box)?.textContent || "";
     panel.box.textContent = "";
@@ -631,24 +641,42 @@
     if (keepStatus) setStatus(keepStatus);
   }
 
-  const btn = $t("#togetherBtn");
+  // кнопка — та, что приложение уже поставило в разметку (#togetherBtn), иначе своя в начале правого блока плеера
+  let btn = document.getElementById("togetherBtn");
+  if (!btn) {
+    btn = el("button", "togetherbtn"); btn.id = "togetherBtn"; btn.title = "Слушать вместе";
+    (roleEl("player.actions") || roleEl("player"))?.prepend(btn);
+    if (!btn.isConnected) btn = null;
+  }
   if (btn) {
     btn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 19c.6-3.3 3-5 6-5s5.4 1.7 6 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.5 5.3a3 3 0 0 1 0 5.4M18 13.6c1.6.7 2.7 2.4 3 5.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
     btn.onclick = open;
   }
   // окно закрывается — комнату не бросаем: ведущий продолжает раздавать, гость — слушать
   window.addEventListener("beforeunload", () => { if (inRoom()) call("POST", `/api/rooms/${code}/leave`).catch(() => {}); });
-  window.roomInfo = () => (inRoom() ? { code, host: isHost(), follow } : null);
-  // для консоли (cli.js)
-  window.roomCli = {
-    create, join, leave, suggest, info: () => (inRoom() ? room : null),
-    // кнопки страницы «Моя волна» у гостя (main.js): центральная — играть/пауза трека комнаты, верхняя — окно комнаты
+  function info() { return inRoom() ? { code, host: isHost(), follow } : null; }
+  // событие «room»: { inRoom, code, host, follow, roleChanged? } — всегда объект, и в комнате, и без неё
+  function roomEvent() { return { inRoom: inRoom(), code: code || null, host: isHost(), follow, ...(info() || {}) }; }
+  const api = {
+    info,                                  // { code, host, follow } | null
+    wantsPlay,                             // плеер: держать ли трек, загруженный без звука
+    take,                                  // плеер: перед следующим треком — поставить предложение («Ставить в очередь»)
+    open, create, join, leave, suggest, rejoin,
+    room: () => (inRoom() ? room : null),
+    // кнопки бесконечного потока у гостя (у Whisper Yandex — страница «Моя волна»): центральная — играть/пауза
+    // трека комнаты, кнопка станций — окно комнаты
     waveBtn: () => {
       if (!inRoom() || isHost()) return;
       if (!follow) return rejoin();
-      if (!curTrack() || needLoad) return guestApply();
-      togglePlay();
+      if (!curTrack() || P.media().pending) return guestApply();
+      P.toggle();
     },
     stBtn: () => { if (!inRoom() || isHost()) return; if (!follow) rejoin(); else if (!panel) open(); },
   };
+  W.modules.together = api;
+  // старые имена: main.js (страница «Моя волна», nextIndex, play) и консоль (cli.js)
+  window.roomInfo = info;
+  window.roomWantsPlay = wantsPlay;
+  window.roomTake = take;
+  window.roomCli = { create, join, leave, suggest, info: api.room, waveBtn: api.waveBtn, stBtn: api.stBtn };
 })();

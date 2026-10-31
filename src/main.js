@@ -6,6 +6,9 @@ const invoke = async (cmd, args) => {
 const OAUTH_URL =
   "https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d";
 const $ = (s) => document.querySelector(s);
+// Ядро Whisper (core/whisper-core.js): сообщаем ему, что случилось с плеером, — дальше оно само рассылает
+// события модулям (Whisper.on("track"…)). Ядра может не быть (старая разметка) — тогда просто молчим.
+const wReport = (p) => { try { window.Whisper?.player.report(p); } catch (e) { console.error("Whisper:", e); } };
 
 // Динамический CSS (свои цвета, CSS своих тем) — без элементов <style>: CSP приложения запрещает
 // встроенные стили (style-src без 'unsafe-inline', аудит F-11). На constructable stylesheets
@@ -62,6 +65,7 @@ ICON.shuffle = svgp("M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 
 ICON.repeat = svgp("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z");
 ICON.repeatOne = svgp("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z");
 ICON.more = svgp("M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z");
+ICON.playNext = svgp("M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z");      // «Играть следующим» в меню трека
 ICON.download = svgp("M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z");
 ICON.got = svgp("M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 5v6.6l2.3-2.3 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4 2.3 2.3V7h2z");
 // «Не нравится» — как у Яндекса: перечёркнутый круг
@@ -1607,7 +1611,9 @@ function setHead({ title = "", img = "", round = true, back = false, sub = null,
   if (sub) sub(s);
 }
 function setChips(items, active, onPick) {
-  const c = $("#chips"); c.hidden = false; c.innerHTML = "";
+  const c = $("#chips"); c.hidden = false;
+  const dl = $("#dlAllBtn"); if (dl && c.contains(dl)) $("#pinBtn").before(dl);   // не стереть кнопку вместе с чипсами
+  c.innerHTML = "";
   for (const [id, label] of items) {
     const b = document.createElement("button");
     b.className = "chip" + (id === active ? " active" : "");
@@ -1702,10 +1708,9 @@ function syncIcons() {
   $("#waveBtn").innerHTML = waveOwn && playing ? ICON.pause : ICON.play;
   $("#waveBtn").classList.toggle("playing", waveOwn && playing);
   waveOrbitsSync();
-  window.discordPush?.();                 // Discord RPC (discord.js), если включён
-  window.miniPush?.();                    // мини-плеер у значка в трее (traymini.js)
   if (active !== trayPlaying) { trayPlaying = active; Promise.resolve(invoke("tray_playing", { playing: active })).catch(() => {}); }   // в трей — только при смене
   thumbSync();
+  wReport({ playing });                   // Discord, мини-плеер, OBS, «Слушать вместе» узнают об этом от ядра (Whisper.player.watch)
 }
 // Кнопки под миниатюрой окна на панели задач Windows (thumbbar.rs): «В лайки», «Назад», «Пауза/Играть», «Вперёд».
 // В Rust отправляется только изменившееся состояние.
@@ -2237,7 +2242,7 @@ async function waveMoreRun() {
       if (!added) wave.session = null;        // сессия не отдала новых треков — в следующей попытке начнём новую
     }
   } finally { wave.loading = false; }
-  if (added) window.qRefresh?.();
+  if (added) wReport({ queue: true });
   return added > 0;
 }
 
@@ -2811,6 +2816,7 @@ function refreshHearts() {
   setHeart($("#fLike"), !!t && likedIds.has(String(t.id)));
   refreshPlayerBtns();
   thumbSync();
+  if (!t || String(t.id) === window.Whisper?.player.state().track?.id) wReport({ liked: !!t && likedIds.has(String(t.id)), disliked: !!t && dislikedIds.has(String(t.id)) });
 }
 async function loadLikedIds() {
   try {
@@ -2910,7 +2916,7 @@ function updateModes() {
   rp.innerHTML = er === 2 ? ICON.repeatOne : ICON.repeat;
   sh.title = on ? (shuffle ? "Случайный порядок: включён" : "Случайный порядок") : "Случайный порядок доступен только в альбомах и лайках";
   rp.title = on ? ["Повтор выключен", "Повтор всего списка", "Повтор трека"][repeat] : er === 2 ? "Повтор трека: включён" : "Повтор трека";
-  window.miniPush?.();
+  wReport({ modes: { available: on, shuffle: on && shuffle, repeat: er } });
 }
 $("#shuffleBtn").onclick = () => { shuffle = !shuffle; if (shuffle) buildOrder(); saveModes(); updateModes(); };
 $("#repeatBtn").onclick = () => { repeat = modesActive() ? (repeat + 1) % 3 : repeat === 2 ? 0 : 2; saveModes(); updateModes(); };
@@ -2976,10 +2982,21 @@ async function lyricsFrom(t, src) {
   let res = lyricsCache.get(key);
   if (res) return res;
   try { res = src === "lrclib" ? await fetchLrclib(t) : await fetchLyrics(t.id); }
-  catch { return { type: "none", err: true }; }                // ошибку сети не кэшируем — можно повторить
+  catch (e) { console.warn("lyrics", src, e); return { type: "none", err: String(e?.message || e || "") }; }   // ошибку не кэшируем — можно повторить
   lyricsCache.set(key, res);
   if (lyricsCache.size > 120) lyricsCache.delete(lyricsCache.keys().next().value);
   return res;
+}
+// Почему не пришёл текст. Ошибки LRCLIB из lyrics.rs начинаются с причины («limit:», «timeout:», «net:», «http:»):
+// раньше любая из них выглядела как «проверь интернет», хотя чаще всего интернет в порядке, а занят сам сервер.
+function lyrErrText(src, err) {
+  const n = LYR_NAME[src];
+  if (!navigator.onLine) return `${n}: нет подключения к интернету`;
+  if (/^limit:/.test(err)) return `${n} просит подождать — слишком много запросов. Попробуй через минуту`;
+  if (/^timeout:/.test(err)) return `${n} долго не отвечает — попробуй ещё раз чуть позже`;
+  if (/^net:/.test(err)) return `${n} сейчас недоступен — сервер не отвечает. Попробуй позже`;
+  if (/^http:/.test(err)) return `${n}: сервер ответил ошибкой — попробуй позже`;
+  return `${n}: не удалось получить текст — попробуй ещё раз`;
 }
 function paintLyrSrc() {
   for (const b of document.querySelectorAll("#fSrc [data-src]")) {
@@ -3045,17 +3062,17 @@ async function loadFullLyrics(t, only = null) {
   setFullMode("cover");
   $("#fSrc").classList.add("busy");
   const order = only ? [only] : [lyrPref, ...LYR_SRCS.filter((s) => s !== lyrPref)];
-  let res = { type: "none" }, src = order[0], err = false;
+  let res = { type: "none" }, src = order[0], err = "";
   for (const s of order) {
     const r = await lyricsFrom(t, s);
     if (my !== fullSeq || $("#full").hidden) return;
-    err ||= !!r.err;
+    err ||= r.err || "";
     if (r.type !== "none") { res = r; src = s; break; }
   }
   $("#fSrc").classList.remove("busy");
   lyrShown = res.type === "none" ? "" : src;
   // источник выбран вручную, а текста там нет — короткая подсказка поверх обложки
-  if (res.type === "none" && only) showToast(err ? `${LYR_NAME[only]}: не удалось получить текст — проверь интернет` : `У источника «${LYR_NAME[only]}» текста этой песни нет`, 3000);
+  if (res.type === "none" && only) showToast(err ? lyrErrText(only, err) : `У источника «${LYR_NAME[only]}» текста этой песни нет`, 3500);
   paintLyrSrc();
   renderLyrics(res);
 }
@@ -3256,7 +3273,7 @@ function setSpeed(v) {
   try { localStorage.setItem("ym_speed", String(speed)); } catch {}
   applySpeed(audio);
   syncSpeedBadge();
-  window.discordPush?.(true); window.miniPush?.(true);     // время в Discord и мини-плеере — с новой скоростью
+  wReport({ rate: speed });               // время в Discord и мини-плеере — с новой скоростью (ядро: событие «rate»)
 }
 function syncSpeedBadge() {
   const b = $("#pMore");
@@ -3297,12 +3314,12 @@ function trackMenuMain(t, ctx) {
   menuReset();
   const bottom = tmenuBtn?.id === "pMore";                       // меню нижней панели
   // сверху: «Слушать вместе» отдельным блоком (только в комнате, together.js), под ним — скорость
-  const roomed = !!window.roomTrackMenu?.(t);
+  const roomed = (window.Whisper?.ui.trackMenu.build(t, ctx, "top") || 0) > 0;     // core/together.js
   if (bottom) menuSpeed();
   if (roomed || bottom) menuSep();
   if (window.playNext && String(t.id) !== String(queue[current]?.id)) menuItem(ICON.playNext, "Играть следующим", () => window.playNext(t));
   menuItem(ICON.plAdd, "Добавить в плейлист", () => trackMenuPlaylists(t, ctx), { keep: true, arrow: true });
-  window.waTrackMenu?.(t, ctx);         // «Сохранить в архив» (whisper.js) — в одной группе с плейлистами
+  window.Whisper?.ui.trackMenu.build(t, ctx);   // пункты общих модулей («Сохранить в архив», core/archive.js) — в одной группе с плейлистами
   if (ctx) {
     const p = PL.full.get(ctx.kind), n = p ? p.items.length : 0;
     menuSep();
@@ -3896,6 +3913,10 @@ function paintDlAll() {
   const b = $("#dlAllBtn");
   if (!b) return;
   if (!dlCur || offline) { b.hidden = true; return; }
+  // Лайки — в ряд с вкладками «Лайки / Мои плейлисты», справа; остальное (альбомы) — в шапке рядом с «Закрепить»
+  const chips = $("#chips");
+  if (dlCur.key === "likes" && !chips.hidden) { if (b.parentNode !== chips) chips.append(b); }
+  else if (b.nextElementSibling !== $("#pinBtn")) $("#pinBtn").before(b);
   b.hidden = false;
   const running = !!bulk && bulk.key === dlCur.key;
   b.classList.toggle("busy", running);
@@ -4067,9 +4088,8 @@ function showTrack(t, pos = 0) {
   else if (!$("#wavePage").hidden) waveHead();         // волна выключилась — не оставлять наверху старое название
   refreshHearts(); updateModes();
   if (!$("#full").hidden) fillFull(t);
-  window.qRefresh?.();                    // панель очереди (queue.js), если открыта
-  window.discordPush?.();
-  window.miniPush?.();
+  // в конце: к этому моменту обложка, цвета и режимы уже новые — модули (Discord, мини-плеер, OBS) берут их отсюда
+  wReport({ track: t, position: pos, liked: likedIds.has(String(t.id)), disliked: dislikedIds.has(String(t.id)), queue: true });
 }
 
 function saveLast(pos = 0) {
@@ -4134,7 +4154,7 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     else { const k = order.indexOf(i); if (k >= 0) ordPos = k; }
   }
   saveLast(resumeAt);
-  if (!isRetry) window.qOnPlay?.(t);      // история прослушивания (queue.js)
+  if (!isRetry) wReport({ started: t });  // трек включили — история прослушивания (core/queue.js) слушает событие «start»
   if (wave.on) {
     wave.pos = i; markHeard(t);
     if (!isRetry) waveFeedback("trackStarted", t);
@@ -4162,14 +4182,15 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
   curLocal = false; curFromWa = false;      // флаги прошлого трека не должны влиять на разбор ошибки этого
   try {
     // Скачанный трек играет с диска (ymlocal://, Rust отдаёт файл кусками) — без единого запроса в сеть.
-    // Иначе Whisper Archive (whisper.js): трек есть в архиве — играет поток оттуда (wa://, кусками), иначе версия Яндекса.
+    // Иначе источники ядра (Whisper.sources — Whisper Archive, core/archive.js): трек есть в архиве — играет поток оттуда
+    // (wa://, кусками), иначе версия Яндекса.
     const local = got.has(String(t.id)) ? LOCAL_BASE + "track/" + encodeURIComponent(String(t.id)) : "";
     // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
     if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");
     if (local) backfillMeta([t]);
-    const wa = local ? null : window.waSource ? await window.waSource(t, queue[i + 1]) : null;
+    const wa = local ? null : (await window.Whisper?.sources.resolve(t, queue[i + 1])) || null;
     if (my !== playSeq) return;
-    window.waBadge?.(!!wa);
+    wReport({ source: local ? "local" : wa ? wa.source : "provider" });     // печать «WA» на обложке и т.п.
     curFromWa = !!wa; curLocal = !!local;
     let src = null;
     if (audio._native) {
@@ -4222,12 +4243,12 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
       if (!wa || err?.name !== "NotSupportedError") throw err;
       // поток из архива не заиграл — берём файл целиком, а если и это не вышло, играет версия Яндекса
       let b = null;
-      try { b = await window.waBlob(wa.id); } catch {}
+      try { b = await wa.blob?.(); } catch {}
       if (my !== playSeq) return;
       audio.removeAttribute("crossorigin");
       if (b) audio.src = curBlob = URL.createObjectURL(b);
       else {
-        curFromWa = false; window.waBadge?.(false);
+        curFromWa = false; wReport({ source: "provider" });
         const url = await directLink(t.id);
         if (my !== playSeq) return;
         audio.src = url;
@@ -4381,10 +4402,10 @@ function makeAudio(useViz, nat = false) {
     applySpeed(a);
     if (a === audio) {
       loadAt = 0; wdPos = -1; wdAt = 0; if (transit) setTransit(false);
-      window.roomOnPlaying?.();           // «Слушать вместе»: ведущий сообщает старт, гость догоняет (together.js)
+      wReport({ audible: true });         // звук пошёл — «Слушать вместе»: ведущий сообщает старт, гость догоняет (core/together.js)
     }
   };
-  a.onseeked = () => { if (a === audio) { window.discordPush?.(true); window.miniPush?.(true); } };
+  a.onseeked = () => { if (a === audio) wReport({ seek: a.currentTime }); };
   a.onended = () => {
     if (a !== audio) return;
     setTransit(true);
@@ -4848,6 +4869,7 @@ function setVol(v) {
   document.documentElement.style.setProperty("--vol", String(volume));      // громкость числом 0…1 — для CSS тем (ручка громкости)
   if (hook("volKnob")) $("#volBtn").setAttribute("aria-valuenow", String(pct));
   thSync();
+  wReport({ volume });
 }
 $("#vol").addEventListener("input", (e) => setVol(e.target.value / 100));
 $("#volBtn").onclick = () => { if (knob.moved) { knob.moved = false; return; } if (volume > 0) { lastVol = volume; try { localStorage.setItem("ym_lastvol", String(lastVol)); } catch {} setVol(0); } else setVol(lastVol || 0.5); };

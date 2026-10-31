@@ -490,7 +490,7 @@ pub fn serve_local(app: &AppHandle, req: &Request<Vec<u8>>) -> Response<Vec<u8>>
     if total == 0 {
         return local_err(StatusCode::NOT_FOUND, "пустой файл", &origin);
     }
-    let (start, want_end) = crate::whisper::parse_range(req.headers().get(header::RANGE).and_then(|v| v.to_str().ok()));
+    let (start, want_end) = crate::whisper::stream::parse_range(req.headers().get(header::RANGE).and_then(|v| v.to_str().ok()));
     if start >= total {
         return local_resp(StatusCode::RANGE_NOT_SATISFIABLE, &origin)
             .header(header::CONTENT_RANGE, format!("bytes */{total}"))

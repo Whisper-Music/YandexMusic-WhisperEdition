@@ -1,5 +1,6 @@
 "use strict";
-// Свои стили оформления из файлов .wmt (Whisper Music Theme). Формат: wmt.js и docs/WMT-FORMAT.md.
+// Свои стили оформления из файлов .wmt (Whisper Music Theme). Формат: core/wmt.js и docs/WMT-FORMAT.md,
+// разбор и привязка CSS темы, фильтр безопасности — core/theme-css.js (общие для всех приложений Whisper).
 //
 // Как это устроено в приложении:
 // * Встроенные стили (Неон, Королевский, Стимпанк, Lolitta) — это CSS-правила вида :root[data-style="royal"] .panel {…}.
@@ -11,6 +12,9 @@
 //   Lolitta есть банты и жемчуг на панелях и подбор контрастного текста под цвета.
 (() => {
   const APP = "whisper-music";
+  // общая секция для всех приложений Whisper: CSS по ролям ([data-w="search"], [data-w="player.volume"]),
+  // ядро (core/whisper-core.js) переводит роли в селекторы этого приложения. Секция приложения идёт после неё и главнее.
+  const CORE = window.Whisper?.CORE_SECTION || "whisper-core";
   const OBS = "whisper-obs";        // виджет для OBS (obs.js): своя секция css/settings в том же файле темы
   const KEY = (id) => "theme:" + id;
   const NAMES = { neon: "Неон", royal: "Королевский", steam: "Стимпанк", lolitta: "Lolitta" };
@@ -23,228 +27,10 @@
   const nameOf = (id) => NAMES[id] || cfg.themes.find((t) => t.id === id)?.name || id;
 
   // ---------- CSS: привязка правил к стилю и обратно ----------
-  // разделить список селекторов по запятым верхнего уровня (запятые внутри :is(), [attr="a,b"] не в счёт)
-  function splitTop(s) {
-    const out = []; let depth = 0, q = "", cur = "";
-    for (let i = 0; i < s.length; i++) {
-      const c = s[i];
-      if (q) { cur += c; if (c === "\\") cur += s[++i] ?? ""; else if (c === q) q = ""; continue; }
-      if (c === '"' || c === "'") { q = c; cur += c; continue; }
-      if (c === "(" || c === "[") depth++;
-      else if (c === ")" || c === "]") depth--;
-      if (c === "," && depth === 0) { out.push(cur.trim()); cur = ""; continue; }
-      cur += c;
-    }
-    if (cur.trim()) out.push(cur.trim());
-    return out;
-  }
-  // Разбор CSS-текста на правила. Браузерный разбор (CSSOM) здесь не годится: при пересборке он теряет
-  // сокращённые свойства с var() (например, «background: linear-gradient(… var(--x) …)» превращается в пустоту).
-  // Поэтому тексты правил переносятся как есть — с исходным форматированием и комментариями внутри.
-  function cssParse(src) {
-    const nodes = [], n = src.length;
-    let i = 0;
-    const endStr = (k) => { const q = src[k++]; while (k < n && src[k] !== q) { if (src[k] === "\\") k++; k++; } return k + 1; };
-    const endCmt = (k) => { const e = src.indexOf("*/", k + 2); return e < 0 ? n : e + 2; };
-    const skipWs = () => { for (;;) { while (i < n && /\s/.test(src[i])) i++; if (src.startsWith("/*", i)) i = endCmt(i); else break; } };
-    const readPrelude = () => {
-      let s = "", depth = 0;
-      while (i < n) {
-        const c = src[i];
-        if (c === '"' || c === "'") { const j = endStr(i); s += src.slice(i, j); i = j; continue; }
-        if (src.startsWith("/*", i)) { i = endCmt(i); s += " "; continue; }
-        if (c === "(" || c === "[") depth++; else if (c === ")" || c === "]") depth--;
-        if (depth <= 0 && (c === "{" || c === ";" || c === "}")) break;
-        s += c; i++;
-      }
-      return s.trim().replace(/\s+/g, " ");
-    };
-    const readBlock = () => {
-      const start = ++i; let depth = 1;
-      while (i < n) {
-        const c = src[i];
-        if (c === '"' || c === "'") { i = endStr(i); continue; }
-        if (src.startsWith("/*", i)) { i = endCmt(i); continue; }
-        if (c === "{") depth++;
-        else if (c === "}" && !--depth) { const body = src.slice(start, i); i++; return body; }
-        i++;
-      }
-      return src.slice(start);
-    };
-    for (;;) {
-      skipWs();
-      if (i >= n) break;
-      if (src[i] === "}") { i++; continue; }
-      const prelude = readPrelude();
-      if (i >= n || src[i] === ";") { i++; if (prelude) nodes.push({ prelude, body: null }); continue; }
-      if (src[i] === "}") { i++; continue; }
-      nodes.push({ prelude, body: readBlock() });
-    }
-    return nodes;
-  }
-  const ruleText = (sel, body) => `${sel} {${/\n/.test(body) ? body.replace(/\s+$/, "") + "\n" : " " + body.trim() + " "}}`;
+  // Сам движок (разбор, привязка к стилю, безопасность, роли) — в ядре: core/theme-css.js. Здесь — только то, что про это приложение.
+  const TC = window.WhisperThemeCss;
+  const { splitTop, cssParse, scopeSel, scopeCss, extractFrom } = TC;
 
-  // при загрузке: селектор из файла -> селектор своего стиля
-  function scopeSel(sel, id, gate = "") {
-    const pre = `:root[data-style="${id}"]${gate}`;
-    return splitTop(sel).map((s) => {
-      const m = /^(:root|html)(?![\w-])/i.exec(s);
-      return m ? pre + s.slice(m[0].length) : `${pre} ${s}`;
-    }).join(", ");
-  }
-  // ---------- безопасность CSS темы ----------
-  // Тема — чужой файл. Её CSS не должен ни ходить в сеть, ни подменять общие анимации и шрифты приложения.
-  // Все проверки делаются по ТЕКСТУ ПОСЛЕ РАСКРЫТИЯ ЭКРАНИРОВАНИЯ и без комментариев: «@\69mport», «u\72l(» и «u/**/rl(»
-  // браузер читает так же, как «@import» и «url(», а обычное регулярное выражение их не видит.
-  const unesc = (s) => String(s)
-    .replace(/\/\*[\s\S]*?(\*\/|$)/g, "")
-    .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?|\\([\s\S])/gi, (m, h, c) => {
-      if (!h) return c;
-      const n = parseInt(h, 16);
-      return !n || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff) ? "�" : String.fromCodePoint(n);
-    });
-  // top-level разбор по «;» (внутри строк, скобок и вложенных {} не режем)
-  function splitDecls(body) {
-    const out = []; let cur = "", depth = 0, q = "";
-    for (let i = 0; i < body.length; i++) {
-      const c = body[i];
-      if (q) { cur += c; if (c === "\\") cur += body[++i] ?? ""; else if (c === q) q = ""; continue; }
-      if (c === '"' || c === "'") { q = c; cur += c; continue; }
-      if (c === "/" && body[i + 1] === "*") { const e = body.indexOf("*/", i + 2), j = e < 0 ? body.length : e + 2; cur += body.slice(i, j); i = j - 1; continue; }
-      if (c === "(" || c === "[" || c === "{") depth++;
-      else if (c === ")" || c === "]" || c === "}") depth = Math.max(0, depth - 1);
-      if (c === ";" && depth === 0) { out.push(cur); cur = ""; continue; }
-      cur += c;
-    }
-    if (cur.trim()) out.push(cur);
-    return out;
-  }
-  // Можно ли оставить фрагмент CSS: из внешнего мира в нём разрешены только blob:-ссылки на ресурсы этой темы
-  // (их ставит inject()), data: и #якоря. Функции, которые принимают адрес строкой (image-set, src…), не допускаются совсем.
-  function cssSafe(text, allowed) {
-    const t = unesc(text);
-    if (/@\s*import\b/i.test(t) || /expression\s*\(|javascript\s*:|behavior\s*:|-moz-binding/i.test(t)) return false;
-    if (/(^|[^\w-])(?:-webkit-)?(image-set|cross-fade|element|paint|src)\s*\(/i.test(t)) return false;
-    const re = /url\s*\(\s*(?:"([^"]*)"|'([^']*)'|([^)"'\s]*))\s*\)/gi;
-    let m;
-    while ((m = re.exec(t))) {
-      const u = (m[1] ?? m[2] ?? m[3] ?? "").trim();
-      if (!(allowed.has(u) || /^data:/i.test(u) || u.startsWith("#"))) return false;
-    }
-    // «url» без закрывающей скобки или с неразобранным содержимым
-    if (/url\s*\(/i.test(t.replace(re, ""))) return false;
-    return true;
-  }
-  const cleanBody = (body, allowed) => splitDecls(body).filter((d) => cssSafe(d, allowed)).join(";");
-
-  // @keyframes и @font-face темы получают имена с её id: тема не может ни подменить общую анимацию или шрифт приложения,
-  // ни повлиять на них, пока выбран другой стиль. Переименовываются только имена, которые тема определяет сама.
-  const GROUPING = /^@(media|supports|container|layer|scope|starting-style)\b/i;
-  const KEYFRAMES = /^@(-webkit-)?keyframes\s+/i;
-  function collectNames(nodes, ctx) {
-    for (const { prelude, body } of nodes) {
-      if (body === null || prelude[0] !== "@") continue;
-      const p = unesc(prelude);
-      let m;
-      if ((m = KEYFRAMES.exec(p))) ctx.kf.add(p.slice(m[0].length).trim().replace(/^["']|["']$/g, ""));
-      else if (/^@font-face\b/i.test(p)) {
-        const f = /font-family\s*:\s*([^;}]+)/i.exec(unesc(body));
-        if (f) ctx.ff.add(f[1].trim().replace(/^["']|["']$/g, ""));
-      } else if (GROUPING.test(p)) collectNames(cssParse(body), ctx);
-    }
-  }
-  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  function renameIn(text, names, pre) {
-    if (!names.size) return text;
-    const re = new RegExp(`(?<![\\w-])(${[...names].map(escRe).join("|")})(?![\\w-])`, "g");
-    return text.replace(re, pre + "$1");
-  }
-  const ANIM_PROP = /(^|[\s;{])(-webkit-)?animation(-name)?\s*:/i;
-  // сдвиг, поворот и увеличение при наведении/нажатии — тоже анимация интерфейса: такие свойства из правил
-  // с :hover/:active выносятся в отдельное правило, которое действует только при включённых анимациях
-  const MOVE_PROP = /^\s*(-webkit-)?(transform|translate|scale|rotate)\s*:/i;
-  const MOTION_ON = '[data-anim="on"]';
-  const FONT_PROP = /(^|[\s;{])(--[\w-]*font[\w-]*|font(-family)?)\s*:/i;
-  function renameDecls(body, ctx, pre) {
-    return splitDecls(body).map((d) => {
-      const u = unesc(d);
-      if (ANIM_PROP.test(u)) return renameIn(d, ctx.kf, pre);
-      if (FONT_PROP.test(u)) return renameIn(d, ctx.ff, pre);
-      return d;
-    }).join(";");
-  }
-
-  function emitCss(nodes, id, ctx, allowed) {
-    const out = [], pre = `wmt-${id}-`;
-    for (const { prelude, body } of nodes) {
-      if (prelude[0] === "@") {
-        const p = unesc(prelude);
-        if (body === null) continue;                                                      // @import, @charset, @namespace и любые «@что-то;» без блока
-        if (/^@layer\b/i.test(p)) {
-          // слои темы получают имена с её id: тема не может ни попасть в слой приложения (app-motion-off в styles.css,
-          // им выключаются анимации), ни встать в порядке слоёв перед ним
-          const names = p.replace(/^@layer\b/i, "").trim();
-          if (names && !/^[\w-]+(\.[\w-]+)*$/.test(names)) continue;
-          out.push(`@layer${names ? " " + pre + names : ""} {\n${emitCss(cssParse(body), id, ctx, allowed)}\n}`);
-          continue;
-        }
-        if (GROUPING.test(p)) { out.push(`${prelude} {\n${emitCss(cssParse(body), id, ctx, allowed)}\n}`); continue; }
-        if (KEYFRAMES.test(p)) {
-          const name = p.replace(KEYFRAMES, "").trim().replace(/^["']|["']$/g, "");
-          if (!/^[\w-]+$/.test(name)) continue;
-          const frames = cssParse(body).map((f) => ruleText(f.prelude, cleanBody(f.body ?? "", allowed))).join("\n");
-          out.push(`@keyframes ${pre}${name} {\n${frames}\n}`);
-          continue;
-        }
-        if (/^@font-face\b/i.test(p)) {
-          const clean = cleanBody(body, allowed).replace(/font-family\s*:\s*([^;]+)/i, (m, v) => {
-            const n = v.trim().replace(/^["']|["']$/g, "");
-            return `font-family: "${pre}${n}"`;
-          });
-          if (/(^|[;\s])src\s*:/i.test(clean)) out.push(`@font-face {${clean}}`);        // без разрешённого источника шрифта правило бесполезно
-          continue;
-        }
-        continue;                                                                        // @property, @page, @counter-style и прочее — не поддерживаются
-      }
-      if (prelude && body !== null) {
-        const clean = renameDecls(cleanBody(body, allowed), ctx, pre);
-        if (!clean.trim()) continue;
-        if (/:(hover|active)\b/i.test(unesc(prelude))) {
-          const ds = splitDecls(clean), move = ds.filter((d) => MOVE_PROP.test(unesc(d))), rest = ds.filter((d) => !MOVE_PROP.test(unesc(d)));
-          if (rest.some((d) => d.trim())) out.push(ruleText(scopeSel(prelude, id), rest.join(";")));
-          if (move.length) out.push(ruleText(scopeSel(prelude, id, MOTION_ON), move.join(";")));
-        } else out.push(ruleText(scopeSel(prelude, id), clean));
-      }
-    }
-    return out.join("\n");
-  }
-  function scopeCss(src, id, allowed = new Set()) {
-    const nodes = cssParse(src), ctx = { kf: new Set(), ff: new Set() };
-    collectNames(nodes, ctx);
-    return emitCss(nodes, id, ctx, allowed);
-  }
-  // При сохранении встроенного стиля: все его правила из CSS приложения, уже без привязки к стилю.
-  // Вместе с ними — общие правила «:root[data-style] …» (для любого стиля): в CSS приложения они стоят между
-  // правилами стилей и намеренно перекрывают часть из них. Свой стиль подключается последним, и без них порядок
-  // перекрытия поменялся бы (например, другие отступы нижней панели) — а так копия совпадает с оригиналом.
-  function extractFrom(src, st, pad = "") {
-    const want = new RegExp(`\\[data-style(?:=["']?${st}["']?)?\\]`, "g"), res = [];
-    for (const { prelude, body } of cssParse(src)) {
-      if (body === null) continue;
-      if (prelude[0] === "@") {
-        if (!GROUPING.test(prelude)) continue;                          // @keyframes и т.п. остаются общими в приложении
-        const inner = extractFrom(body, st, pad + "  ");
-        if (inner.length) res.push(`${pad}${prelude} {\n${inner.join("\n\n")}\n${pad}}`);
-        continue;
-      }
-      const parts = splitTop(prelude).filter((s) => { want.lastIndex = 0; return want.test(s); }).map((s) => {
-        const x = s.replace(want, "");
-        return x.startsWith(":root ") ? x.slice(6).trim() : x;
-      });
-      if (parts.length) res.push(pad + ruleText(parts.join(",\n" + pad), body));
-    }
-    return res;
-  }
   async function extractCss(st) {
     const out = [];
     for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
@@ -290,7 +76,6 @@
 
   // ---------- значения из tokens ----------
   const HEX = /^#[0-9a-f]{6}$/i;
-  const cssVal = (v) => (typeof v === "string" && v.length <= 300 && !/[;{}<>\\]|\/\*|url\s*\(|expression/i.test(v) ? v.trim() : "");
   const num = (v, lo, hi) => (typeof v === "number" && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : null);
   function defaultsFrom(m, base) {
     const s = { ...STYLE_DEF[base], cc: {}, bg: "" };
@@ -307,65 +92,24 @@
     }
     return s;
   }
-  function tokensCss(tokens) {
-    const c = tokens?.color || {}, f = tokens?.font || {}, root = [], body = [];
-    if (cssVal(c.text)) root.push(`--text: ${cssVal(c.text)}`);
-    if (cssVal(c.muted)) root.push(`--muted: ${cssVal(c.muted)}`);
-    if (cssVal(f.display)) root.push(`--font-display: ${cssVal(f.display)}`);
-    if (cssVal(f.body)) body.push(`font-family: ${cssVal(f.body)}`);
-    // цвет фона окна заменяет фон целиком (в том числе градиенты основы); своя картинка лежит отдельно, в #bg
-    if (cssVal(c.background)) body.push(`background: ${cssVal(c.background)}`);
-    // в списках и блоках общее оформление осветляет второстепенный текст под тёмные стили — цвет темы главнее
-    const blocks = cssVal(c.muted)
-      ? `:is(.settings > .card, .stats .card, .main .list, .main .lastAlbum, .main .similar, .main .plpage, .main .sub, .main > .status) { --muted: ${cssVal(c.muted)}; }\n`
-      : "";
-    return (root.length ? `:root { ${root.join("; ")}; }\n` : "") + (body.length ? `body { ${body.join("; ")}; }\n` : "") + blocks;
-  }
+  // в списках и блоках общее оформление осветляет второстепенный текст под тёмные стили — цвет темы главнее
+  const MUTED_IN = ":is(.settings > .card, .stats .card, .main .list, .main .lastAlbum, .main .similar, .main .plpage, .main .sub, .main > .status)";
 
   // ---------- подключение CSS темы ----------
   function inject(id, th) {
     for (const u of blobUrls.get(id) || []) URL.revokeObjectURL(u);
-    const urls = [];
-    // ресурсы файла в CSS: url(asset:font.woff2) -> blob:
-    // значения из tokens идут после CSS темы — они главнее тех же переменных в CSS
-    let css = (th.css(APP) || "") + "\n" + tokensCss(th.tokens);
-    css = css.replace(/url\(\s*(['"]?)asset:([\w.-]+)\1\s*\)/gi, (m, q, name) => {
-      const a = th.assets.get(name);
-      if (!a) return "none";
-      const u = URL.createObjectURL(new Blob([a.bytes], { type: a.mime })); urls.push(u);
-      return `url("${u}")`;
-    });
+    // общая секция ролей → секция приложения → tokens; ресурсы url(asset:…) — blob:, наружу CSS темы не ходит
+    const { css, urls } = TC.themeCss(th, id, APP, { core: CORE, mutedIn: MUTED_IN });
     // картинка для карточки стиля (manifest.preview = "asset:…")
     const pv = th.asset(th.manifest?.preview);
     previews.delete(id);
     if (pv && /^image\//.test(pv.mime)) { const u = URL.createObjectURL(new Blob([pv.bytes], { type: pv.mime })); urls.push(u); previews.set(id, u); }
     blobUrls.set(id, urls);
-    DynCss.set("wmt-" + id, scopeCss(css, id, new Set(urls)));   // наружу CSS темы не ходит: разрешены только blob:-ресурсы этой же темы
+    DynCss.set("wmt-" + id, css);
     themeReady.add(id);
   }
-  // ---------- виджет для OBS: «@@ css whisper-obs» и «@@ settings whisper-obs» ----------
-  // Виджет — отдельная страница в OBS, поэтому ресурсы темы вставляются прямо в CSS (data:), а всё, что ведёт
-  // наружу (@import, url(http…), image-set…), вырезается: виджет ничего не загружает из сети, кроме обложки.
-  function b64(bytes) {
-    let s = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    return btoa(s);
-  }
-  function obsOf(th) {
-    let css = th.css(OBS) || "";
-    css = css.replace(/url\(\s*(['"]?)asset:([\w.-]+)\1\s*\)/gi, (m, q, name) => {
-      const a = th.assets.get(name);
-      if (!a || a.bytes.length > 1.5 * 1024 * 1024) return "none";
-      return `url("data:${a.mime};base64,${b64(a.bytes)}")`;
-    });
-    css = css
-      .replace(/@\s*import\b[^;]*;?/gi, "")
-      .replace(/(?:-webkit-)?(image-set|cross-fade|element|paint|src)\s*\(/gi, "x-blocked(")
-      .replace(/url\(\s*(?!["']?data:)[^)]*\)/gi, "none")
-      .replace(/expression\s*\(|javascript\s*:|behavior\s*:|-moz-binding/gi, "x-blocked:");
-    const s = th.settings(OBS);
-    return { css: css.length > 1024 * 1024 ? "" : css, settings: s && typeof s === "object" ? s : {} };
-  }
+  // ---------- виджет для OBS: «@@ css whisper-obs» и «@@ settings whisper-obs» (чистит core/theme-css.js) ----------
+  const obsOf = (th) => TC.obsCss(th);
   window.wmtObs = (id) => meta.get(id)?.obs || null;
 
   function uninject(id) {
@@ -428,7 +172,7 @@
     const m = th.manifest, id = m.id;
     if (BUILTIN.includes(id)) throw new Error(`manifest.id «${id}» — это встроенный стиль. Дай своему стилю другой id`);
     const base = BUILTIN.includes(m.base) ? m.base : "neon";
-    if (!th.css(APP) && !th.tokens?.color) throw new Error("В теме нет ни секции «@@ css whisper-music», ни цветов в tokens — применять нечего");
+    if (!th.css(APP) && !th.css(CORE) && !th.tokens?.color) throw new Error("В теме нет ни секции «@@ css whisper-music» или «@@ css whisper-core», ни цветов в tokens — применять нечего");
     const known = cfg.themes.findIndex((t) => t.id === id);
     if (known < 0 && cfg.themes.length >= 50) throw new Error("Своих стилей уже 50 — удали ненужные");
     await IDB.set(KEY(id), typeof data === "string" ? data : new Blob([data]));      // храним как есть: текст или архив
@@ -469,7 +213,7 @@
       description: builtin ? `Копия стиля «${NAMES[st]}». Поправь и загрузи обратно` : m0.description || "",
       version: m0.version || "1.0",
       base: baseOf(st),
-      apps: [APP],
+      apps: orig?.css(CORE) ? [CORE, APP] : [APP],
       created: m0.created || new Date().toISOString(),
     };
     const tokens = {
@@ -513,7 +257,9 @@
     // виджет для OBS: у своего стиля — секции из его файла как были; у копии встроенного — заготовка-подсказка
     const obsCss = orig?.css(OBS) || "/* Виджет «Сейчас играет» для OBS (Настройки → Виджет для OBS).\n   Разметка, классы и переменные — docs/WMT-FORMAT.md, раздел «Виджет для OBS». Например:\n   .w-bg { border-radius: 0; }\n   .w-title { letter-spacing: .04em; } */";
     const obsSettings = orig?.settings(OBS) || {};
-    const theme = { comment, manifest, tokens, settings: { [APP]: settings, [OBS]: obsSettings }, css: { [APP]: css, [OBS]: obsCss } };
+    // общая секция ролей: у своего стиля — как была в файле; у копии встроенного — заготовка-подсказка
+    const coreCss = orig?.css(CORE) || "/* Общие правила для всех приложений Whisper (Yandex, VK…): пиши по ролям, а не по классам.\n   Например: [data-w=\"search\"] { border-radius: 0; } — любой поиск в любом приложении;\n   [data-w=\"player.volume\"] { … } — громкость в плеере. Список ролей — docs/CORE.md, раздел «Роли».\n   Правила из «@@ css whisper-music» ниже идут после этих и главнее. */";
+    const theme = { comment, manifest, tokens, settings: { [APP]: settings, [OBS]: obsSettings }, css: { [CORE]: coreCss, [APP]: css, [OBS]: obsCss } };
     const data = await WMT.pack({ ...theme, background, files });
     return { manifest, data, archive: !!background || files.length > 0, text: WMT.serialize(theme) };
   }

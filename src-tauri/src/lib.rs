@@ -6,6 +6,7 @@ mod desktop;
 mod discord;
 mod download;
 mod engine;
+mod fonts;
 mod hotkeys;
 mod lyrics;
 mod mini;
@@ -18,7 +19,12 @@ mod theme;
 mod themelib;
 mod thumbbar;
 mod update;
+// Whisper Archive: общая часть приходит с ядром (подмодуль whisper-core в src/core), своё у приложения —
+// whisper_host (хранилище ключа, семафор, Origin, подпись) и whisper_yandex (что архив делает с треками Яндекса)
+#[path = "../../src/core/rust/whisper/mod.rs"]
 mod whisper;
+mod whisper_host;
+mod whisper_yandex;
 mod winstate;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -194,7 +200,7 @@ pub fn run() {
                 return;
             }
             tauri::async_runtime::spawn(async move {
-                responder.respond(whisper::serve_stream(request).await);
+                responder.respond(whisper::stream::serve_stream(request).await);
             });
         })
         // Скачанные треки играют прямо с диска (ymlocal://localhost/track/<id>, на Windows —
@@ -256,7 +262,7 @@ pub fn run() {
             bg::bg_dir_pick,
             bg::bg_read,
             theme::theme_save,
-            // Whisper Archive: у каждой операции своя команда, путь собирает Rust (whisper.rs)
+            // Whisper Archive: у каждой операции своя команда, путь собирает Rust (src/core/rust/whisper/)
             whisper::wa_token_exists,
             whisper::wa_token_set,
             whisper::wa_token_clear,
@@ -264,18 +270,18 @@ pub fn run() {
             whisper::wa_album,
             whisper::wa_me,
             whisper::wa_stream,
-            whisper::wa_auth_request_code,
-            whisper::wa_auth_issue,
-            whisper::wa_save_track,
-            whisper::wa_prefetch,
-            whisper::wa_room_create,
-            whisper::wa_room_get,
-            whisper::wa_room_join,
-            whisper::wa_room_leave,
-            whisper::wa_room_state,
-            whisper::wa_room_suggest,
-            whisper::wa_room_dismiss,
-            whisper::wa_room_transfer,
+            whisper::auth::wa_auth_request_code,
+            whisper::auth::wa_auth_issue,
+            whisper_yandex::wa_save_track,
+            whisper::stream::wa_prefetch,
+            whisper::rooms::wa_room_create,
+            whisper::rooms::wa_room_get,
+            whisper::rooms::wa_room_join,
+            whisper::rooms::wa_room_leave,
+            whisper::rooms::wa_room_state,
+            whisper::rooms::wa_room_suggest,
+            whisper::rooms::wa_room_dismiss,
+            whisper::rooms::wa_room_transfer,
             discord::discord_config,
             discord::discord_status,
             discord::discord_retry,
@@ -291,6 +297,7 @@ pub fn run() {
             lyrics::lyrics_lrclib,
             themelib::themelib_fetch,
             thumbbar::thumbbar_state,
+            fonts::system_fonts,
             obs::obs_config,
             obs::obs_state,
             obs::obs_theme,

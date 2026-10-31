@@ -73,6 +73,7 @@
     "allow-sleep-status",
     "allow-lyrics-lrclib",
     "allow-thumbbar-state",
+    "allow-system-fonts",
     "allow-obs-config",
     "allow-obs-state",
     "allow-obs-theme",

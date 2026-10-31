@@ -27,8 +27,10 @@ tauri-plugin-http = "2"
 md5 = "0.8.1"
 keyring = "3"
 getrandom = "0.3"
-# семафор для тяжёлых загрузок (net.rs::heavy_slot); tokio уже есть в сборке через Tauri
-tokio = { version = "1", default-features = false, features = ["sync"] }
+# семафор для тяжёлых загрузок (net.rs::heavy_slot) и пауза перед повтором запроса (lyrics.rs); tokio уже есть в сборке через Tauri
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# список установленных шрифтов для выбора шрифта интерфейса (fonts.rs): читает только заголовки файлов, чистый Rust
+fontdb = "0.23"
 # второй запуск приложения не открывает новую копию, а показывает уже запущенное окно
 # (в Linux это единственный способ вернуть окно из трея, если в оболочке нет значков трея)
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

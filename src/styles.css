@@ -420,7 +420,9 @@ a { color: var(--accent); }
 .tbctl button:hover { background: rgba(255,255,255,.1); color: var(--text); }
 .tbctl .wclose:hover { background: #e5484d; color: #fff; }
 .app { padding-top: 40px; }
-.fclose { top: 46px; }
+/* верх кнопок полноэкранного плеера — под полосой заголовка окна; общий для крестика и переключателя «Яндекс / LRCLIB» */
+.full { --f-top: 46px; }
+.fclose { top: var(--f-top); }
 .fwrap { padding-top: 52px; }
 
 .stylepick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -772,7 +774,9 @@ a { color: var(--accent); }
 .stgrid { min-height: 96px; }
 .stmsg { flex: 1 0 100%; margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
 
-#artistWaveBtn:not([hidden]) + .pin { margin-left: 8px; }
+/* кнопки справа в шапке («Моя волна по артисту», «Скачать», «Закрепить») — одной группой у правого края:
+   отступ «auto» только у первой видимой, иначе свободное место делилось между ними и первая висела посередине */
+.head .pin:not([hidden]) ~ .pin { margin-left: -6px; }
 .stalbum { cursor: default; }
 .stpic { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; border-radius: 8px; cursor: pointer; overflow: hidden; }
 .stalbum:hover img { transform: none; }
@@ -2120,8 +2124,9 @@ body.vizfull-on .thbtns { visibility: hidden; }
 :root[data-style="lolitta"] .search, :root[data-style="lolitta"] .lkfindcnt { text-shadow: none; }
 
 /* ---------- источник текста в полноэкранном плеере ---------- */
+/* на одной линии с крестиком (.fclose, 38px): по высоте переключатель ~36px, отсюда +1px — центры совпадают */
 .fsrc {
-  position: absolute; top: 22px; right: 76px; z-index: 2; display: flex; gap: 2px; padding: 3px; border-radius: 999px;
+  position: absolute; top: calc(var(--f-top, 20px) + 1px); right: 76px; z-index: 2; display: flex; gap: 2px; padding: 3px; border-radius: 999px;
   background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,.12);
 }
@@ -2135,7 +2140,7 @@ body.vizfull-on .thbtns { visibility: hidden; }
 /* заголовок не должен уходить под переключатель */
 .full[data-mode="lyrics"] .fhead { padding-right: 230px; }
 @media (max-width: 900px) {
-  .fsrc { top: 70px; right: 24px; }
+  .fsrc { top: calc(var(--f-top, 20px) + 48px); right: 24px; }      /* узкое окно — под крестиком */
   .full[data-mode="lyrics"] .fhead { padding-right: 56px; }
 }
 :root[data-style="royal"] .fsrc, :root[data-style="royal"] .fsrc button { border-radius: 3px; }
@@ -2247,86 +2252,23 @@ body:has(#full:not([hidden])) .dynbg * { animation-play-state: paused; }
 .obsval { font-size: 12px; color: var(--muted); margin-left: 4px; }
 #obsNote.err { color: #ff8a8a; }
 
-/* ---------- «Слушать вместе» ---------- */
-.player .togetherbtn { position: relative; color: var(--muted); opacity: .8; transition: opacity .15s, color .15s; }
-.player .togetherbtn svg { width: 20px; height: 20px; }
-.player .togetherbtn:hover { opacity: 1; color: var(--text); }
-.player .togetherbtn.on { opacity: 1; color: var(--accent); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--btn-glow, var(--accent)) 60%, transparent)); }
-.player .togetherbtn.on::after {
-  content: attr(data-n); position: absolute; right: 0; bottom: 2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px;
-  font-size: 9.5px; line-height: 14px; font-weight: 700; text-align: center; pointer-events: none;
-  color: var(--on-accent, #0b0618); background: var(--accent);
-}
-.player .togetherbtn.detached { color: var(--muted); }
-.player .togetherbtn.detached::after { background: var(--muted); }
-:root[data-style="royal"] .togetherbtn.on::after, :root[data-style="steam"] .togetherbtn.on::after { border-radius: 2px; }
+/* ---------- «Слушать вместе»: то, что относится к разметке этого приложения ----------
+   Оформление самого модуля (кнопка, ярлык в плеере, блок в меню «⋯», окно комнаты) — core/together.css. */
 /* гость: управление у ведущего */
 body.room-guest .player #next, body.room-guest .player #prev, body.room-guest #fNext, body.room-guest #fPrev,
 body.room-guest .player #shuffleBtn, body.room-guest .player #repeatBtn { opacity: .35; }
 body.room-guest #seek, body.room-guest #fSeek { cursor: default; }
-/* ведущий: есть непросмотренные предложения — значок пульсирует */
-.player .togetherbtn.sug { color: var(--accent); opacity: 1; animation: rmSugPulse 1.6s ease-in-out infinite; }
-@keyframes rmSugPulse {
-  0%, 100% { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--btn-glow, var(--accent)) 40%, transparent)); }
-  50% { filter: drop-shadow(0 0 9px var(--btn-glow, var(--accent))); }
-}
-:root[data-anim="off"] .player .togetherbtn.sug, .reduce-motion .player .togetherbtn.sug { animation: none; }
 /* гость на странице волны: вместо жанров — кнопка комнаты */
 .stwrap.room .stbtn { color: var(--accent); }
-.rmauto { align-self: flex-start; }
-/* передача ведущего */
-.rmchip.pick { cursor: pointer; color: inherit; border: 0; font: inherit; font-size: 12px; transition: background .15s, box-shadow .15s; }
-.rmchip.pick:hover { background: rgba(255,255,255,.14); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
-.rmchip.pick.sel { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.rmmembers > small.rmhint { font-size: 11px; opacity: .75; }
-.rmconfirm { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4;
-  background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
-.rmconfirmbtns { display: flex; justify-content: flex-end; gap: 8px; }
-:root[data-style="royal"] .rmconfirm, :root[data-style="steam"] .rmconfirm { border-radius: 3px; }
-.rmsug.taken { opacity: .55; }
-
-/* ---------- режим комнаты: ярлык под названием трека в плеере (в потоке, ничего не перекрывает) ---------- */
-.player .meta .roomtab {
-  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin-top: 4px;
-  padding: 2px 10px; border-radius: 999px; white-space: nowrap; cursor: pointer; user-select: none;
-  font-size: 11px; line-height: 16px; letter-spacing: .02em; color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
-  transition: background .15s, box-shadow .15s, filter .15s;
-}
-.player .meta .roomtab > span, .player .meta .roomtab > b,
-:root[data-style] .player .meta .roomtab > span, :root[data-style] .player .meta .roomtab > b {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; font-size: inherit; letter-spacing: inherit;
-}
-.player .meta .roomtab:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
-.player .meta .roomtab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.roomtab .rtdot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: rtLive 1.8s ease-in-out infinite; }
-.roomtab.host .rtdot { border-radius: 1px; transform: rotate(45deg); animation: none; }
-@keyframes rtLive { 50% { opacity: .35; } }
-/* гость отошёл: крупная заливная кнопка, пульсирует */
-.player .meta .roomtab.away {
-  gap: 6px; padding: 3px 12px 3px 9px; font-size: 12px;
-  color: var(--on-accent, #0b0618); background: var(--accent); box-shadow: none;
-  animation: rtAway 1.6s ease-in-out infinite;
-}
-.roomtab.away svg { flex: none; width: 14px; height: 14px; }
-.roomtab.away b { font-weight: 700; }
-.player .meta .roomtab.away .rtsub { opacity: .75; }
-.player .meta .roomtab.away:hover { background: var(--accent); filter: brightness(1.1); }
-@keyframes rtAway {
-  0%, 100% { box-shadow: 0 0 6px color-mix(in srgb, var(--btn-glow, var(--accent)) 50%, transparent); }
-  50% { box-shadow: 0 0 22px var(--btn-glow, var(--accent)), 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
-}
-:root[data-anim="off"] .roomtab, :root[data-anim="off"] .roomtab .rtdot { animation: none; }
-:root[data-style="royal"] .roomtab, :root[data-style="steam"] .roomtab { border-radius: 3px; }
-:root[data-style="lolitta"] .player .meta .roomtab:not(.away) { color: var(--l-ink, var(--accent)); }
 /* страница волны у отошедшего гостя */
 .stwrap.room.away .stbtn { color: var(--on-accent, #0b0618); background: var(--accent); border-color: var(--accent); animation: rtAway 1.6s ease-in-out infinite; }
 :root[data-anim="off"] .stwrap.room.away .stbtn { animation: none; }
 
 /* «Скачать альбом» / «Скачать лайки» */
-.head .dlall.busy { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.head .dlall.done { opacity: .7; }
+.dlall.busy { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.dlall.done { opacity: .7; }
+/* лайки: в ряду вкладок, справа, тем же размером, что и вкладки */
+.chips .dlall { margin-left: auto; padding: 7px 18px; border-radius: 999px; font-size: inherit; }
 /* надпись офлайн-режима на странице (только без связи) */
 .status.offmsg, #stNote.offmsg {
   display: block; margin: 18px auto; padding: 12px 16px; max-width: 520px; text-align: center;
@@ -2336,55 +2278,6 @@ body.room-guest #seek, body.room-guest #fSeek { cursor: default; }
 .status.offmsg::before, #stNote.offmsg::before { content: "⦸ "; opacity: .8; }
 :root[data-style="royal"] .status.offmsg, :root[data-style="steam"] .status.offmsg { border-radius: 3px; }
 
-/* меню «⋯»: блок комнаты в самом верху */
-.tmenu .mroom {
-  display: flex; flex-direction: column; gap: 2px; margin: 0 0 2px; padding: 6px 4px 4px; border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.tmenu .mroomhead { display: flex; align-items: center; gap: 7px; padding: 0 8px 4px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
-.tmenu .mroomdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-.tmenu .mroom.away .mroomdot { background: var(--muted); box-shadow: none; }
-:root[data-style="royal"] .tmenu .mroom, :root[data-style="steam"] .tmenu .mroom { border-radius: 3px; }
-
-.rmbox { width: min(460px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px; }
-.rmbox h2 { margin: 0; }
-.rmlead { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-.rmwarn { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; background: color-mix(in srgb, #ffb44a 14%, transparent); border: 1px solid color-mix(in srgb, #ffb44a 40%, transparent); }
-.rmcreate { text-align: center; }
-.rmor { text-align: center; font-size: 12px; color: var(--muted); }
-.rmjoin { display: flex; gap: 8px; }
-.rmjoin .rmcode { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .18em; font-weight: 700; text-align: center; }
-.rmhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.rmrole { font-size: 12px; color: var(--muted); }
-.rmcodebox { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: rgba(0,0,0,.2); }
-.rmcodebox > span { grid-column: 1; font-size: 12px; color: var(--muted); }
-.rmcodebox .rmbig { grid-column: 1; font-size: 28px; letter-spacing: .22em; font-variant-numeric: tabular-nums; color: var(--accent); }
-.rmcodebox .nav { grid-column: 2; grid-row: 1 / 3; }
-.rmcodebox .rmcodebtns { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 6px; }
-.rmcodebox .rmcodebtns .nav { text-align: center; }
-.rmnow, .rmmembers, .rmsugs { display: flex; flex-direction: column; gap: 6px; }
-.rmnow > small, .rmmembers > small, .rmsugs > small { font-size: 12px; color: var(--muted); }
-.rmtrack { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
-.rmtrack img { width: 38px; height: 38px; border-radius: 6px; object-fit: cover; flex: none; background: rgba(255,255,255,.08); }
-.rmtx { display: flex; flex-direction: column; min-width: 0; }
-.rmtx b, .rmtx span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rmtx b { font-size: 14px; }
-.rmtx span { font-size: 12px; color: var(--muted); }
-.rmsync { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px; background: rgba(255,255,255,.06); }
-.rmsync.on { color: var(--accent); }
-.rmchips { display: flex; flex-wrap: wrap; gap: 6px; }
-.rmchip { padding: 4px 10px; border-radius: 999px; font-size: 12px; background: rgba(255,255,255,.08); }
-.rmchip.host { color: var(--accent); }
-.rmchip.me { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent); }
-.rmsugs { max-height: 240px; overflow-y: auto; }
-.rmsug { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.05); }
-.rmfrom { flex: none; font-size: 11px; color: var(--muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rmacts { flex: none; display: flex; gap: 2px; }
-.rmact { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; color: var(--muted); }
-.rmact:hover { color: var(--text); background: rgba(255,255,255,.1); }
-:root[data-style="royal"] .rmcodebox, :root[data-style="royal"] .rmsug, :root[data-style="royal"] .rmsync,
-:root[data-style="steam"] .rmcodebox, :root[data-style="steam"] .rmsug, :root[data-style="steam"] .rmsync { border-radius: 3px; }
 
 /* настройки: мелочи после объединения карточек */
 .card .subh { margin: 4px 0 -4px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: none; }
@@ -2493,3 +2386,41 @@ body.cli-on .cli {
 .lgs-l2-hi { stop-color: var(--l2-hi); }
 .lgs-l2-lo { stop-color: var(--l2-lo); }
 .lgs-l2-mid { stop-color: var(--l2-mid); }
+
+/* ---------- аватарка артиста / обложка альбома на весь экран (imgview.js) ---------- */
+.headimg.zoomable { cursor: zoom-in; transition: transform .15s, filter .15s; }
+.headimg.zoomable:hover { transform: scale(1.04); filter: brightness(1.08); }
+.imgview {
+  position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; cursor: zoom-out;
+  background: rgba(6, 4, 12, .82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  opacity: 0; transition: opacity .18s;
+}
+.imgview.on { opacity: 1; }
+.imgview img {
+  width: min(86vw, 86vh, 1000px); height: min(86vw, 86vh, 1000px); object-fit: cover; border-radius: 14px;
+  box-shadow: 0 20px 70px rgba(0,0,0,.6), 0 0 40px color-mix(in srgb, var(--glow-c, var(--accent)) 30%, transparent);
+  transform: scale(.94); transition: transform .2s; user-select: none;
+}
+.imgview img.rnd { border-radius: 50%; }
+.imgview.on img { transform: none; }
+.imgview .ivhint { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,.55); }
+:root[data-style="royal"] .imgview img:not(.rnd), :root[data-style="steam"] .imgview img:not(.rnd) { border-radius: 4px; }
+:root[data-anim="off"] .imgview, :root[data-anim="off"] .imgview img, :root[data-anim="off"] .headimg.zoomable { transition: none; }
+
+/* ---------- шрифт интерфейса (uifont.js) ---------- */
+#fontCard [hidden] { display: none !important; }
+.fontcur { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fontname { flex: 1 1 140px; min-width: 0; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fontbox { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.fontlist {
+  max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  border-radius: 12px; background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.08);
+}
+.fontitem {
+  flex: none; text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 15px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; content-visibility: auto; contain-intrinsic-size: auto 34px;
+}
+.fontitem:hover, .fontitem:focus-visible { background: rgba(255,255,255,.08); outline: none; }
+.fontitem.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+#fontCard .switch { margin-top: 10px; }
+#fontCard .status:empty { display: none; }

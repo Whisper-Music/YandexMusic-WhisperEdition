@@ -1,6 +1,8 @@
 // Значок в трее: обычное меню (по умолчанию) или мини-плеер (настройка «Значок в трее»).
 // Здесь — переключатель в настройках и передача «что играет» в мини-плеер (окно mini.html, src-tauri/src/mini.rs).
+// «Что играет» берётся только из ядра Whisper (Whisper.player) — модуль не зависит от переменных main.js.
 (() => {
+  const W = window.Whisper;
   const KEY = "ym_tray";
   const IS_WIN = /Windows/i.test(navigator.userAgent);
   let mode = "menu";
@@ -12,28 +14,26 @@
   let last = "", queued = false, forceNext = false;
 
   function snapshot() {
-    const t = typeof current === "number" && current >= 0 ? queue?.[current] : null;
+    const p = W.player.state(), t = p.track;
     const css = getComputedStyle(document.documentElement);
-    const st = {
+    return {
       has: !!t,
-      title: t ? String(t.title || "") : "",
-      artist: t ? (t.artists || []).map((a) => a?.name).filter(Boolean).join(", ") : "",
-      cover: t ? cover(t, "200x200") || "" : "",
-      playing: !!(audio && !audio.paused),
-      pos: audio?.currentTime || 0,
-      rate: audio?.playbackRate > 0 ? audio.playbackRate : 1,         // скорость: полоска в мини-плеере идёт с ней
-      dur: audio && isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (t?.durationMs || 0) / 1000,
+      title: t ? t.title : "",
+      artist: t ? t.artists.map((a) => a.name).filter(Boolean).join(", ") : "",
+      cover: t ? W.cover(t, 200) : "",
+      playing: p.playing,
+      pos: p.position,
+      rate: p.rate,                     // скорость: полоска в мини-плеере идёт с ней
+      dur: p.duration,
       at: Date.now(),
-      shuffleOk: false, shuffle: false, repeat: 0,
+      shuffleOk: p.modes.available, shuffle: p.modes.shuffle, repeat: p.modes.repeat,
       accent: css.getPropertyValue("--accent").trim(),
       accent2: css.getPropertyValue("--accent2").trim(),
     };
-    try { st.shuffleOk = modesActive(); st.shuffle = st.shuffleOk && shuffle; st.repeat = effRepeat(); } catch {}
-    return st;
   }
 
-  // вызывается из main.js: смена трека, пауза/воспроизведение, перемотка, режимы повтора/перемешивания
-  window.miniPush = (force) => {
+  // смена трека, пауза/воспроизведение, перемотка, скорость, режимы повтора/перемешивания — от ядра
+  function push(force) {
     if (!wanted()) return;
     if (force) forceNext = true;
     if (queued) return;
@@ -47,7 +47,9 @@
       last = key;
       call("mini_state", { state: s });
     });
-  };
+  }
+  W.player.watch(push);
+  window.miniPush = push;          // для совместимости: кто-то снаружи может попросить отправить заново
 
   function apply() {
     call("tray_mode", { mini: mode === "mini" });
@@ -56,7 +58,7 @@
       c.classList.toggle("active", on);
       c.setAttribute("aria-pressed", on ? "true" : "false");
     });
-    last = ""; window.miniPush(true);
+    last = ""; push(true);
   }
   document.querySelectorAll(".trseg .chip").forEach((c) => {
     c.type = "button";

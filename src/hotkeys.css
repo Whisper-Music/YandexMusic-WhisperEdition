@@ -1,4 +1,14 @@
 /* Горячие клавиши: строка в настройках и окно назначения (hotkeys.js) */
+/* Навигация клавиатурой (keynav.js): рамка только пока работают с клавиатуры, после щелчка мышью пропадает */
+:root.kbnav .main li:focus, :root.kbnav .main .simgrid > :focus, :root.kbnav .main .stgrid > :focus,
+:root.kbnav .main .nav:focus, :root.kbnav .main .chip:focus, :root.kbnav .main .round:focus, :root.kbnav .main .pill:focus,
+:root.kbnav .side .nav:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 85%, transparent); outline-offset: -2px;
+}
+:root.kbnav .main li:focus { background: rgba(255,255,255,.07); }
+:root.kbnav .tmenu button:focus { outline: none; background: rgba(255,255,255,.12); }
+.kbhelp .hkkey { cursor: default; display: flex; align-items: center; justify-content: center; }
+.kbhelp .hklist { max-height: min(60vh, 520px); overflow: auto; }
 #hkNote.bad { color: #ffb36b; }
 .hkmodal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 .hkmodal [hidden] { display: none !important; }

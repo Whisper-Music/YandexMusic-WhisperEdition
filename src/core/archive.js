@@ -1,12 +1,17 @@
-// whisper.js — Whisper Archive: треки из своего архива вместо версий Яндекса.
-// Подключается в index.html ПОСЛЕ main.js; нужен Rust-модуль whisper.rs.
+// core/archive.js — Whisper Archive в любом приложении Whisper: свои треки из архива вместо версий сервиса.
+// Общий модуль ядра (core/whisper-core.js, docs/CORE.md «Общие модули»): работает только через window.Whisper
+// и Rust-папка src-tauri/src/whisper/ (команды wa_*, протокол wa://). Подключается после привязки приложения (yandex.js).
 //
-// Как работает: при включённой настройке клиент собирает список треков из альбомов владельца токена (/api/albums/mine).
-// Когда Яндекс Музыка включает трек, ищется трек архива с тем же названием и тем же исполнителем.
-// Нашёлся — играет файл из архива; не нашёлся или архив недоступен — обычный трек Яндекса.
+// Как работает: при включённой настройке модуль собирает список треков из альбомов владельца токена (/api/albums/mine).
+// Когда приложение включает трек, ядро спрашивает источники звука (Whisper.sources) — архив ищет трек
+// с тем же названием и тем же исполнителем. Нашёлся — играет файл из архива; нет или архив недоступен — версия сервиса.
 // Следующий трек очереди, если он есть в архиве, подгружается заранее.
+// «Сохранить в архив» в меню трека — если провайдер умеет (provider.archiveSave: файл трека берёт сам сервис).
 // Токен wa_… хранится только в системном хранилище: JavaScript передаёт его в Rust один раз и больше не видит.
 (() => {
+  const W = window.Whisper;
+  if (!W) { console.error("archive.js: нет ядра Whisper — подключи core/whisper-core.js раньше"); return; }
+  const kit = W.ui.kit;
   const { invoke } = window.__TAURI__.core;
   const CFG_KEY = "wa_cfg", IDX_KEY = "wa_index_mine";
   try { localStorage.removeItem("wa_index"); } catch {}      // старый индекс включал и чужие публичные альбомы
@@ -27,7 +32,7 @@
   const msg = (e) => String(e?.message || e || "неизвестная ошибка");
   // команда не зарегистрирована в lib.rs или не разрешена в build.rs / capabilities/default.json
   const rustMissing = (e) => (/not found|unknown command|not allowed/i.test(msg(e))
-    ? `Приложение не пускает команды Whisper Archive (${msg(e)}). Нужны whisper.rs, регистрация в lib.rs и разрешения в build.rs и capabilities/default.json.` : "");
+    ? `Приложение не пускает команды Whisper Archive (${msg(e)}). Нужны src-tauri/src/whisper/, регистрация в lib.rs и разрешения в build.rs и capabilities/default.json.` : "");
   const pl = (n, a, b, c) => { const m = n % 100, d = n % 10; return m > 10 && m < 20 ? c : d === 1 ? a : d >= 2 && d <= 4 ? b : c; };
 
   // ---------- сравнение названий и исполнителей ----------
@@ -102,7 +107,7 @@
   }
 
   // ---------- список треков архива ----------
-  // У каждого запроса к архиву своя команда Rust (whisper.rs): путь к API интерфейс не задаёт.
+  // У каждого запроса к архиву своя команда Rust (whisper/): путь к API интерфейс не задаёт.
   async function waGet(cmd, args) {
     const r = await invoke(cmd, args);
     if (r.status === 401 || r.status === 403) throw Object.assign(new Error(`сервер не принял токен (HTTP ${r.status})`), { status: r.status });
@@ -219,27 +224,29 @@
     try { return window.__TAURI__.core.convertFileSrc("", "wa").replace(/\/?$/, "/"); } catch { return "wa://localhost/"; }
   })();
 
-  // ---------- для main.js ----------
+  // ---------- источник звука для ядра ----------
   // Перед загрузкой трека: { id, url } — трек есть в архиве, url — поток кусками (wa://, ключ подставляет Rust);
-  // null — играет версия Яндекса. Ничего не скачивает целиком и не бросает ошибок.
-  window.waSource = async (t, next) => {
-    badge(false);
-    if (!st.on || !st.hasToken || !t) return null;
-    try {
-      await ensureIndex();
-      const hit = lookup(t);
-      prefetch(next);
-      return hit ? { id: hit.i, url: STREAM_BASE + "track/" + hit.i } : null;
-    } catch { return null; }
-  };
-  // Запасной путь, если поток не заиграл (например, WebKitGTK в Linux не всегда умеет медиа из своих протоколов): файл целиком.
-  window.waBlob = (id) => (UUID.test(String(id)) ? getBlob(String(id)) : Promise.reject(new Error("некорректный id трека")));
+  // null — играет версия сервиса. Ничего не скачивает целиком и не бросает ошибок.
+  // blob — запасной путь, если поток не заиграл (например, WebKitGTK в Linux не всегда умеет медиа из своих протоколов): файл целиком.
+  W.sources.register({
+    id: "archive", name: "Whisper Archive", priority: 10,
+    async resolve(t, next) {
+      badge(false);
+      if (!st.on || !st.hasToken || !t) return null;
+      try {
+        await ensureIndex();
+        const hit = lookup(t);
+        prefetch(next);
+        return hit ? { id: hit.i, url: STREAM_BASE + "track/" + hit.i, blob: () => getBlob(hit.i) } : null;
+      } catch { return null; }
+    },
+  });
   // Метка — маленькая печать со значком архива на углу обложки в плеере: место у названия и автора не занимает.
   // Обложку оборачиваем один раз; сам элемент #cover (с его обработчиком клика) просто переезжает в обёртку.
   let badgeEl = null, wrapEl = null;
   function badge(on) {
     if (!badgeEl) {
-      const cov = document.getElementById("cover");
+      const cov = W.ui.all("player.cover")[0];          // обложка играющего трека в плеере
       if (!cov) return;
       wrapEl = document.createElement("span");
       wrapEl.className = "wacov";
@@ -257,7 +264,8 @@
     wrapEl.classList.toggle("on", !!on);
     document.body.classList.toggle("wa-playing", !!on);
   }
-  window.waBadge = badge;
+  // откуда звук — сообщает приложение (report({ source })): «archive» — печать на обложке
+  W.on("source", ({ source }) => badge(source === "archive"));
 
   // ---------- ответы сервера ----------
   // Сервер отвечает по-разному: строкой, { message }, ProblemDetails с errors, массивом строк или HTML-страницей прокси.
@@ -287,8 +295,8 @@
   const EMAIL_KEY = "wa_email";
   const lastEmail = () => { try { return localStorage.getItem(EMAIL_KEY) || ""; } catch { return ""; } };
   const keepEmail = (e) => { try { localStorage.setItem(EMAIL_KEY, e); } catch {} };
-  const closeMenu = () => { if (typeof closeTrackMenu === "function") closeTrackMenu(); };
-  const toast = (...a) => { if (typeof showToast === "function") showToast(...a); };
+  const closeMenu = () => kit.closeMenu();
+  const toast = (...a) => kit.toast(...a);
 
   function onLoggedIn(nickname) {
     st.hasToken = true; st.nick = nickname || ""; saveCfg();
@@ -368,7 +376,7 @@
         err.textContent = ""; setBusy(true, "Проверка…");
         try {
           const r = await invoke("wa_auth_issue", { email: sentTo, code: c });
-          if (r?.ok) window.warnPlainSecrets?.();
+          if (r?.ok) kit.secretSaved();
           if (r.ok) { onLoggedIn(r.nickname); done(true); return; }
           err.textContent = errText(r);
           if (/истёк|не найден|попыток/i.test(err.textContent)) err.textContent += " Нажми «Отправить код ещё раз».";
@@ -389,10 +397,10 @@
     }).finally(() => { loginP = null; });
     return loginP;
   }
-  window.waLogin = waLogin;
+  window.waLogin = waLogin;              // «Слушать вместе» (together.js) просит войти по приглашению
 
   // ---------- «Сохранить в архив» в меню «⋯» ----------
-  const saving = new Set();                       // id треков Яндекса, которые сейчас загружаются
+  const saving = new Set();                       // id треков сервиса, которые сейчас загружаются
   const MAX_TITLE = 75;                           // лимит сервера на название альбома
   const clampTitle = (s) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > MAX_TITLE ? s.slice(0, MAX_TITLE - 1).trimEnd() + "…" : s; };
 
@@ -428,14 +436,14 @@
     const where = target.id ? `в альбом «${target.title}»` : `в новый альбом «${target.title}»`;
     toast(`«${t.title}» сохраняется ${where}…`, 0);
     try {
-      // трек Rust скачивает сам по его номеру (адрес файла интерфейс не передаёт)
-      const args = { trackId: id, fileName: trackFileName(t), albumId: target.id || null, albumTitle: null, coverUrl: null, coverBytes: null };
+      // файл трека берёт сам сервис (provider.archiveSave → Rust скачивает его по номеру, адрес файла интерфейс не передаёт)
+      const args = { fileName: trackFileName(t), albumId: target.id || null, albumTitle: null, coverUrl: null, coverBytes: null };
       if (!target.id) {
         args.albumTitle = target.title;
-        const cu = typeof cover === "function" ? cover(t, "800x800") : "";
+        const cu = W.cover(t, 800);
         if (cu) args.coverUrl = cu; else args.coverBytes = await fallbackCover(t);
       }
-      const r = await invoke("wa_save_track", args);
+      const r = await W.provider().archiveSave(t, args);
       if (r.status < 200 || r.status >= 300) throw Object.assign(new Error(errText(r)), { status: r.status });
       toast(`«${t.title}» сохранён ${where}`, 4500, { kind: "ok" });
       st.at = 0; st.failAt = 0;
@@ -447,42 +455,43 @@
     } finally { saving.delete(id); }
   }
 
-  async function archiveMenu(t, ctx) {
-    if (saving.has(String(t.id))) return;
+  // m — меню трека приложения (kit.menu): пункты, подписи, вложенный список, «назад»
+  async function archiveMenu(t, m) {
+    if (saving.has(t.id)) return;
     if (!st.hasToken) {                                    // не вошли — сначала окно входа, потом снова это меню
-      const anchor = typeof tmenuBtn !== "undefined" ? tmenuBtn : null;
-      closeMenu();
+      const anchor = m.anchor();
+      m.close();
       const ok = await waLogin("Для сохранения в архив нужен вход.");
-      if (ok && anchor?.isConnected && typeof openMenu === "function") openMenu(anchor, () => archiveMenu(t, ctx));
+      if (ok && anchor?.isConnected) m.reopen(anchor, () => archiveMenu(t, m));
       return;
     }
-    const seq = menuReset();
-    menuHead("Сохранить в архив", () => trackMenuMain(t, ctx));
-    if (lookup(t)) menuNote("Трек уже есть в архиве — будет сохранена копия.");
-    const newTitle = clampTitle(t.albums?.[0]?.title || t.title) || "Без названия";
-    menuItem(ICON.plus, `Новый альбом «${newTitle}»`, () => saveTrack(t, { title: newTitle }));
-    const box = document.createElement("div"); box.className = "mscroll"; tmenu.append(box);
-    const wait = menuNote("Загрузка альбомов…", box);
-    placeMenu();
+    const seq = m.reset();
+    m.head("Сохранить в архив");
+    if (lookup(t)) m.note("Трек уже есть в архиве — будет сохранена копия.");
+    const newTitle = clampTitle(t.album?.title || t.title) || "Без названия";
+    m.item(kit.icon("plus"), `Новый альбом «${newTitle}»`, () => saveTrack(t, { title: newTitle }));
+    const box = m.scroll();
+    const wait = m.note("Загрузка альбомов…", box);
+    m.place();
     let albums;
     try { albums = listOf(await waGet("wa_albums_mine")); }
     catch (e) {
-      if (!menuAlive(seq)) return;
+      if (!m.alive(seq)) return;
       if (e?.status === 401 || e?.status === 403) {
         wait.textContent = "Вход в Whisper Archive больше не действует.";
-        menuItem("", "Войти заново", () => waLogin().then((ok) => ok && toast("Вход выполнен — открой меню ещё раз", 3500, { kind: "ok" })), { to: box });
+        m.item("", "Войти заново", () => waLogin().then((ok) => ok && toast("Вход выполнен — открой меню ещё раз", 3500, { kind: "ok" })), { to: box });
       } else wait.textContent = "Не удалось загрузить альбомы: " + msg(e);
-      placeMenu(); return;
+      m.place(); return;
     }
-    if (!menuAlive(seq)) return;
+    if (!m.alive(seq)) return;
     wait.remove();
-    if (!albums.length) menuNote("Альбомов пока нет.", box);
+    if (!albums.length) m.note("Альбомов пока нет.", box);
     for (const a of albums) {
       const aid = String(pick(a, "id") ?? "");
       if (!UUID.test(aid)) continue;
       const title = nameOf(pick(a, "title")) || "Без названия";
       const n = Number(pick(a, "trackCount")) || 0, full = n >= 50;
-      const b = menuItem("", title, () => saveTrack(t, { id: aid, title }), { to: box });
+      const b = m.item("", title, () => saveTrack(t, { id: aid, title }), { to: box });
       b.classList.add("mpl");
       const c = document.createElement("small");
       c.textContent = full ? "заполнен" : `${n} ${pl(n, "трек", "трека", "треков")}`;
@@ -490,17 +499,20 @@
       if (full) { b.disabled = true; b.title = "В альбоме уже 50 треков — больше архив не принимает"; }
       else if (String(pick(a, "visibility") || "").toLowerCase() === "public") b.title = "Публичный альбом — трек увидят все";
     }
-    placeMenu();
+    m.place();
   }
 
   const ARCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M3 3.5h18V8H3zM4.5 9h15v11.5h-15zM9.5 11.6v1.7h5v-1.7z"/></svg>';
-  // main.js вызывает это в конце главного меню трека
-  window.waTrackMenu = (t, ctx) => {
-    if (!t?.id || typeof menuItem !== "function") return;
-    const busy = saving.has(String(t.id));
-    const b = menuItem(ARCH_ICON, busy ? "Сохраняется в архив…" : "Сохранить в архив", () => archiveMenu(t, ctx), { keep: true, arrow: !busy && st.hasToken });
-    if (busy) b.disabled = true;
-  };
+  // пункт в меню «⋯» трека — только если сервис умеет отдать файл трека в архив
+  W.ui.trackMenu.add({
+    id: "archive",
+    build(t, m) {
+      if (!t?.id || typeof W.provider()?.archiveSave !== "function") return;
+      const busy = saving.has(t.id);
+      const b = m.item(ARCH_ICON, busy ? "Сохраняется в архив…" : "Сохранить в архив", () => archiveMenu(t, m), { keep: true, arrow: !busy && st.hasToken });
+      if (busy) b.disabled = true;
+    },
+  });
 
   // ---------- настройки ----------
   const $w = (id) => document.getElementById(id);
@@ -544,7 +556,7 @@
     btn.disabled = true; note("Проверка ключа…");
     try {
       await invoke("wa_token_set", { token: v });
-      window.warnPlainSecrets?.();
+      kit.secretSaved();
       inp.value = ""; st.hasToken = true; st.nick = ""; saveCfg();
       clearIndex(); render(); refreshNick();
       await doSync();
@@ -552,13 +564,11 @@
     finally { btn.disabled = false; }
   }
   function mountSettings() {
-    const page = $w("settingsPage");
-    if (!page || $w("waCard")) return;
+    if ($w("waCard") || !kit.settingsCard) return;
     const card = document.createElement("div");
-    card.className = "card colbreak"; card.id = "waCard"; card.dataset.tab = "play";      // вкладка «Воспроизведение», правый столбец
+    card.id = "waCard";
     card.innerHTML = `
-      <h3>Для разработчиков</h3>
-      <h4 class="devh">Whisper Archive</h4>
+      <h3>Whisper Archive</h3>
       <div class="waacc">
         <span class="wainfo" tabindex="0" title="Аккаунт Whisper Archive: сохранение треков в архив и воспроизведение из него">ⓘ</span>
         <span id="waAcc" class="waaccname"></span>
@@ -574,16 +584,8 @@
         <div class="row"><button class="nav" id="waSync" hidden>Обновить список треков</button></div>
       </div>
       <p id="waNote" class="status"></p>`;
-    page.append(card);
-    // «Скачивание треков» переезжает сюда же — первым разделом, над Whisper Archive
-    const dl = $w("dlPath")?.closest(".card");
-    if (dl) {
-      dl.className = "devsec"; dl.id = "dlSec";
-      const h = dl.querySelector("h3"), h4 = document.createElement("h4");
-      h4.className = "devh"; h4.textContent = h?.textContent || "Скачивание треков";
-      h?.replaceWith(h4);
-      card.querySelector("h3").after(dl);
-    }
+    // куда встать, решает приложение: у Whisper Yandex — первой во вкладке «Интеграции»
+    if (kit.settingsCard(card, { section: "integrations", first: true }) === false || !card.isConnected) return;
     $w("waOn").onchange = (e) => {
       st.on = e.target.checked; saveCfg(); render();
       if (!st.on) { badge(false); return; }
@@ -602,6 +604,14 @@
       st.hasToken = false; st.nick = ""; saveCfg(); clearIndex(); badge(false); render(); note("Выход выполнен.");
     };
   }
+
+  W.modules.archive = {
+    login: waLogin,
+    enabled: () => st.on && st.hasToken,
+    connected: () => st.hasToken,
+    lookup: (t) => { const h = lookup(W.to("track", t)); return h ? { id: h.i } : null; },
+    sync: () => sync(),
+  };
 
   // ---------- старт ----------
   (async () => {

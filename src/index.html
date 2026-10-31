@@ -7,15 +7,24 @@
   <!-- без defer, первым: стиль прошлого запуска и «шторка» до первой отрисовки (boot.js) -->
   <script src="boot.js"></script>
   <link rel="stylesheet" href="styles.css" />
+  <!-- оформление «Слушать вместе» (core/together.js) — сразу после общего: перекрывает его правила плеера и меню -->
+  <link rel="stylesheet" href="core/together.css" />
+  <!-- ядро Whisper (общее для всех приложений Whisper) — раньше main.js; yandex.js — сразу после него и до theme.js -->
+  <script src="core/whisper-core.js" defer></script>
   <script src="imgguard.js" defer></script>
-    <script src="main.js" defer></script>
-  <link rel="stylesheet" href="whisper.css" />
-  <script src="whisper.js" defer></script>
-  <link rel="stylesheet" href="queue.css" />
-  <script src="queue.js" defer></script>
+  <script src="main.js" defer></script>
+  <script src="yandex.js" defer></script>
+  <!-- Whisper Archive — общий модуль ядра Whisper -->
+  <link rel="stylesheet" href="core/archive.css" />
+  <script src="core/archive.js" defer></script>
+  <!-- очередь и история — общий модуль ядра Whisper -->
+  <link rel="stylesheet" href="core/queue.css" />
+  <script src="core/queue.js" defer></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="themelib.css" />
-  <script src="wmt.js" defer></script>
+  <!-- движок тем ядра: формат .wmt и привязка CSS темы (чистые модули, без зависимостей) — до theme.js и themelib.js -->
+  <script src="core/wmt.js" defer></script>
+  <script src="core/theme-css.js" defer></script>
   <script src="theme.js" defer></script>
   <script src="themelib.js" defer></script>
   <link rel="stylesheet" href="discord.css" />
@@ -23,11 +32,14 @@
   <script src="traymini.js" defer></script>
   <script src="obs.js" defer></script>
   <script src="update.js" defer></script>
-  <script src="together.js" defer></script>
+  <script src="core/together.js" defer></script>
   <script src="listenstats.js" defer></script>
   <script src="cli.js" defer></script>
   <link rel="stylesheet" href="hotkeys.css" />
   <script src="hotkeys.js" defer></script>
+  <script src="keynav.js" defer></script>
+  <script src="imgview.js" defer></script>
+  <script src="uifont.js" defer></script>
   <link rel="stylesheet" href="sleep.css" />
   <script src="sleep.js" defer></script>
   <link rel="stylesheet" href="eq.css" />
@@ -197,13 +209,7 @@
           </div>
           <p id="styleCap" class="stylecap" aria-live="polite"></p>
         </div>
-        <div class="card" id="fxCard" data-tab="look">
-          <h3>Эффекты</h3>
-          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
-          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
-          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
-        </div>
-        <div class="card colbreak" data-tab="look">
+        <div class="card" data-tab="look">
           <h3>Цвета</h3>
           <div class="swrow">
             <div class="swatches">
@@ -216,7 +222,21 @@
             </div>
           </div>
         </div>
-        <div class="card" data-tab="look">
+        <div class="card" id="fontCard" data-tab="look">
+          <h3>Шрифт</h3>
+          <div class="fontcur">
+            <span id="fontName" class="fontname">Шрифт стиля</span>
+            <button type="button" class="nav" id="fontPick">Выбрать…</button>
+            <button type="button" class="nav" id="fontReset" title="Вернуть шрифт, который задан в стиле" hidden>Шрифт стиля</button>
+          </div>
+          <div id="fontBox" class="fontbox" hidden>
+            <input id="fontFind" class="search" type="search" placeholder="Найти шрифт" autocomplete="off" spellcheck="false" />
+            <div id="fontList" class="fontlist" role="listbox" aria-label="Шрифты на компьютере"></div>
+          </div>
+          <label class="switch" title="Выключи, чтобы заголовки остались шрифтом стиля"><input type="checkbox" id="fontHeads" /><i></i><span>И для заголовков</span></label>
+          <p class="status" id="fontNote"></p>
+        </div>
+        <div class="card colbreak" data-tab="look">
           <h3>Фон</h3>
           <label class="switch" title="Фон — обложка текущего трека, цвета интерфейса берутся из неё"><input type="checkbox" id="cDyn" /><i></i><span>Динамический фон по обложке</span></label>
           <label class="slide"><span>Размытие фона</span><input type="range" id="cBlur" min="0" max="40" /></label>
@@ -241,6 +261,12 @@
           <div class="lyrow"><span>Вид боковой панели</span><div class="lyseg" data-k="sb"><button class="chip" data-v="full">Обычный</button><button class="chip" data-v="mini" title="Узкая полоса со значками, подписи — при наведении">Свёрнутый</button></div></div>
           <div class="lyrow"><span>Нижняя панель</span><div class="lyseg" data-k="pl"><button class="chip" data-v="full">Обычная</button><button class="chip" data-v="mini" title="Кнопки и линия воспроизведения в одну строку">Свёрнутая</button></div></div>
           <div class="lyrow"><span>Время трека</span><div class="lyseg" data-k="time"><button class="chip" data-v="always">Всегда</button><button class="chip" data-v="hover" title="Время появляется при наведении на линию воспроизведения">При наведении</button></div></div>
+        </div>
+        <div class="card" id="fxCard" data-tab="ui">
+          <h3>Эффекты и анимации</h3>
+          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
+          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
+          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
         </div>
         <div class="card colbreak" data-tab="ui">
           <h3>Визуализатор</h3>
@@ -327,6 +353,7 @@
           <p id="trayNote" class="status"></p>
           <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
           <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
+          <div class="dcline"><span class="dcnote">Клавиши внутри окна: стрелки, Пробел, Ctrl+F и другие</span><button class="nav" id="kbHelpBtn">Список (F1)</button></div>
         </div>
         <div class="card" data-tab="app">
           <h3>Обновления</h3>
@@ -350,7 +377,7 @@
           <p class="status">Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.</p>
           <div class="row"><button class="nav danger" id="cfgReset">Сбросить оформление…</button></div>
         </div>
-        <div class="card" data-tab="int">
+        <div class="card colbreak" data-tab="int">
           <h3>Discord</h3>
           <label class="switch" title="Показывает в профиле Discord, что сейчас играет. Подключается само, когда Discord запущен"><input type="checkbox" id="dcOn" /><i></i><span>Использовать Discord RPC</span></label>
           <div class="dcline">
@@ -359,7 +386,7 @@
             <button class="nav" id="dcSetup">Настроить…</button>
           </div>
         </div>
-        <div class="card colbreak" data-tab="int">
+        <div class="card" data-tab="int">
           <h3>Виджет для OBS</h3>
           <label class="switch" title="Полупрозрачная карточка «Сейчас играет» — источник «Браузер» в OBS"><input type="checkbox" id="obsOn" /><i></i><span>Мини-плеер для стрима</span></label>
           <div id="obsBox" class="obsbox" hidden>
