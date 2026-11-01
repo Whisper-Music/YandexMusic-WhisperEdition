@@ -180,4 +180,14 @@
     if (!actx && active()) note("");
   }
   window.eqOpen = open;
+  // devprofile.js: у каждого устройства вывода свой эквалайзер — снять и вернуть настройки
+  window.eqState = () => ({ on: st.on, gains: st.gains.slice(), pre: st.pre, guard: st.guard, preset: st.preset });
+  window.eqSetState = (v) => {
+    if (!v || typeof v !== "object") return;
+    const gains = Array.isArray(v.gains) && v.gains.length === BANDS.length ? v.gains.map((g) => clampDb(g)) : st.gains;
+    const next = { on: !!v.on, gains, pre: clampDb(v.pre, 12), guard: v.guard !== false, preset: typeof v.preset === "string" ? v.preset.slice(0, 20) : st.preset };
+    if (JSON.stringify(next) === JSON.stringify(window.eqState())) return;
+    Object.assign(st, next);
+    syncSliders(); apply();
+  };
 })();

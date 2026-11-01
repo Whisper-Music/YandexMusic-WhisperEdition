@@ -115,6 +115,9 @@
   function stateOf(t) {
     const mine = cfg.themes.find((x) => x.id === t.id);
     if (!mine) return "new";
+    // id совпал, но установлена другая тема (чужая, с тем же id) — «Включить» включило бы не её, а «Обновить» молча
+    // заменило бы чужой стиль. Показываем «Заменить…»: перед заменой theme.js спросит (wmtOtherTheme — та же проверка)
+    if (window.wmtOtherTheme?.(mine, t.author, t.name)) return "conflict";
     const v = window.wmtVersion?.(t.id) || "";
     if (t.version && v && t.version !== v) return "update";
     return cfg.style === t.id ? "active" : "installed";
@@ -123,8 +126,12 @@
     const s = stateOf(t);
     b.disabled = s === "active";
     b.classList.toggle("active", s === "new" || s === "update");
-    b.textContent = { new: "Установить", update: `Обновить до ${t.version}`, installed: "Включить", active: "Включена" }[s];
-    b.title = { new: "Скачать тему и сразу включить", update: "В библиотеке новая версия темы", installed: "Тема уже установлена — включить её", active: "Эта тема сейчас включена" }[s];
+    b.textContent = { new: "Установить", update: `Обновить до ${t.version}`, installed: "Включить", active: "Включена", conflict: "Заменить…" }[s];
+    const mine = s === "conflict" ? cfg.themes.find((x) => x.id === t.id) : null;
+    b.title = {
+      new: "Скачать тему и сразу включить", update: "В библиотеке новая версия темы", installed: "Тема уже установлена — включить её", active: "Эта тема сейчас включена",
+      conflict: `У тебя установлен другой стиль с таким же id — «${mine?.name || t.id}»${mine?.author ? ` (${mine.author})` : ""}. Установка заменит его — перед этим спросим`,
+    }[s];
   }
 
   async function install(t, b) {
@@ -138,6 +145,7 @@
       if (th.manifest?.id !== t.id) throw new Error("файл темы не совпадает со списком библиотеки");
       b.textContent = "Устанавливается…";
       const ok = await window.wmtImport(bytes);
+      if (ok === null) { repaint(); return; }       // отказался заменять свой стиль с тем же id — это не ошибка
       if (!ok) throw new Error("тема не прошла проверку — подробности в настройках");
     } catch (e) {
       showToast(`«${t.name}»: ${e?.message || e}`, 5000);

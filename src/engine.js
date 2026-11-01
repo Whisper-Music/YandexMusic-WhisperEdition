@@ -29,7 +29,10 @@
 
   function goFallback(msg) {
     fallback = true; info = null;
-    showToast(`Эксклюзивный режим недоступен: ${msg}. звук идёт в общем режиме`, 8000, { kind: "err", action: { label: "Настройки", fn: openOut } });
+    // errinfo.js: устройство занято / отключено / формат не принят — человеческими словами, исходный текст — в консоли
+    const why = window.errExplain?.(Object.assign(new Error("WASAPI: " + msg), { name: "EngineFallback" }), { native: true, track: queue[current] });
+    if (why) console.warn("Эксклюзивный режим:", msg);
+    showToast(`Эксклюзивный режим недоступен — ${why ? `${why.where}: ${why.text}` : msg}. Звук идёт в общем режиме`, 9000, { kind: "err", action: { label: "Настройки", fn: openOut } });
     paint();
   }
   // ошибки Rust: «WASAPI: …» — устройство или формат (возврат в общий режим), «LOCAL: …» — скачанный файл пропал
@@ -184,10 +187,12 @@
       yes.focus();
     });
   }
-  async function setMode(excl) {
+  // quiet — переключение по профилю устройства (devprofile.js): без предупреждения (его уже видели, когда выбирали
+  // эксклюзивный режим для этого устройства) и без своего сообщения — профиль покажет общее
+  async function setMode(excl, quiet = false) {
     if (excl && !avail) return;
     if (excl ? on() : !want) return;                 // уже так
-    if (excl && !(await warn())) { paint(); return; }
+    if (excl && !quiet && !(await warn())) { paint(); return; }
     want = excl; fallback = false; save(); paint();
     // играющий трек переезжает на другой движок с той же позиции; на паузе — загрузится по «Играть»
     if (audio && queue[current] && !needLoad) {
@@ -195,7 +200,7 @@
       if (!audio.paused) play(current, pos, true);
       else { audio.pause(); audio.removeAttribute("src"); audio.load(); needLoad = true; resumePos = pos; }
     }
-    showToast(excl ? "Эксклюзивный режим включён" : "Общий режим", 2500, { kind: "ok" });
+    if (!quiet) showToast(excl ? "Эксклюзивный режим включён" : "Общий режим", 2500, { kind: "ok" });
     window.soundRefresh?.();
   }
   window.engineSetMode = setMode;

@@ -116,9 +116,11 @@
       if (audio || (actx && canCtx)) await sinkOn(audio, id);
       save();
       showToast(id ? `Звук идёт на «${want.label}»` : "Звук идёт на системное устройство по умолчанию", 3000, { kind: "ok" });
+      changed();
     } catch (e) {
       want = prev;
-      showToast("Не удалось переключить устройство: " + (e?.message || e), 5000, { kind: "err" });
+      const why = window.errExplain?.(e, { device: true });
+      showToast("Не удалось переключить устройство: " + (why ? why.text : e?.message || e), 6000, { kind: "err" });
     }
     paint();
     window.soundRefresh?.();
@@ -140,7 +142,10 @@
       }
     }
     paint();
+    changed();
   });
+  // devprofile.js: устройство, на котором играет звук, могло смениться — подстроить громкость и звук под него
+  function changed() { window.dispatchEvent(new Event("whisper:output")); }
 
   // ---------- вкладка «Звук» ----------
   const $o = (id) => document.getElementById(id);

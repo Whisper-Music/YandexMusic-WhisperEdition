@@ -1,5 +1,6 @@
 mod audiodev;
 mod auth;
+mod backup;
 mod bg;
 mod deeplink;
 mod desktop;
@@ -262,6 +263,13 @@ pub fn run() {
             download::download_dir_pick,
             download::download_dir_reset,
             download::download_dir_open,
+            download::dl_index_restore,
+            // резервные копии и автокопии на случай повреждения данных (backup.rs)
+            backup::backup_save,
+            backup::snap_list,
+            backup::snap_settings_save,
+            backup::snap_settings_read,
+            backup::recovery_status,
             bg::bg_dir_pick,
             bg::bg_read,
             theme::theme_save,

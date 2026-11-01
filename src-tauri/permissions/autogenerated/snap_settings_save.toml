@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-snap-settings-save"
+description = "Enables the snap_settings_save command without any pre-configured scope."
+commands.allow = ["snap_settings_save"]
+
+[[permission]]
+identifier = "deny-snap-settings-save"
+description = "Denies the snap_settings_save command without any pre-configured scope."
+commands.deny = ["snap_settings_save"]

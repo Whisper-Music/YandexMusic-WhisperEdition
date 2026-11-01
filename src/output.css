@@ -46,3 +46,13 @@
 /* меню «⋯»: текущее устройство серым справа от пункта, пустое место вместо галочки у невыбранных */
 .tmenu .mi .mosub { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
 .tmenu .mi .moempty { display: inline-block; width: 20px; height: 20px; flex: none; }
+
+/* профили устройств (devprofile.js): строка как у списка устройств, только без выбора; ✕ — забыть устройство */
+#dpList[hidden] { display: none !important; }
+.outdev.dprow { cursor: default; }
+.outdev.dprow:hover { background: rgba(0,0,0,.18); }
+.dprow .dpx {
+  flex: none; width: 24px; height: 24px; margin-right: -6px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; opacity: .6;
+}
+.dprow .dpx:hover { opacity: 1; color: var(--text); background: rgba(255,255,255,.08); }

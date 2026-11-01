@@ -263,7 +263,9 @@ const styleDef = (st) => STYLE_DEF[st] || STYLE_DEF[baseOf(st)];
 // Что умеет стиль — от этого зависит, какие настройки показывать. Свой стиль задаёт это в файле темы
 // (settings whisper-music → features, заполняет theme.js); не задал — как у его основы.
 //   glow — есть свечение (ползунок «Свечение»), animations — есть анимации (галочка «Анимации интерфейса»),
-//   panelOpacity — панели могут быть прозрачными (ползунок «Прозрачность панелей»).
+//   panelOpacity — панели могут быть прозрачными (ползунок «Прозрачность панелей»),
+//   pinHide — работает режим «Скрывать закреплённые» (у стиля со своей раскладкой "layout": "fixed" — никогда),
+//   mascot — по стилю может гулять маскот (карточка «Маскот»; false — кот не рисуется, выбор пользователя хранится).
 const themeFeatures = {};
 // Возможности своих тем сверх CSS (settings whisper-music, разбирает theme.js → setFeatures):
 // volKnob — громкость ручкой, layoutFixed — тема сама задаёт расположение, buttons — [[имя, действие], …].
@@ -829,6 +831,8 @@ const TH_ACTIONS = {
   "page:wave": ["#wave", "Моя волна"], "page:likes": ["#likes", "Лайки"], "page:stats": ["#statsBtn", "Статистика"],
   "page:settings": ["#settingsBtn", "Настройки"], "page:profile": ["#profile", "Профиль"],
   "vol-up": [null, "Громче"], "vol-down": [null, "Тише"],
+  // окно: у окна нет системной рамки — тема, которая убирает .titlebar, обязана дать эти кнопки сама (themeguard.js)
+  close: ["#wClose", "Закрыть"], minimize: ["#wMin", "Свернуть"], maximize: ["#wMax", "Развернуть"], drag: [null, "Перетащить окно"],
 };
 const thState = {
   wave: () => $("#waveBtn").classList.contains("playing"),
@@ -851,7 +855,10 @@ function renderThemeButtons(list) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "thbtn"; b.dataset.th = name; b.dataset.act = act;
     b.title = TH_ACTIONS[act][1]; b.setAttribute("aria-label", TH_ACTIONS[act][1]);
+    // «drag» — не щелчок: окно начинает двигаться, когда мышь сдвинули с зажатой кнопкой (как за заголовок)
+    if (act === "drag") b.addEventListener("mousedown", (e) => { if (e.button === 0) winDragFrom(e); });
     b.onclick = () => {
+      if (act === "drag") return;
       if (act === "vol-up") return setVol(volume + 0.05);
       if (act === "vol-down") return setVol(volume - 0.05);
       const el = $(TH_ACTIONS[act][0]);
@@ -883,6 +890,18 @@ function applyHooks() {
   if (kn) { vb.setAttribute("role", "slider"); vb.setAttribute("aria-valuemin", "0"); vb.setAttribute("aria-valuemax", "100"); vb.setAttribute("aria-valuenow", String(Math.round(volume * 100))); }
   else ["role", "aria-valuemin", "aria-valuemax", "aria-valuenow"].forEach((a) => vb.removeAttribute(a));
   window.layoutLock?.(!!hook("layoutFixed"));
+  // «Скрывать закреплённые» и маскот — только там, где стиль их выдерживает (features.pinHide / features.mascot).
+  // Стиль, который сам задаёт раскладку ("layout": "fixed"), закреплённые не прячет: режим просто не применится.
+  // Маскот у такого стиля (и у стиля-консоли) тоже выключен — кот ходит по верху обычной нижней панели, а её
+  // там переделали или нет вовсе; автор может вернуть кота явным "mascot": true.
+  const catSet = themeFeatures[cfg.style]?.mascot;
+  const pinOk = feature("pinHide") && !hook("layoutFixed");
+  const catOk = typeof catSet === "boolean" ? catSet : !hook("layoutFixed") && !hook("console");
+  window.layoutNoPinHide?.(!pinOk);
+  window.mascotAllowed?.(catOk);
+  const phc = $("#pinHideCard"), mcc = $("#mascotCard");
+  if (phc) phc.style.display = pinOk ? "" : "none";
+  if (mcc) mcc.style.display = catOk ? "" : "none";
   renderThemeButtons(hook("buttons") || []);
   window.cliMount?.(hook("console") || null);          // стиль-консоль (cli.js)
 }
@@ -1595,13 +1614,19 @@ function unpin(type, id) {
 $("#pinBtn").onclick = () => {
   if (!pinItem) return;
   if (isPinned(pinItem.type, pinItem.id)) return unpin(pinItem.type, pinItem.id);
-  pins.push({ type: pinItem.type, id: pinItem.id, title: pinItem.title, year: pinItem.year });
+  pins.push({ type: pinItem.type, id: pinItem.id, title: pinItem.title, year: pinItem.year, img: pinItem.img || "" });
   savePins(); renderTabs(tabsActive); updatePinBtn();
 };
 
 function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null, artistWave = null }) {
   artistWaveItem = artistWave; $("#artistWaveBtn").hidden = !artistWave;
-  pinItem = pin; updatePinBtn();
+  // обложка для колонки закреплённых: только постоянные ссылки (blob: своих обложек плейлистов живёт до перезапуска)
+  const keepImg = /^https:\/\//.test(img) ? img : "";
+  pinItem = pin ? { ...pin, img: keepImg } : null; updatePinBtn();
+  if (pin && keepImg) {
+    const p = pins.find((x) => x.type === pin.type && String(x.id) === String(pin.id));
+    if (p && p.img !== keepImg) { p.img = keepImg; savePins(); renderRail(tabsActive); }
+  }
   $("#title").textContent = title;
   const im = $("#headImg"); im.hidden = !img; if (img) im.src = img;
   im.classList.toggle("sq", !round);
@@ -1678,6 +1703,82 @@ function renderTabs(active) {
     if (l < box.scrollLeft) box.scrollLeft = l - 8;
     else if (r > box.scrollLeft + box.clientWidth) box.scrollLeft = r - box.clientWidth + 8;
   }
+  renderRail(active);
+}
+
+// ---------- закреплённые колонкой сбоку (Настройки → Интерфейс → Расположение → «Закреплённые: Сбоку») ----------
+// Как папки в Telegram: узкая колонка с внешней стороны боковой панели — «Лайки» и закреплённое с обложками.
+// Рисуется всегда (вместе с закладками), а показывает её layout.css только при data-ly-pins="side".
+const RAIL_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 20.5 4.6 13.3a4.9 4.9 0 0 1 6.9-7l.5.5.5-.5a4.9 4.9 0 0 1 6.9 7z"/></svg>';
+const railImgLoading = new Set();
+// обложка закреплённого: своя обложка плейлиста → сохранённая → у Яндекса (и запоминаем её в закреплении)
+async function pinImg(p) {
+  if (p.type === "playlist") {
+    let own = "";
+    try { own = await plLocalCover(p.id); } catch {}
+    if (own) return own;
+  }
+  if (p.img) return safeUrl(p.img);
+  // в Яндекс ходим, только когда колонка видна (при закладках сверху обложки не нужны)
+  if (offline || document.documentElement.getAttribute("data-ly-pins") !== "side") return "";
+  const key = pinKey(p.type, p.id);
+  if (railImgLoading.has(key)) return "";
+  railImgLoading.add(key);
+  let url = "";
+  try {
+    if (p.type === "artist") {
+      const { info } = await loadArtist(p.id);
+      const u = info?.artist?.cover?.uri || info?.artist?.ogImage;
+      url = u ? cover({ coverUri: u }, "200x200") : "";
+    } else if (p.type === "album") {
+      url = cover(await ym("album", { id: p.id }), "200x200");
+    } else if (p.type === "playlist") {
+      const pl = (await plLoadList()).find((x) => String(x.kind) === String(p.id));
+      url = pl ? plYandexCover(pl) : "";
+    }
+  } catch {} finally { railImgLoading.delete(key); }
+  if (/^https:\/\//.test(url) && pins.includes(p)) { p.img = url; savePins(); }
+  return url;
+}
+function renderRail(active) {
+  const rail = $("#pinRail");
+  if (!rail) return;
+  const keepScroll = rail.scrollTop;
+  rail.innerHTML = "";
+  const mk = (label, key, fn, { onClose, glyph, html, round, p } = {}) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "prail" + (active === key ? " active" : "");
+    b.title = label;
+    const ic = document.createElement("span");
+    ic.className = "prailic" + (round ? " rnd" : "");
+    if (html) ic.innerHTML = html;
+    else {
+      const g = document.createElement("i"); g.textContent = glyph || "♪"; ic.append(g);
+      if (p) pinImg(p).then((u) => { if (u && ic.isConnected) { ic.textContent = ""; ic.classList.add("img"); ic.append(mkImg(u)); } }).catch(() => {});
+    }
+    const t = document.createElement("span"); t.className = "prailtx"; t.textContent = label;
+    b.append(ic, t);
+    if (onClose) {
+      const x = document.createElement("span");
+      x.className = "prailx"; x.textContent = "✕"; x.title = "Открепить"; x.setAttribute("role", "button");
+      x.onclick = (e) => { e.stopPropagation(); onClose(); };
+      b.append(x);
+    }
+    b.onclick = fn;
+    rail.append(b);
+  };
+  mk("Лайки", "likes", () => { likesQuery = ""; goTop(showLikes); }, { html: RAIL_HEART });
+  for (const p of pins) {
+    const open = p.type === "artist" ? () => showArtist(p.id) : p.type === "playlist" ? () => showPlaylist(p.id) : () => showAlbum(p.id);
+    mk(p.title, pinKey(p.type, p.id), () => goTop(open), {
+      onClose: () => unpin(p.type, p.id), p, round: p.type === "artist",
+      glyph: p.type === "artist" ? "♪" : p.type === "playlist" ? "♫" : roman(p.year) || "†",
+    });
+  }
+  rail.scrollTop = keepScroll;
+  const on = rail.querySelector(".prail.active");
+  if (on && (on.offsetTop < rail.scrollTop || on.offsetTop + on.offsetHeight > rail.scrollTop + rail.clientHeight)) on.scrollIntoView({ block: "nearest" });
 }
 // закладок больше, чем помещается: полоса прокрутки у них скрыта, поэтому их листает обычное колесо мыши
 $("#tabs").addEventListener("wheel", (e) => {
@@ -3885,7 +3986,8 @@ async function downloadTrack(t, force = false) {
     syncGot();
     showToast(`Сохранено: ${path}`, 5000, { kind: "ok" });
   } catch (e) {
-    showToast("Не удалось скачать: " + e.message, 6000);
+    const why = window.errExplain?.(e, { track: t });
+    showToast(why ? `«${t.title}» не скачался — ${why.where}: ${why.text}` : "Не удалось скачать: " + e.message, 8000, { kind: "err" });
   } finally { refreshPlayerBtns(); }
 }
 // Один трек на диск. Файл называется «Исполнители — Название»; ссылку на файл Rust берёт сам по id.
@@ -4258,7 +4360,7 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     }
     if (my !== playSeq) return;
     playFail = 0; loadAt = 0; setTransit(false);
-    if (/повторная попытка|перезапускается|Нет связи|Нет интернета/.test($("#status").textContent)) $("#status").textContent = "";
+    if (/повторная попытка|перезапускается|Нет связи|Нет интернета/.test($("#status").textContent)) { $("#status").textContent = ""; $("#status").title = ""; }
     if (offline && !curLocal && !curFromWa) backOnline();      // трек загрузился из сети — значит, связь есть
     window.soundRefresh?.();        // «Сведения о формате», если вкладка «Звук» открыта
   } catch (e) {
@@ -4267,16 +4369,19 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     // играем этот же трек обычным путём
     if (e?.name === "EngineFallback") return play(i, resumeAt, true);
     const net = !curLocal && !curFromWa && isNetErr(e);
+    // где проблема (errinfo.js): Яндекс, сеть, устройство, декодер, файл, архив — показываем вместо сырого текста
+    const why = window.errExplain?.(e, { local: curLocal, wa: curFromWa, native: !!audio?._native, media: audio?.error, track: t });
+    $("#status").title = why ? why.raw : "";
     // Сбой загрузки (ссылка протухла, сеть мигнула): два повтора с новой ссылкой, потом в волне — следующий трек.
     // Уже известно, что сети нет, — не повторяем, сразу ищем замену среди скачанного.
     if (!curLocal && !(net && (offline || !navigator.onLine)) && ++playFail <= 2) {
-      $("#status").textContent = "Не удалось загрузить трек — повторная попытка…";
+      $("#status").textContent = `Не удалось загрузить трек${why ? ` (${why.short})` : ""} — повторная попытка…`;
       setTimeout(() => { if (my === playSeq) play(i, resumeAt, true); }, playFail * 2000);
       return;
     }
     playFail = 0;
     if (!curLocal && wave.on && !net && i + 1 < queue.length) {
-      $("#status").textContent = `«${t.title}» не загрузился — пропущен`;
+      $("#status").textContent = `«${t.title}» не загрузился${why ? ` (${why.where}: ${why.text})` : ""} — пропущен`;
       play(i + 1);
       return;
     }
@@ -4291,7 +4396,7 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     if (net) {
       resumeOnNet = true;
       $("#status").textContent = `Нет связи с Яндекс Музыкой — «${t.title}» не скачан, а скачанных треков нет. Он включится, когда связь вернётся.`;
-    } else $("#status").textContent = "Не удалось воспроизвести: " + e.message;
+    } else $("#status").textContent = why ? `«${t.title}» не играет — ${why.where}: ${why.text}` : "Не удалось воспроизвести: " + e.message;
   }
 }
 function stopForRetry(pos = 0) {
@@ -4918,6 +5023,10 @@ $("#wClose").onclick = () => win("win_close");
 $("#titlebar").addEventListener("mousedown", (e) => {
   if (e.button !== 0 || e.target.closest("button")) return;
   if (e.detail === 2) { win("win_toggle_max"); return; }
+  winDragFrom(e);
+});
+// Начать перетаскивание окна с этого нажатия: заголовок, кнопка темы «drag», аварийная полоса (themeguard.js)
+function winDragFrom(e) {
   const x0 = e.screenX, y0 = e.screenY;
   const move = (m) => {
     if (!(m.buttons & 1)) return stop();
@@ -4927,7 +5036,7 @@ $("#titlebar").addEventListener("mousedown", (e) => {
   const stop = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", stop); };
   window.addEventListener("mousemove", move);
   window.addEventListener("mouseup", stop);
-});
+}
 let resizeTimer;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(syncMax, 120); });
 syncMax();

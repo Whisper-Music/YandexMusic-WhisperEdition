@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-snap-list"
+description = "Enables the snap_list command without any pre-configured scope."
+commands.allow = ["snap_list"]
+
+[[permission]]
+identifier = "deny-snap-list"
+description = "Denies the snap_list command without any pre-configured scope."
+commands.deny = ["snap_list"]

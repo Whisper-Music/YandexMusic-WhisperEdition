@@ -153,9 +153,13 @@
     cv.style.transform = `translate(${Math.round(r.left + x)}px, ${Math.round(r.top - BODY_ROWS * st.size)}px)`;
   }
 
+  // стиль без маскота (settings → "features": { "mascot": false }): кот не рисуется, а выбор пользователя
+  // сохраняется и вернётся вместе с другим стилем (main.js → applyHooks)
+  let allowed = typeof feature === "function" ? feature("mascot") : true;
+  window.mascotAllowed = (v) => { if (allowed === !!v) return; allowed = !!v; x = -1; run(); };
   function run() {
     clearInterval(timer); timer = 0; prevId = null; lastT = 0;
-    if (st.on && !document.hidden) { timer = setInterval(tick, 50); tick(); }
+    if (st.on && allowed && !document.hidden) { timer = setInterval(tick, 50); tick(); }
     else cv.hidden = true;
   }
   document.addEventListener("visibilitychange", run);

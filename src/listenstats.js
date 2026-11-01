@@ -186,8 +186,18 @@
     const fa = r.topArtists[0];
     if (fa) {
       const c = h("div", "card lsmini");
+      // аватар исполнителя: сохранённый → пока грузится, обложка его трека → настоящий из artist_brief
       const art = r.topTracks.find((x) => x.m.artists.some((a) => artistKey(a) === fa.k));
-      c.append(mkImg(art ? cover(trackObj(art.id, art.m), "200x200") : "", "rnd"));
+      const av = mkImg(fa.m.cover ? cover({ coverUri: fa.m.cover }, "200x200") : art ? cover(trackObj(art.id, art.m), "200x200") : "", "rnd");
+      c.append(av);
+      if (fa.m.id != null && typeof loadArtist === "function" && !offline) {
+        loadArtist(fa.m.id).then(({ info }) => {
+          const u = info?.artist?.cover?.uri || info?.artist?.ogImage;
+          if (!u) return;
+          if (my === nav) av.src = cover({ coverUri: u }, "200x200");
+          if (db.artists[fa.k] && db.artists[fa.k].cover !== u) { db.artists[fa.k].cover = u; dirty = true; }
+        }).catch(() => {});
+      }
       const tx = h("div", "lshtx");
       tx.append(h("small", "", "Любимый исполнитель"), h("b", "", fa.m.name), h("em", "", `${fmtHours(fa.ms)} · ${pct(fa.ms, r.ms)}% времени`));
       c.append(tx);

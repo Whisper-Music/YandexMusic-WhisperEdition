@@ -93,6 +93,18 @@
     paintNorm();
   }
 
+  // devprofile.js: нормализация своя у каждого устройства вывода — снять и вернуть настройки
+  window.soundPrefs = {
+    get: () => ({ mode: cfgS.mode, target: cfgS.target, boost: cfgS.boost }),
+    set: (p) => {
+      const patch = {};
+      if (MODES.includes(p?.mode)) patch.mode = p.mode;
+      if (TARGETS.includes(p?.target)) patch.target = p.target;
+      if (typeof p?.boost === "boolean") patch.boost = p.boost;
+      if (Object.keys(patch).some((k) => patch[k] !== cfgS[k])) setNorm(patch);
+    },
+  };
+
   // ---------- качество ----------
   window.ymQuality = () => cfgS.quality;
   function setQuality(q) {
@@ -139,6 +151,9 @@
       rows.push(["Источник", f ? `Яндекс Музыка · ${String(f.codec).toUpperCase()} ${f.bitrate} кбит/с` : "Яндекс Музыка"]);
       if (f?.options?.length > 1) rows.push(["Доступно", f.options.map((k) => `${k}`).join(" / ") + " кбит/с"]);
     }
+    // последняя ошибка с этим треком (errinfo.js) — где именно была проблема
+    const le = window.errLast;
+    if (le && le.track === String(t.id) && Date.now() - le.at < 30 * 60000) rows.push(["Последняя ошибка", `${le.where}: ${le.text}`]);
     // громкость и нормализация
     const l = loud(t), g = gainNow();
     rows.push(["Громкость трека", l ? `${fmtDb(l.i)} LUFS · пик ${fmtDb(l.tp)} dBTP` : "нет данных"]);

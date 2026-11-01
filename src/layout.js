@@ -1,4 +1,5 @@
-// Расположение интерфейса: сторона и вид боковой панели, вид нижней панели, показ времени трека.
+// Расположение интерфейса: сторона и вид боковой панели, вид нижней панели, показ времени трека,
+// где показывать закреплённые (сверху закладками или сбоку колонкой — её рисует renderRail в main.js).
 // Скрипт подключён в <head> без defer: атрибуты ставятся на <html> до отрисовки — без «прыжка» при запуске.
 // Внешний вид режимов — в layout.css.
 (() => {
@@ -8,9 +9,11 @@
     sb: ["full", "mini"],
     pl: ["full", "mini"],
     time: ["always", "hover"],
+    pins: ["top", "side"],          // закреплённые: полосой закладок сверху или колонкой у боковой панели (как папки в Telegram)
+    pinhide: ["off", "on"],         // закреплённые спрятаны и выезжают при наведении на край (Интерфейс → «Скрывать закреплённые»)
   };
   // sw — ширина боковой панели, ph — высота нижней (px, перетаскиванием за край); 0 — размер по умолчанию
-  const ly = { side: "left", sb: "full", pl: "full", time: "always", sw: 0, ph: 0 };
+  const ly = { side: "left", sb: "full", pl: "full", time: "always", pins: "top", pinhide: "off", sw: 0, ph: 0 };
   const SW_MIN = 170, SW_MAX = 440, PH_GROW = 160;
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || "null");
@@ -23,15 +26,24 @@
   const root = document.documentElement;
   // стиль оформления задаёт расположение сам (settings → "layout": "fixed"): режимы не применяются,
   // но выбор пользователя сохраняется и вернётся вместе с другим стилем
-  const DEF = { side: "left", sb: "full", pl: "full", time: "always" };
+  const DEF = { side: "left", sb: "full", pl: "full", time: "always", pins: "top", pinhide: "off" };
   let locked = false;
   window.layoutLock = (on) => {
     if (locked === !!on) return;
     locked = !!on; apply();
     window.dispatchEvent(new Event("resize"));
   };
+  // стиль не выдерживает «Скрывать закреплённые» (settings → "features": { "pinHide": false }): режим не применяется,
+  // выбор пользователя сохраняется и вернётся вместе с другим стилем (main.js → applyHooks)
+  let noPinHide = false;
+  window.layoutNoPinHide = (on) => {
+    if (noPinHide === !!on) return;
+    noPinHide = !!on; apply();
+    window.dispatchEvent(new Event("resize"));
+  };
+  const eff = (k) => (locked ? DEF[k] : k === "pinhide" && noPinHide ? "off" : ly[k]);
   function apply() {
-    for (const k of Object.keys(OPTS)) root.setAttribute("data-ly-" + k, locked ? DEF[k] : ly[k]);
+    for (const k of Object.keys(OPTS)) root.setAttribute("data-ly-" + k, eff(k));
     // свои размеры панелей (CSS-правила в layout.css действуют, только пока стоит атрибут)
     const useSw = !locked && ly.sw > 0 && ly.sb !== "mini";
     const usePh = !locked && ly.ph > 0 && ly.pl !== "mini";
@@ -53,6 +65,10 @@
       if (ly.sb === "mini") { if (!b.title) { b.title = b.textContent.trim(); b.dataset.lyTitle = "1"; } }
       else if (b.dataset.lyTitle) { b.removeAttribute("title"); delete b.dataset.lyTitle; }
     });
+    const ph = document.getElementById("pinHide");
+    if (ph) { ph.checked = ly.pinhide === "on"; ph.disabled = locked || noPinHide; }
+    if (eff("pinhide") !== "on") root.classList.remove("pinpeek-on");
+    measureSide();
     document.querySelectorAll(".lyseg[data-k]").forEach((g) => {
       g.querySelectorAll(".chip").forEach((c) => {
         const on = c.dataset.v === ly[g.dataset.k];
@@ -68,6 +84,8 @@
     ly[k] = v;
     persist();
     apply();
+    // колонка закреплённых стала видна — перерисовать, чтобы подтянулись обложки (renderRail — в main.js)
+    if (k === "pins" && typeof renderRail === "function") { try { renderRail(typeof tabsActive !== "undefined" ? tabsActive : "likes"); } catch {} }
     window.dispatchEvent(new Event("resize"));      // визуализатор и прочее, что меряет себя по размеру, пересчитаются
   }
   window.layoutSet = set;
@@ -155,6 +173,90 @@
     }
   }
 
+  // ---------- узкая боковая панель ----------
+  // У стилей со значками в кнопках («Стимпанк», «Lolitta») длинные подписи («Статистика») в узкой панели
+  // вылезали за край. По настоящей ширине панели ставим data-ly-sbw = s | xs — layout.css ужимает кнопки.
+  function measureSide() {
+    const side = document.querySelector(".side");
+    if (!side) return;
+    const w = side.getBoundingClientRect().width;
+    const lvl = locked || ly.sb === "mini" || !w ? "" : w < 205 ? "xs" : w < 240 ? "s" : "";
+    if (lvl) { if (root.getAttribute("data-ly-sbw") !== lvl) root.setAttribute("data-ly-sbw", lvl); }
+    else root.removeAttribute("data-ly-sbw");
+  }
+
+  // ---------- скрытые закреплённые: выезжают при наведении на край ----------
+  // Сверху — по положению курсора: всё, что выше поиска (заголовок окна с «Yandex Music», промежуток,
+  // верх боковой панели), открывает закладки; кнопки окна (свернуть/закрыть) — нет. Ловушка-элемент тут не годится:
+  // широкую полосу пришлось бы класть поверх панелей, и она мешала бы нажимать.
+  // Сбоку — полоса-«ловушка» .pinpeek в отступе окна с внешней стороны.
+  // Открывшись, закладки/колонка раздвигают интерфейс и встают на место; увёл курсор — прячутся почти сразу.
+  const PEEK_OPEN_MS = 60, PEEK_CLOSE_MS = 160;
+  function initPeek() {
+    const app = document.querySelector(".app");
+    if (!app || document.querySelector(".pinpeek")) return;
+    const zone = document.createElement("div");
+    zone.className = "pinpeek"; zone.setAttribute("aria-hidden", "true");
+    app.append(zone);
+    let tOpen = 0, tClose = 0, closedAt = 0, rz = 0, openLim = 0;
+    const on = () => eff("pinhide") === "on";
+    const isOpen = () => root.classList.contains("pinpeek-on");
+    // размеры панелей меняются плавно — визуализатор и прочее пересчитываются, когда движение закончится
+    const resized = () => { clearTimeout(rz); rz = setTimeout(() => window.dispatchEvent(new Event("resize")), 260); };
+    const toggle = (v) => {
+      if (isOpen() === v) return;
+      root.classList.toggle("pinpeek-on", v);
+      if (!v) closedAt = Date.now();
+      resized();
+    };
+    // таймеры не перезапускаются на каждое движение мыши — иначе, пока водишь курсором, панель не спряталась бы никогда;
+    // сразу после закрытия не открываем заново: интерфейс съехал обратно и край мог оказаться под курсором
+    const open = () => {
+      clearTimeout(tClose); tClose = 0;
+      if (tOpen || isOpen() || !on() || Date.now() - closedAt < 250) return;
+      tOpen = setTimeout(() => { tOpen = 0; toggle(true); }, PEEK_OPEN_MS);
+    };
+    const close = () => {
+      clearTimeout(tOpen); tOpen = 0;
+      if (tClose || !isOpen()) return;
+      tClose = setTimeout(() => { tClose = 0; toggle(false); }, PEEK_CLOSE_MS);
+    };
+    const keep = () => { clearTimeout(tClose); tClose = 0; };
+
+    // ---- сверху ----
+    // граница — верх поиска в боковой панели (в свёрнутой панели — кружок поиска); без поиска — верх панели + 24px
+    const searchTop = () => {
+      const s = document.querySelector(".side .sbox") || document.getElementById("search");
+      const r = s?.getBoundingClientRect();
+      if (r && r.height) return r.top;
+      const side = document.querySelector(".side")?.getBoundingClientRect();
+      return side ? side.top + 24 : 80;
+    };
+    document.addEventListener("pointermove", (e) => {
+      if (!on() || root.getAttribute("data-ly-pins") !== "top") return;
+      const tabs = document.getElementById("tabs");
+      if (!tabs?.classList.contains("pins")) return;             // закреплённых нет — открывать нечего
+      // открыто: держим, пока курсор выше прежней границы или над закладками (+ немного под ними);
+      // прежняя граница — потому что интерфейс уехал вниз и поиск вместе с ним
+      const lim = isOpen() ? Math.max(openLim, tabs.getBoundingClientRect().bottom + 10) : searchTop();
+      const inside = e.clientY < lim && !e.target?.closest?.(".tbctl");
+      if (!inside) { close(); return; }
+      if (isOpen()) keep();
+      else { openLim = lim; open(); }
+    }, { passive: true });
+    // курсор ушёл из окна (например, вверх за край) — прячем
+    document.documentElement.addEventListener("mouseleave", () => { if (root.getAttribute("data-ly-pins") === "top") close(); });
+
+    // ---- сбоку ----
+    zone.addEventListener("pointerenter", open);
+    zone.addEventListener("pointerleave", close);
+    const rail = document.getElementById("pinRail");
+    if (rail) {
+      rail.addEventListener("pointerenter", () => { if (isOpen()) keep(); });
+      rail.addEventListener("pointerleave", close);
+    }
+  }
+
   function init() {
     // поиск — в обёртку: в свёрнутой панели он кружок со значком и раскрывается поверх контента
     const s = document.getElementById("search");
@@ -201,6 +303,11 @@
       });
       seek.addEventListener("pointerleave", () => row.classList.remove("tipon"));
     }
+    const ph = document.getElementById("pinHide");
+    if (ph) ph.onchange = () => set("pinhide", ph.checked ? "on" : "off");
+    initPeek();
+    const sideEl = document.querySelector(".side");
+    if (sideEl && "ResizeObserver" in window) new ResizeObserver(() => measureSide()).observe(sideEl);
     initResize();
     apply();
   }

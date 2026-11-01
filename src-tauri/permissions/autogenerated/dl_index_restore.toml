@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dl-index-restore"
+description = "Enables the dl_index_restore command without any pre-configured scope."
+commands.allow = ["dl_index_restore"]
+
+[[permission]]
+identifier = "deny-dl-index-restore"
+description = "Denies the dl_index_restore command without any pre-configured scope."
+commands.deny = ["dl_index_restore"]

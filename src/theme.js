@@ -43,9 +43,10 @@
   }
 
   // ---------- что умеет стиль: settings whisper-music → features ----------
-  // { "glow": false, "animations": false, "panelOpacity": false } — не показывать соответствующие настройки
-  // (и выключить анимации). Нет поля — как у основы стиля (main.js, feature()).
-  const FEATURES = ["glow", "animations", "panelOpacity"];
+  // { "glow": false, "animations": false, "panelOpacity": false, "pinHide": false, "mascot": false } — не показывать
+  // соответствующие настройки (и выключить анимации / режим «Скрывать закреплённые» / маскота).
+  // Нет поля — как у основы стиля (main.js, feature()).
+  const FEATURES = ["glow", "animations", "panelOpacity", "pinHide", "mascot"];
   function setFeatures(id, settings) {
     const f = settings?.features, out = {};
     if (f && typeof f === "object") for (const k of FEATURES) if (typeof f[k] === "boolean") out[k] = f[k];
@@ -167,6 +168,19 @@
   }
 
   // ---------- загрузка .wmt (текст или архив) ----------
+  // Тему узнаём только по id: файл с тем же id — новая версия и заменяет установленную. Но id мог совпасть
+  // у двух разных авторов (оба назвали тему «gold»), и тогда молча пропал бы чужой стиль вместе с фоном.
+  // Похоже на другую тему — спрашиваем. «Другая» — автор не совпал; без автора у обеих — не совпало название.
+  const sameKey = (s) => String(s || "").trim().toLowerCase();
+  const otherTheme = (old, author, name) => {
+    if (!old) return false;
+    const a = sameKey(old.author), b = sameKey(author);
+    if (a || b) return a !== b;
+    return sameKey(old.name) !== sameKey(name);
+  };
+  window.wmtOtherTheme = otherTheme;                 // themelib.js: та же проверка для кнопки в библиотеке
+  const by = (author) => (author ? ` (автор — ${author})` : " (автор не указан)");
+  class ImportCancelled extends Error {}
   async function importText(data) {
     const th = await WMT.open(data);
     const m = th.manifest, id = m.id;
@@ -175,8 +189,19 @@
     if (!th.css(APP) && !th.css(CORE) && !th.tokens?.color) throw new Error("В теме нет ни секции «@@ css whisper-music» или «@@ css whisper-core», ни цветов в tokens — применять нечего");
     const known = cfg.themes.findIndex((t) => t.id === id);
     if (known < 0 && cfg.themes.length >= 50) throw new Error("Своих стилей уже 50 — удали ненужные");
-    await IDB.set(KEY(id), typeof data === "string" ? data : new Blob([data]));      // храним как есть: текст или архив
     const entry = { id, name: m.name.trim().slice(0, 60), author: authorOf(m), base, desc: String(m.description || "").trim().slice(0, 120) };
+    const old = known >= 0 ? cfg.themes[known] : null;
+    if (otherTheme(old, entry.author, entry.name)) {
+      const ok = await modal({
+        title: "Заменить стиль?",
+        text: `У тебя уже есть стиль «${old.name}»${by(old.author)} с таким же id «${id}», а этот файл — «${entry.name}»${by(entry.author)}. `
+          + `Похоже, это разные темы. Если заменить, прежний стиль пропадёт вместе с его фоном и настройками цветов — `
+          + `вернуть его можно только загрузив его файл заново. Две темы с одним id одновременно установить нельзя.`,
+        ok: "Заменить", danger: true,
+      });
+      if (!ok) throw new ImportCancelled();
+    }
+    await IDB.set(KEY(id), typeof data === "string" ? data : new Blob([data]));      // храним как есть: текст или архив
     if (known >= 0) cfg.themes[known] = entry; else cfg.themes.push(entry);
     const settings = th.settings(APP);
     meta.set(id, { manifest: m, tokens: th.tokens, settings, obs: obsOf(th) });
@@ -189,9 +214,13 @@
     note(`${known >= 0 ? "Стиль обновлён" : "Добавлен стиль"} «${entry.name}» (основа — ${NAMES[base]})${th.background ? "" : ", без фоновой картинки"}.`, true);
     showToast(`Стиль «${entry.name}» ${known >= 0 ? "обновлён" : "добавлен"}`, 3500, { kind: "ok" });
   }
+  // true — загружена, false — ошибка (подробности в настройках), null — пользователь сам отказался заменять
   async function importSafe(text) {
     try { await importText(text); return true; }
-    catch (e) { note("Не удалось загрузить тему: " + (e?.message || e)); showToast("Тема не загружена — подробности в настройках", 4000); return false; }
+    catch (e) {
+      if (e instanceof ImportCancelled) { note("Загрузка отменена — прежний стиль на месте."); return null; }
+      note("Не удалось загрузить тему: " + (e?.message || e)); showToast("Тема не загружена — подробности в настройках", 4000); return false;
+    }
   }
 
   // ---------- сохранение в .wmt ----------

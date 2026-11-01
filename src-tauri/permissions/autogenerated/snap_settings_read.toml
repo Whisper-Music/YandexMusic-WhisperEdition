@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-snap-settings-read"
+description = "Enables the snap_settings_read command without any pre-configured scope."
+commands.allow = ["snap_settings_read"]
+
+[[permission]]
+identifier = "deny-snap-settings-read"
+description = "Denies the snap_settings_read command without any pre-configured scope."
+commands.deny = ["snap_settings_read"]

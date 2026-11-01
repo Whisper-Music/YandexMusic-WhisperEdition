@@ -65,14 +65,26 @@ src/                      фронтенд (без сборки, файлы от
   imgview.js              аватарка артиста / обложка альбома на весь экран (щелчок по #headImg)
   uifont.js               шрифт интерфейса из установленных в системе (Оформление → Шрифт)
   sleep, eq, output, engine, sound — режим сна, эквалайзер, устройство вывода, свой WASAPI-движок, качество/нормализация
-  layout.js/.css          режимы «Расположения» (без defer)
+  layout.js/.css          режимы «Расположения» (без defer), колонка и скрытие закреплённых (см. «Расположение и закреплённые»)
   mascot, listenstats, traymini, update, imgguard — маскот, статистика, трей, автообновление, заглушки картинок
   mini.html/js/css        отдельное окно мини-плеера
+  themeguard.js           защита от «странных» стилей: проверяет обязательный минимум (окно, пауза, настройки) у своих
+                          стилей, иначе — аварийная панель / встроенный стиль; «Не показывать» — localStorage ym_tguard
+  devprofile.js           профили устройств вывода: громкость, нормализация, режим вывода, эквалайзер — свои у каждого
+                          устройства, переключаются сами (хуки: soundPrefs, eqState/eqSetState, engineSetMode(excl, quiet),
+                          событие whisper:output из output.js)
+  errinfo.js              понятные ошибки: window.errExplain(e, ctx) → где проблема (Яндекс, сеть, устройство, декодер,
+                          файл, архив) и что делать; исходный текст — в title строки состояния; последняя — window.errLast
+  lsguard.js              БЕЗ defer, сразу после boot.js: замечает повреждённые записи localStorage до main.js (window.__lsCheck)
+  backup.js/.css          резервная копия .wbak (настройки, закреплённые, темы, фоны, статистика; токенов нет — список
+                          исключений SECRET_RE/SKIP), автокопии настроек и восстановление; Настройки → Приложение
 src-tauri/
   src/lib.rs              регистрация модулей и команд (generate_handler!), трей, окно
   src/*.rs                net (запросы к Яндексу), auth/secret (токен в keyring), download, engine (WASAPI),
                           theme/themelib, hotkeys,
                           fonts (список шрифтов), desktop (обои), power (экономия в трее), update, …
+                          backup (файл .wbak через диалог; автокопии в <папка настроек>/backups: settings, downloaded,
+                          downloads — последние 8; download.rs сам восстанавливает из них повреждённый индекс и папки)
   src/whisper_host.rs     что приложение даёт общему Rust ядра (src/core/rust: whisper/, discord.rs, obs.rs): хранилище
                           ключа, heavy_slot, app_origin, подпись ключа, приложение Discord и кнопка, обложки для OBS —
                           единственное своё у приложения
@@ -80,6 +92,8 @@ src-tauri/
   build.rs                СПИСОК КОМАНД (AppManifest) — без строки здесь команда не вызывается
   capabilities/*.json     права окон на команды (default.json — главное окно)
   tauri.conf.json         окно, CSP, сборка
+scripts/
+  check-themes.mjs        проверка репозитория библиотеки тем перед публикацией (Node, разбор — src/core/wmt.js)
 docs/
   CORE.md, WMT-FORMAT.md  ссылки: сами документы — в ядре, src/core/docs/
   THEMES.md               гайд по темам для пользователей
@@ -159,10 +173,30 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
   Карточка — прямой ребёнок `.settings`: `<div class="card" data-tab="…">`. Без `data-tab` попадает в «Интеграции».
 - Два столбца (CSS columns, ≥1100px): карточки идут **в порядке разметки**, правый столбец начинается с карточки `.colbreak`
   (одна на вкладку). Баланс высоты столбцов подбирается переносом `.colbreak`.
-- Сейчас: Оформление — слева Стиль, Цвета, Шрифт; справа Фон. Интерфейс — Расположение, Эффекты и анимации | Визуализатор, Маскот.
+- Сейчас: Оформление — слева Стиль, Цвета, Шрифт; справа Фон. Интерфейс — Расположение, Эффекты и анимации | Визуализатор, Маскот, Закреплённые.
   Воспроизведение — Режим сна | Скачивание треков. Интеграции — Whisper Archive (вставляет core/archive.js первой, через kit.settingsCard в yandex.js) | Discord, OBS.
 - Настройки оформления — `cfg` (localStorage `ym_cfg3`, `saveCfg()`, `applyCfg()`, `syncControls()`), значения стиля — `cfg.s[стиль]`.
   Отдельные модули хранят своё под своими ключами (`ym_font`, `ym_hotkeys`, …).
+
+### Расположение и закреплённые (`layout.js` / `layout.css`)
+- Режимы — атрибуты на `<html>`, хранятся в localStorage `ym_layout`: `data-ly-side` (left|right), `data-ly-sb` (full|mini),
+  `data-ly-pl` (full|mini), `data-ly-time` (always|hover), `data-ly-pins` (top|side), `data-ly-pinhide` (off|on);
+  служебные: `data-ly-sw`/`data-ly-ph` (свой размер панелей), `data-ly-sbw` (s|xs — узкая боковая панель, по замеру ширины).
+  Переключатели — `.lyseg[data-k="…"] .chip[data-v="…"]` (сами подхватываются), чекбокс `#pinHide`. `window.layoutSet(k, v)`.
+  Тема с `"layout": "fixed"` → `layoutLock(true)`: действуют значения по умолчанию, выбор пользователя сохраняется.
+  Тема с `features.pinHide: false` (или с `"layout": "fixed"`) → `layoutNoPinHide(true)`: `data-ly-pinhide="off"`, карточка
+  `#pinHideCard` скрыта; `features.mascot: false` (а при `"layout": "fixed"` или `console` — если не задано явное `"mascot": true`) → `mascotAllowed(false)`, карточка `#mascotCard` скрыта (main.js → applyHooks).
+- Закреплённые: массив `pins` в main.js (localStorage `ym_pins`, `{ type, id, title, year, img }`; `img` — постоянная https-ссылка
+  на обложку, запоминается в `setHead` и при первой подгрузке). Рисуются **двумя элементами**: `renderTabs()` — закладки `#tabs .tab`,
+  в конце зовёт `renderRail()` — колонку `#pinRail .prail` (`.prailic` обложка, `.prailtx` подпись, `.prailx` открепить).
+  Колонка рисуется всегда, видна только при `data-ly-pins="side"`; обложки (`pinImg()`) грузятся, только когда колонка видна.
+- Колонка — с внешней стороны боковой панели (сетка `.app`: `"rail side main"` / `"main side rail"`), ширина `--rw` на `.app`.
+  Подгонка под стили — по **основе** (`html:root[data-base="royal|lolitta"]`), а не по `data-style`: свои темы — копии правил
+  стиля на момент сохранения, колонки в них может не быть. В роли `sidebar` (yandex.js) колонка вместе с `.side`.
+- «Скрывать закреплённые» (`data-ly-pinhide="on"`): закладки схлопываются по `max-height`, колонка — по ширине ячейки
+  (`--rwx`, @property, ячейка `side` = `--sw + --rwx`, у `.side` отступ `--rwx`). Показаны — класс `.pinpeek-on` на `<html>`:
+  сверху — по `pointermove` (курсор выше поиска, кроме `.tbctl`), сбоку — невидимая полоса `.pinpeek` в отступе окна.
+  Своего оформления у режима нет — не добавляй подложек и отступов, иначе ломается вид стилей.
 
 ### Клавиатура
 - Глобальные сочетания (Ctrl+Alt+…) — `hotkeys.js` + `hotkeys.rs`. Внутри окна — `keynav.js`; занятые клавиши:
@@ -218,6 +252,14 @@ JSON-секции — JSONC: `//`, `/* */`, лишняя запятая. Оши�
 ```
 Основа даёт то, что сделано кодом: `neon` — свечение (ползунок есть только у него); `steam` — отступ кругового
 визуализатора; `lolitta` — банты/жемчуг/розы (`.lodeco`), подбор контрастного текста, отступ визуализатора; `royal` — ничего.
+Плюс подгонка из layout.css по `data-base`: `royal`/`lolitta` — вид колонки закреплённых, `steam`/`lolitta` — ужатые кнопки
+со значками в узкой боковой панели.
+**id — признак темы:** файл с тем же id заменяет установленную тему (и сбрасывает `cfg.s[id]`). Если автор другой (без автора
+у обеих — название), theme.js сначала спрашивает (`otherTheme()` / `window.wmtOtherTheme`; отказ — `importSafe` → `null`),
+а библиотека показывает «Заменить…» (состояние `conflict` в themelib.js) вместо «Включить»/«Обновить». В библиотеке id уникален
+на весь `index.json` (дубль пропускается). Для чужих тем — id с ником автора (`nick-name`).
+Перед публикацией в whisper-themes: `node scripts/check-themes.mjs ../whisper-themes [--new присланная.wmt]` — дубли id, пути,
+id в файле ≠ в списке, битые темы, файлы вне списка; с `--new` — свободен ли id присланной темы.
 
 ### tokens (общие для всех приложений Whisper)
 ```jsonc
@@ -231,15 +273,20 @@ JSON-секции — JSONC: `//`, `/* */`, лишняя запятая. Оши�
 
 ### settings whisper-music
 ```jsonc
-{ "features": { "glow": false, "panelOpacity": false, "animations": false },  // скрыть настройки; нет поля — как у основы
+{ "features": { "glow": false, "panelOpacity": false, "animations": false,  // скрыть настройки; нет поля — как у основы
+                "pinHide": false, "mascot": false },  // нет «Скрывать закреплённые» / маскота (выбор пользователя хранится)
   "colorOverrides": { "heading": "#f0e2b6", "mainBg": "#ffffff59" },        // #rrggbb / #rrggbbaa; главнее CSS темы, даже !important
   "controls": { "volume": "knob" },   // #volBtn — ручка; громкость в CSS: var(--vol) 0…1
-  "layout": "fixed",                  // режимы «Расположения» не применяются
+  "layout": "fixed",                  // режимы «Расположения» не применяются, «Скрывать закреплённые» скрыта сама
   "buttons": { "power": "wave" },     // ≤16; имя [a-z][a-z0-9-]{0,23} → #thBtns > button.thbtn[data-th="power"], .on — включено
   "console": { "prompt": "user@whisper:~$", "banner": "Привет!\nhelp — команды" } }  // или "console": true
 ```
 - Действия `buttons`: `wave play next prev like dislike shuffle repeat mute vol-up vol-down full sleep more
-  page:wave page:likes page:stats page:settings page:profile`. Кнопка темы просто нажимает кнопку приложения (и так же `:disabled`).
+  page:wave page:likes page:stats page:settings page:profile close minimize maximize drag`. Кнопка темы просто нажимает
+  кнопку приложения (и так же `:disabled`); `drag` тянет окно (main.js → `winDragFrom`).
+- **Обязательный минимум** (`themeguard.js`): окно (закрыть, свернуть, перетащить), «Играть/пауза», настройки. Доступно —
+  видна кнопка приложения, ИЛИ кнопка темы с этим действием, ИЛИ консоль. Иначе — аварийная панель (popover, инлайн
+  `!important`), спрятана и она — встроенный стиль. `check-themes.mjs` предупреждает о том же заранее (по CSS).
 - Ключи `colorOverrides` (= «Тонкая настройка цветов», список — `CC_GROUPS` в main.js): `text muted heading winBg
   tabBg tabText tabBorder tabActBg tabActText titleBarBg sideBg sideBorder navBg navText navBorder navActBg navActText
   searchBg searchText btnBg btnText btnBorder btnActBg btnActText plBg plBorder plTitle plArtist plIcons plModeOn
@@ -261,7 +308,9 @@ JSON-секции — JSONC: `//`, `/* */`, лишняя запятая. Оши�
 **Переменные:** `--accent --accent2 --text --muted --glow (px) --glow-c --panel-a (0–1) --on-accent --btn-fill
 --font-display --vol (0–1) --kick (0–1, на .stage при визуализаторе) --viz-gap (задаёт тема на .stage, px)`.
 
-**Основные селекторы:** `.titlebar` (`.tbctl button`), `.tabs .tab(.active)`, `.side .nav(.active)`, `.search`,
+**Основные селекторы:** `.titlebar` (`.tbctl button`), `.tabs .tab(.active)`, `#pinRail .prail(.active)` (закреплённые сбоку:
+`.prailic(.rnd .img)`, `.prailtx`, `.prailx`; ширина — `body > .app { --rw }`; в теме начинать с `#pinRail` — подгонка основы сильнее `.pinrail`;
+режимы — `:root[data-ly-pins="top|side"]`, `[data-ly-pinhide="on"]`, `:root.pinpeek-on`), `.side .nav(.active)`, `.search`,
 `.main[data-page="likes|wave|settingsBtn|…"]`, `.head h2`/`#title`, `#headImg`, `.chip(.active)`, `.list li(.playing)` (`.t .a`),
 `.likebtn(.on) .morebtn`, `.player` (`.pinfo .pcenter .pright .seekrow .ctrls .volwrap .playbtn .modebtn.on`), `#seek #vol`,
 `.wavebtn` (`.stamp` при нажатии), `.waveorbits` (5×`<i>`, скрыт по умолчанию; `.on`, `.beats`), `.stage`, `.card`, `.stylecard`,
@@ -293,7 +342,8 @@ CSS без привязки к стилю, после встроенного. Р
 
 ### Как в приложении
 - «Сохранить стиль в файл…» — выгружает правила текущего стиля уже без привязки (архив, если есть фон).
-- «Загрузить тему…» / перетащить файл в окно; тот же `id` → обновление. Хранение — IndexedDB (`theme:<id>`), список — `cfg.themes`.
+- «Загрузить тему…» / перетащить файл в окно; тот же `id` → обновление (другой автор → сначала вопрос «Заменить стиль?»).
+  Хранение — IndexedDB (`theme:<id>`), список — `cfg.themes`.
 - «Библиотека тем» — `themelib.rs` качает `index.json`, `previews/<папка>/<id>.*`, `themes/<папка>/<id>.wmt`
   (папки `whisper`, `community`, `artists`) из ветки `main` репозитория Whisper-Music/whisper-themes.
 - Чтение в JS: `const th = await WMT.open(bytes); th.manifest; th.tokens; th.css("whisper-music"); th.settings(app);

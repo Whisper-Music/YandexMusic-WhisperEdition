@@ -3,6 +3,7 @@
    data-ly-sb    = full | mini      — боковая панель целиком или узкой полосой со значками
    data-ly-pl    = full | mini      — нижняя панель обычная или в одну строку
    data-ly-time  = always | hover   — время трека видно всегда или при наведении на линию
+   data-ly-pins  = top | side       — закреплённые закладками сверху или колонкой у боковой панели
    Селекторы начинаются с html:root — так они сильнее правил стилей (:root[data-style=…] …),
    а там, где тема должна побеждать (значки), специфичность нарочно снижена через :where(). */
 
@@ -23,6 +24,175 @@ html:root[data-ly-side="right"] .settings { margin-left: auto; }
 html:root[data-ly-side="right"] .main[data-page="settingsBtn"] .head { max-width: 560px; margin-left: auto; }
 /* закладки прижаты к той же стороне; auto-отступ (а не justify-content) — чтобы при переполнении полоса листалась */
 html:root[data-ly-side="right"] .tabs > .tab:first-child { margin-left: auto; }
+
+/* ---------- закреплённые колонкой сбоку (data-ly-pins="side", рисует renderRail в main.js) ---------- */
+/* как папки в Telegram: узкая колонка с внешней стороны боковой панели; панель справа — и колонка справа */
+.app { --rw: 78px; }
+@media (max-width: 880px) { .app { --rw: 66px; } }
+.pinrail { display: none; }
+html:root[data-ly-pins="side"] .tabs { display: none !important; }
+html:root[data-ly-pins="side"] .app {
+  grid-template-columns: var(--rw) var(--sw) minmax(0, 1fr);
+  grid-template-areas: "tabs tabs tabs" "rail side main" "player player player";
+}
+html:root[data-ly-pins="side"][data-ly-side="right"] .app {
+  grid-template-columns: minmax(0, 1fr) var(--sw) var(--rw);
+  grid-template-areas: "tabs tabs tabs" "main side rail" "player player player";
+}
+html:root[data-ly-pins="side"] .pinrail {
+  grid-area: rail; display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  min-height: 0; padding: 10px 6px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+}
+.pinrail::-webkit-scrollbar { display: none; }
+html:root .pinrail .prail {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; flex: none;
+  width: 100%; min-height: 0; padding: 8px 2px 7px; margin: 0; border: 0; border-radius: 14px;
+  background: transparent; color: var(--muted); font: inherit; cursor: pointer; box-shadow: none; text-shadow: none;
+  transition: background .15s, color .15s;
+}
+html:root .pinrail .prail:hover { background: rgba(255,255,255,.06); color: var(--text); transform: none; }
+html:root .pinrail .prail.active { background: rgba(255,255,255,.1); color: var(--text); }
+.prailic {
+  display: grid; place-items: center; flex: none; width: 42px; height: 42px; overflow: hidden;
+  border-radius: 12px; background: rgba(255,255,255,.08); transition: box-shadow .15s;
+}
+.prailic.rnd { border-radius: 50%; }
+.prailic.img { background: none; }
+.prailic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.prailic i { font-style: normal; font-size: 15px; opacity: .8; }
+.prail.active .prailic { box-shadow: 0 0 0 2px var(--accent, #a78bfa), 0 0 12px color-mix(in srgb, var(--accent, #a78bfa) 50%, transparent); }
+.prail.active .prailic svg { color: var(--accent, #a78bfa); }
+.prailtx {
+  max-width: 100%; font-size: 11px; line-height: 1.2; text-align: center; word-break: break-word;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+/* «открепить» — крестик в углу при наведении */
+.prailx {
+  position: absolute; top: 3px; right: 4px; display: grid; place-items: center; width: 17px; height: 17px;
+  border-radius: 50%; font-size: 9px; line-height: 1; color: var(--text, #fff); background: rgba(10, 6, 22, .85);
+  opacity: 0; transition: opacity .12s;
+}
+.prail:hover .prailx { opacity: .75; }
+.prailx:hover { opacity: 1 !important; }
+:root[data-base="steam"] .prailic:not(.rnd) { border-radius: 4px; }
+
+/* «Королевский»: угловые узоры у панелей по 98px — на узкой колонке они закрывали кнопки.
+   Здесь узоры меньше, а кнопки отодвинуты от углов; оформление кнопок — как у .nav этого стиля */
+html:root[data-base="royal"] .app { --rw: 86px; }
+html:root[data-base="royal"] .pinrail { --fs: 40px; }
+html:root[data-base="royal"][data-ly-pins="side"] .pinrail { padding: 40px 10px; gap: 6px; }
+html:root[data-base="royal"] .pinrail .prail { border-radius: 3px; border: 1px solid transparent; letter-spacing: .02em; }
+html:root[data-base="royal"] .pinrail .prail:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+html:root[data-base="royal"] .pinrail .prail.active {
+  color: #f6ead0; border-color: var(--accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent2) 85%, #000), color-mix(in srgb, var(--accent2) 55%, #000));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.45);
+}
+html:root[data-base="royal"] .prailic { border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); background: rgba(0,0,0,.3); }
+html:root[data-base="royal"] .prailic:not(.rnd) { border-radius: 3px; }
+html:root[data-base="royal"] .prail.active .prailic { box-shadow: 0 0 0 2px #0e0b09, 0 0 0 3px var(--accent); }
+html:root[data-base="royal"] .prail .prailic svg { color: var(--accent); }
+html:root[data-base="royal"] .prail.active .prailic svg { color: #f6ead0; }
+html:root[data-base="royal"] .prailx { border-radius: 2px; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: rgba(14, 11, 9, .92); }
+
+/* «Lolitta»: фон колонки — тот же, что у боковой панели (повтор правила .side из styles.css) и следует цветам темы
+   (переменные --l-*); отступы — внутри жемчужной каймы, кнопки — как у .nav этого стиля.
+   Подгонка колонки здесь привязана к ОСНОВЕ (data-base), а не к стилю: свои темы — копии правил стиля
+   на момент сохранения, колонки в них может не быть, а основа у них та же */
+html:root[data-base="lolitta"] .app { --rw: 84px; }
+html:root[data-base="lolitta"] .pinrail {
+  position: relative; border-radius: 16px; -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: 2px solid var(--l-mid);
+  background:
+    radial-gradient(circle at 50% 0, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px top 9px / 9px 5px repeat-x,
+    radial-gradient(circle at 50% 100%, var(--l-pearl) 0 2.4px, transparent 2.9px) left 10px bottom 9px / 9px 5px repeat-x,
+    radial-gradient(circle at 0 50%, var(--l-pearl) 0 2.4px, transparent 2.9px) left 9px top 10px / 5px 9px repeat-y,
+    radial-gradient(circle at 100% 50%, var(--l-pearl) 0 2.4px, transparent 2.9px) right 9px top 10px / 5px 9px repeat-y,
+    var(--quilt) center top / 36px 36px,
+    radial-gradient(120% 80% at 50% 0, rgba(255,255,255,.28), transparent 60%),
+    linear-gradient(175deg, var(--l-panel), var(--l-panel2));
+  box-shadow: 0 0 0 2px var(--l-tab2), 0 0 0 4px var(--l-line), 0 0 0 5px rgba(20,6,10,.5),
+    inset 0 0 0 5px color-mix(in srgb, var(--l-light) 80%, #fff), inset 0 0 0 6px var(--l-lo), inset 0 0 26px rgba(120, 45, 65, .28),
+    0 16px 36px rgba(0,0,0,.55);
+}
+html:root[data-base="lolitta"][data-ly-pins="side"] .pinrail { padding: 20px 11px; gap: 6px; }
+html:root[data-base="lolitta"] .pinrail .prail { color: var(--l-ink2, var(--muted)); font-family: var(--font-display, inherit); border-radius: 10px; }
+html:root[data-base="lolitta"] .pinrail .prail:hover { color: var(--l-ink, var(--text)); background: rgba(255,255,255,.35); }
+html:root[data-base="lolitta"] .pinrail .prail.active {
+  color: var(--lo-on-act, #fff); font-weight: 600; text-shadow: var(--lo-on-act-sh, 0 1px 2px color-mix(in srgb, var(--accent2) 80%, #000));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent2) 55%, #fff), color-mix(in srgb, var(--accent2) 85%, #fff));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 0 0 1px color-mix(in srgb, var(--l-hi) 60%, transparent), 0 0 0 1px var(--l-lo), 0 0 12px color-mix(in srgb, var(--accent2) 45%, transparent);
+}
+html:root[data-base="lolitta"] .prailic {
+  border: 1px solid var(--l-lo); background: linear-gradient(180deg, color-mix(in srgb, var(--l-light) 55%, #fff), var(--l-light));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--l-light) 50%, #fff), 0 0 0 3px var(--l-line2);
+}
+html:root[data-base="lolitta"] .prailic.img { background: none; }
+html:root[data-base="lolitta"] .prailic i { color: var(--l-ink2); opacity: 1; }
+html:root[data-base="lolitta"] .prail .prailic svg { color: var(--l-mid); filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+html:root[data-base="lolitta"] .prail.active .prailic { box-shadow: 0 0 0 2px var(--lo-on-act, #fff), 0 0 0 3px var(--l-lo), 0 0 10px color-mix(in srgb, var(--accent2) 50%, transparent); }
+html:root[data-base="lolitta"] .prailx { color: var(--l-ink); background: color-mix(in srgb, var(--l-light) 70%, #fff); border: 1px solid var(--l-lo); }
+
+/* ---------- скрытые закреплённые (data-ly-pinhide="on"; .pinpeek-on — навели на край, layout.js) ---------- */
+/* Ничего своего в оформлении: закладки и колонка выглядят ровно как без скрытия (стиль и тема решают сами).
+   Спрятанные — схлопнуты и не занимают места; навёл на край — раздвигают интерфейс и встают на своё место,
+   ничего не перекрывая. .pinpeek — невидимая полоса-«ловушка» у края. */
+.pinpeek { display: none; }
+html:root[data-ly-pinhide="on"] .pinpeek { display: block; position: relative; z-index: 29; }
+html:root[data-ly-pinhide="on"] :is(.tabs, .pinrail) {
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .16s ease, transform .22s ease, max-height .22s ease, visibility 0s linear .22s;
+}
+html:root[data-ly-pinhide="on"].pinpeek-on :is(.tabs, .pinrail) {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: opacity .2s ease .06s, transform .22s ease, max-height .22s ease;
+}
+:root[data-anim="off"] :is(.tabs, .pinrail) { transition: none !important; }
+
+/* сверху: закладки в своей строке, спрятанные — высотой 0 (строка схлопывается, как когда закреплённых нет);
+   открываются по положению курсора (выше поиска, layout.js) — ловушка-элемент не нужен */
+html:root[data-ly-pinhide="on"][data-ly-pins="top"] .pinpeek { display: none; }
+/* min-height: 0 — у встроенных стилей .tabs { min-height: max-content } (styles.css) не дал бы схлопнуться */
+html:root[data-ly-pinhide="on"][data-ly-pins="top"] .tabs { max-height: 0; min-height: 0 !important; overflow: hidden; }
+html:root[data-ly-pinhide="on"][data-ly-pins="top"].pinpeek-on .tabs { max-height: 160px; overflow-x: auto; overflow-y: hidden; }
+
+/* сбоку: колонка лежит в той же ячейке сетки, что боковая панель; ширина ячейки = панель + --rwx.
+   Спрятана — --rwx = 0; навёл — --rwx плавно растёт до ширины колонки с промежутком, панель отъезжает,
+   основная часть ужимается. @property — чтобы ширина менялась плавно (без него — сразу, тоже работает) */
+@property --rwx { syntax: "<length>"; inherits: true; initial-value: 0px; }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"] .app {
+  --rwx: 0px; transition: --rwx .22s ease;
+  grid-template-columns: calc(var(--sw) + var(--rwx)) minmax(0, 1fr);
+  grid-template-areas: "tabs tabs" "side main" "player player";
+}
+html:root[data-ly-pinhide="on"][data-ly-pins="side"][data-ly-side="right"] .app {
+  grid-template-columns: minmax(0, 1fr) calc(var(--sw) + var(--rwx));
+  grid-template-areas: "tabs tabs" "main side" "player player";
+}
+html:root[data-ly-pinhide="on"][data-ly-pins="side"].pinpeek-on .app { --rwx: calc(var(--rw) + 14px); }
+html:root[data-anim="off"][data-ly-pinhide="on"][data-ly-pins="side"] .app { transition: none; }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"] .side { margin-left: var(--rwx); }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"][data-ly-side="right"] .side { margin-left: 0; margin-right: var(--rwx); }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"] .pinrail { grid-area: side; justify-self: start; width: var(--rw); transform: translateX(-12px); }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"][data-ly-side="right"] .pinrail { justify-self: end; transform: translateX(12px); }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"] .pinpeek { grid-area: side; justify-self: start; align-self: stretch; width: 14px; margin-left: -14px; }
+html:root[data-ly-pinhide="on"][data-ly-pins="side"][data-ly-side="right"] .pinpeek { justify-self: end; margin-left: 0; margin-right: -14px; }
+
+/* ---------- узкая боковая панель (data-ly-sbw = s | xs по настоящей ширине, layout.js) ---------- */
+/* у «Стимпанка» и «Lolitta» в кнопках значки — подписи не помещались и вылезали за край:
+   ужимаем отступы, значок и шрифт (вертикальные отступы не трогаем — их задают правила для невысокого окна) */
+html:root[data-ly-sbw="xs"]:not([data-ly-sb="mini"]) .side .nav:not(.sidefold) { min-width: 0; overflow: hidden; }
+html:root[data-base="lolitta"][data-ly-sbw="s"] .side { padding-left: 16px; padding-right: 16px; }
+html:root[data-base="lolitta"][data-ly-sbw="s"] .side .nav:not(.sidefold) { gap: 10px; padding-left: 12px; padding-right: 12px; font-size: 15px; }
+html:root[data-base="lolitta"][data-ly-sbw="s"] .side .nav:not(.sidefold)::before { width: 22px; height: 22px; }
+html:root[data-base="lolitta"][data-ly-sbw="xs"] .side { padding-left: 12px; padding-right: 12px; }
+html:root[data-base="lolitta"][data-ly-sbw="xs"] .side .nav:not(.sidefold) { gap: 8px; padding-left: 9px; padding-right: 9px; font-size: 14px; letter-spacing: 0; }
+html:root[data-base="lolitta"][data-ly-sbw="xs"] .side .nav:not(.sidefold)::before { width: 19px; height: 19px; }
+html:root[data-base="steam"][data-ly-sbw="s"] .side { padding-left: 16px; padding-right: 16px; }
+html:root[data-base="steam"][data-ly-sbw="s"] .side .nav:not(.sidefold) { gap: 10px; padding-left: 12px; padding-right: 12px; }
+html:root[data-base="steam"][data-ly-sbw="xs"] .side { padding-left: 12px; padding-right: 12px; }
+html:root[data-base="steam"][data-ly-sbw="xs"] .side .nav:not(.sidefold) { gap: 8px; padding-left: 9px; padding-right: 9px; font-size: 14px; letter-spacing: 0; }
+html:root[data-base="steam"][data-ly-sbw="xs"] .side .nav:not(.sidefold)::before { width: 17px; height: 17px; }
 
 /* ---------- свой размер панелей (перетаскивание за край, layout.js) ---------- */
 /* data-ly-sw / data-ly-ph стоят, только пока размер изменён вручную; ширина не больше 45% окна */

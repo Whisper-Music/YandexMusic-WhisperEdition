@@ -22,7 +22,7 @@
     "tabs": ".tabs",
     "tab": ".tabs .tab:not(.active)",
     "tab:active": ".tabs .tab.active",
-    "sidebar": ".side",
+    "sidebar": ".side, .pinrail",          // .pinrail — колонка закреплённых сбоку: темы красят её как боковую панель
     "nav": ".side .nav:not(.active)",
     "nav:active": ".side .nav.active",
     "search:global": "#search",

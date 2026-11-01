@@ -164,7 +164,12 @@ pub async fn engine_load(
                 let url = crate::net::track_url_q(&id, quality.as_deref() == Some("low")).await?;
                 wasapi::Src::Bytes(crate::net::fetch_media(&url).await?, Some("mp3"))
             }
-            "local" => wasapi::Src::File(crate::download::local_path(&app, &id).ok_or("LOCAL: скачанный файл не найден")?),
+            "local" => {
+                // файл открыт и проверен в download.rs (только папка загрузок, без подмены ссылкой) —
+                // движок читает из этого же дескриптора, путь нужен только как подсказка формата
+                let (file, path, _) = crate::download::open_local(&app, &id).ok_or("LOCAL: скачанный файл не найден")?;
+                wasapi::Src::File(file, path)
+            }
             "wa" => wasapi::Src::Bytes(crate::whisper::wa_track_bytes(&id).await?, None),
             _ => return Err("неизвестный источник".into()),
         };
@@ -225,7 +230,7 @@ mod wasapi {
 
     pub enum Src {
         Bytes(Vec<u8>, Option<&'static str>),
-        File(PathBuf),
+        File(std::fs::File, PathBuf),
     }
 
     #[derive(Serialize, Clone)]
@@ -441,11 +446,11 @@ mod wasapi {
                     }
                     Box::new(Cursor::new(b))
                 }
-                Src::File(p) => {
+                Src::File(f, p) => {
                     if let Some(e) = p.extension().and_then(|e| e.to_str()) {
                         hint.with_extension(e);
                     }
-                    Box::new(std::fs::File::open(&p).map_err(|_| "LOCAL: скачанный файл не открывается".to_string())?)
+                    Box::new(f)
                 }
             };
             let mss = MediaSourceStream::new(ms, Default::default());

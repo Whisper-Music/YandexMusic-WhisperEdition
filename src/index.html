@@ -6,6 +6,7 @@
   <title>Whisper Edition</title>
   <!-- без defer, первым: стиль прошлого запуска и «шторка» до первой отрисовки (boot.js) -->
   <script src="boot.js"></script>
+  <script src="lsguard.js"></script>
   <link rel="stylesheet" href="styles.css" />
   <!-- оформление «Слушать вместе» (core/together.js) — сразу после общего: перекрывает его правила плеера и меню -->
   <link rel="stylesheet" href="core/together.css" />
@@ -13,6 +14,7 @@
   <script src="core/whisper-core.js" defer></script>
   <script src="imgguard.js" defer></script>
   <script src="main.js" defer></script>
+  <script src="errinfo.js" defer></script>
   <script src="yandex.js" defer></script>
   <!-- Whisper Archive — общий модуль ядра Whisper -->
   <link rel="stylesheet" href="core/archive.css" />
@@ -36,7 +38,10 @@
   <script src="update.js" defer></script>
   <script src="core/together.js" defer></script>
   <script src="listenstats.js" defer></script>
+  <link rel="stylesheet" href="backup.css" />
+  <script src="backup.js" defer></script>
   <script src="cli.js" defer></script>
+  <script src="themeguard.js" defer></script>
   <link rel="stylesheet" href="hotkeys.css" />
   <script src="hotkeys.js" defer></script>
   <script src="keynav.js" defer></script>
@@ -50,6 +55,7 @@
   <script src="output.js" defer></script>
   <script src="engine.js" defer></script>
   <script src="sound.js" defer></script>
+  <script src="devprofile.js" defer></script>
   <link rel="stylesheet" href="layout.css" />
   <link rel="stylesheet" href="mascot.css" />
   <script src="mascot.js" defer></script>
@@ -90,6 +96,7 @@
 
   <div class="app">
     <header class="tabs" id="tabs"></header>
+    <nav class="panel pinrail" id="pinRail" aria-label="Закреплённые"></nav>
 
     <aside class="panel side">
       <input id="search" class="search" type="search" placeholder="Поиск" autocomplete="off" spellcheck="false" />
@@ -260,6 +267,7 @@
         <div class="card" id="layoutCard" data-tab="ui">
           <h3>Расположение</h3>
           <div class="lyrow"><span>Боковая панель</span><div class="lyseg" data-k="side"><button class="chip" data-v="left">Слева</button><button class="chip" data-v="right" title="Закреплённые альбомы и артисты тоже переедут вправо">Справа</button></div></div>
+          <div class="lyrow"><span>Закреплённые</span><div class="lyseg" data-k="pins"><button class="chip" data-v="top" title="Закладками над панелями">Сверху</button><button class="chip" data-v="side" title="Колонкой с обложками у боковой панели — как папки в Telegram">Сбоку</button></div></div>
           <div class="lyrow"><span>Вид боковой панели</span><div class="lyseg" data-k="sb"><button class="chip" data-v="full">Обычный</button><button class="chip" data-v="mini" title="Узкая полоса со значками, подписи — при наведении">Свёрнутый</button></div></div>
           <div class="lyrow"><span>Нижняя панель</span><div class="lyseg" data-k="pl"><button class="chip" data-v="full">Обычная</button><button class="chip" data-v="mini" title="Кнопки и линия воспроизведения в одну строку">Свёрнутая</button></div></div>
           <div class="lyrow"><span>Время трека</span><div class="lyseg" data-k="time"><button class="chip" data-v="always">Всегда</button><button class="chip" data-v="hover" title="Время появляется при наведении на линию воспроизведения">При наведении</button></div></div>
@@ -289,6 +297,10 @@
             <label class="switch" title="Кивает в такт, засыпает на долгой паузе и в режиме сна, радуется лайку"><input type="checkbox" id="mcReact" /><i></i><span>Реагирует на музыку</span></label>
           </div>
         </div>
+        <div class="card" id="pinHideCard" data-tab="ui">
+          <h3>Закреплённые</h3>
+          <label class="switch" title="Закладки или колонка закреплённых прячутся. Наведи на верхний край (или на край со стороны боковой панели) — они выедут"><input type="checkbox" id="pinHide" /><i></i><span>Скрывать закреплённые</span></label>
+        </div>
         <div class="card sleepcard" data-tab="play">
           <h3 title="Кнопка с луной в нижней панели: Моя волна под настроение, последние 3 минуты музыка плавно затихает">Режим сна</h3>
           <div class="lyrow"><span>Выключить через</span><div class="lyseg" id="slTime"></div></div>
@@ -316,6 +328,12 @@
           <div id="outList" class="outlist" role="radiogroup" aria-label="Устройство вывода"></div>
           <div class="row"><button type="button" class="nav" id="outRefresh">Обновить список</button></div>
           <p class="status" id="outNote"></p>
+        </div>
+        <div class="card" id="dpCard" data-tab="out">
+          <h3>Профили устройств <i class="hint" title="Громкость, нормализация, режим вывода и эквалайзер запоминаются для каждого устройства отдельно и возвращаются, когда звук снова идёт на него.">i</i></h3>
+          <label class="switch"><input type="checkbox" id="dpOn" /><i></i><span>Подстраивать звук под устройство</span></label>
+          <div id="dpList" class="outlist" aria-label="Запомненные устройства"></div>
+          <p class="status" id="dpNote"></p>
         </div>
         <div class="card" id="modeCard" data-tab="out">
           <h3>Режим вывода</h3>
@@ -373,6 +391,13 @@
           <h3>Статистика</h3>
           <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
           <div class="row"><button type="button" class="nav" id="lsClear">Очистить записанное</button></div>
+        </div>
+        <div class="card" id="bkCard" data-tab="app">
+          <h3>Резервная копия <i class="hint" title="Вход в Яндекс и ключ Whisper Archive в копию не попадают — на другом компьютере войди заново.">i</i></h3>
+          <p class="status">Настройки, закреплённые, темы, фоны и статистика — одним файлом .wbak.</p>
+          <div class="row"><button type="button" class="nav" id="bkSave">Сохранить копию…</button><button type="button" class="nav" id="bkLoad">Восстановить из файла…</button></div>
+          <div class="dcline"><span class="dcnote" id="bkAuto" title="Whisper сам сохраняет настройки и список скачанных треков на случай повреждения">Автокопии: —</span><button type="button" class="nav" id="bkAutoBtn">Автокопии…</button></div>
+          <p class="status" id="bkNote"></p>
         </div>
         <div class="card" id="resetCard" data-tab="app">
           <h3>Сброс</h3>
