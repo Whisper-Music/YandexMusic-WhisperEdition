@@ -829,6 +829,30 @@ pub async fn download_track(
     Ok(saved)
 }
 
+/// «Удалить с диска» в меню трека: файл стирается, запись — из списка скачанных.
+/// Удаляется только файл из своего индекса, только звуковой и только из папок загрузок: путь интерфейс не передаёт.
+/// Файл вне папок загрузок (или уже исчезнувший) не трогаем — просто забываем запись.
+#[tauri::command]
+pub fn download_delete(app: AppHandle, id: String) -> Result<(), String> {
+    if !id_ok(&id) {
+        return Err("Некорректный номер трека".into());
+    }
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut index = read_index(&app);
+    let Some(e) = index.get(&id) else { return Ok(()) };
+    let p = PathBuf::from(e.path());
+    if playable_in(&p, &roots(&app)) {
+        if let Err(e) = std::fs::remove_file(&p) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                // Windows не даёт стереть открытый файл: трек сейчас играет со своего движка или из ymlocal://
+                return Err(format!("Не удалось удалить файл: {e}"));
+            }
+        }
+    }
+    index.remove(&id);
+    write_index(&app, &index)
+}
+
 // ---------------------------------------------------------------------------
 // Локальное воспроизведение: <audio src="ymlocal://localhost/track/<id>"> (на Windows —
 // http://ymlocal.localhost/track/<id>) играет скачанный файл прямо с диска, без запросов к Яндексу.

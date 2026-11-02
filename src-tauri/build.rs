@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "yandex_login",
     "secret_backend",
     "download_track",
+    "download_delete",
     "downloaded_ids",
     "downloaded_tracks",
     "downloaded_meta",

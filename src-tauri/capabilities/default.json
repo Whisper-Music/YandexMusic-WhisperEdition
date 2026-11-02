@@ -52,6 +52,7 @@
     "allow-mini-state",
     "allow-desktop-wallpaper",
     "allow-download-track",
+    "allow-download-delete",
     "allow-downloaded-ids",
     "allow-downloaded-tracks",
     "allow-downloaded-meta",

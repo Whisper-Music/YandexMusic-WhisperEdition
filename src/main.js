@@ -3439,6 +3439,7 @@ function trackMenuMain(t, ctx) {
   // в самом низу — скачать
   menuSep();
   menuItem(got.has(String(t.id)) ? ICON.got : ICON.download, got.has(String(t.id)) ? "Уже скачан" : "Скачать трек", () => downloadTrack(t));
+  if (got.has(String(t.id))) menuItem(ICON.remove, "Удалить с диска", () => deleteDownload(t), { danger: true });
   placeMenu();
 }
 async function trackMenuPlaylists(t, ctx) {
@@ -3990,6 +3991,34 @@ async function downloadTrack(t, force = false) {
     showToast(why ? `«${t.title}» не скачался — ${why.where}: ${why.text}` : "Не удалось скачать: " + e.message, 8000, { kind: "err" });
   } finally { refreshPlayerBtns(); }
 }
+// «Удалить с диска»: файл и запись в списке скачанных стирает Rust (download_delete) — только из папки загрузок.
+// Трек сейчас играет с диска — Windows не даст стереть открытый файл, поэтому сначала переключаем его на поток
+// Яндекса с того же места (без сети так нельзя — тогда просим включить другой трек).
+async function deleteDownload(t) {
+  if (!t) return;
+  const id = String(t.id);
+  if (!got.has(id)) return;
+  if (downloading.has(id)) return showToast("Трек ещё скачивается — подожди немного");
+  const ok = await modal({ title: "Удалить с диска?", text: `Файл «${t.title}» удалится из папки загрузок. Трек останется в Яндекс Музыке — его можно будет скачать снова.`, ok: "Удалить", danger: true });
+  if (!ok) return;
+  const playingHere = curLocal && String(queue[current]?.id) === id;
+  if (playingHere && (offline || !navigator.onLine)) return showToast("Трек сейчас играет с диска, а сети нет — включи другой трек и удали этот", 6000);
+  got.delete(id); syncGot();
+  if (playingHere) {
+    const pos = audio ? audio.currentTime : 0, paused = !audio || audio.paused;
+    await play(current, pos, false, paused);
+    await new Promise((r) => setTimeout(r, 400));       // движок отпускает файл
+  }
+  try {
+    try { await invoke("download_delete", { id }); }
+    catch { await new Promise((r) => setTimeout(r, 1200)); await invoke("download_delete", { id }); }
+    metaSent.delete(id);
+    showToast(`«${t.title}» удалён с диска`, 3500, { kind: "ok" });
+  } catch (e) {
+    got.add(id); syncGot();
+    showToast(`«${t.title}» не удалился: ${e?.message || e}`, 7000, { kind: "err" });
+  }
+}
 // Один трек на диск. Файл называется «Исполнители — Название»; ссылку на файл Rust берёт сам по id.
 async function dlOne(t) {
   const id = String(t.id);
@@ -4341,6 +4370,15 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
       if (local && err?.name === "NotSupportedError") {
         curLocal = false; got.delete(String(t.id)); syncGot();
         return play(i, resumeAt);
+      }
+      // свой движок: файл из архива не скачался (нет доступа, архив недоступен) — сразу версия Яндекса
+      if (wa && audio._native && err?.name === "Error") {
+        curFromWa = false; wReport({ source: "provider" });
+        audio.setTrack({ kind: "ym", id: String(t.id), quality: window.ymQuality?.() || "high" }, resumeAt, (t.durationMs || 0) / 1000);
+        await audio.play();
+        if (my !== playSeq) return;
+        playFail = 0; loadAt = 0; setTransit(false);
+        return;
       }
       if (!wa || err?.name !== "NotSupportedError") throw err;
       // поток из архива не заиграл — берём файл целиком, а если и это не вышло, играет версия Яндекса

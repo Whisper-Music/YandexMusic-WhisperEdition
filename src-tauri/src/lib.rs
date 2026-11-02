@@ -256,6 +256,7 @@ pub fn run() {
             auth::yandex_login,
             secret::secret_backend,
             download::download_track,
+            download::download_delete,
             download::downloaded_ids,
             download::downloaded_tracks,
             download::downloaded_meta,
