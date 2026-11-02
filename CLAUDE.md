@@ -2,7 +2,9 @@
 
 Неофициальный десктопный клиент Яндекс Музыки на **Tauri 2** (Rust + системный WebView: WebView2 в Windows,
 WebKitGTK в Linux). Фронтенд — **чистый JS/CSS/HTML без сборщика и фреймворков**. Свои темы оформления — файлы `.wmt`.
-Автор — Вадим. Версия в `package.json` и `src-tauri/Cargo.toml` (сейчас 0.8.x).
+Автор — Вадим. Версия — одна, в `package.json` (сейчас 0.8.x): `npm run version X.Y.Z` (scripts/set-version.mjs) сам
+переносит её в `src-tauri/Cargo.toml`, `Cargo.lock` и `package-lock.json`; `tauri.conf.json` берёт её из package.json
+(`"version": "../package.json"`). Руками в Cargo.toml и tauri.conf.json версию не меняй.
 
 ## Язык и стиль
 

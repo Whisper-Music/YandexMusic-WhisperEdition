@@ -28,8 +28,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          conf=$(jq -r .version src-tauri/tauri.conf.json)
           pkg=$(jq -r .version package.json)
+          conf=$(jq -r .version src-tauri/tauri.conf.json)
+          # обычно tauri.conf.json берёт версию из package.json ("../package.json") — главная версия там
+          if [ "$conf" = "../package.json" ]; then conf="$pkg"; fi
           cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -n1)
           echo "tauri.conf.json=$conf package.json=$pkg Cargo.toml=$cargo"
           if [ "$conf" != "$pkg" ] || [ "$conf" != "$cargo" ]; then
@@ -49,7 +51,7 @@ jobs:
             exit 0
           fi
           if [ "$draft" = "false" ]; then
-            echo "::error::Релиз $tag уже опубликован. Подними версию (tauri.conf.json, package.json, Cargo.toml + cargo update -p yandex-desktop) и запусти снова."
+            echo "::error::Релиз $tag уже опубликован. Подними версию (npm run version X.Y.Z) и запусти снова."
             exit 1
           fi
           if [ "$draft" = "true" ]; then
