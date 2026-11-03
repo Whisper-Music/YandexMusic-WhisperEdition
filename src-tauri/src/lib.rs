@@ -294,6 +294,7 @@ pub fn run() {
             whisper::rooms::wa_room_suggest,
             whisper::rooms::wa_room_dismiss,
             whisper::rooms::wa_room_transfer,
+            whisper::rooms::wa_room_ping,
             discord::discord_config,
             discord::discord_status,
             discord::discord_retry,

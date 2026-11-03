@@ -239,7 +239,7 @@ document.getElementById("offlineNotice")?.addEventListener("click", probeOnline)
 // знает Rust (src-tauri/src/net.rs, список OPS). Чтение и изменение данных аккаунта — разные команды
 // (ym_read / ym_write) с разными разрешениями (capabilities/yandex-read.json и yandex-write.json).
 const YM_WRITE = new Set(["like_add", "like_remove", "dislike_add", "dislike_remove", "rotor_feedback",
-  "playlist_create", "playlist_rename", "playlist_change", "playlist_change_rel", "playlist_delete"]);
+  "playlist_create", "playlist_rename", "playlist_change", "playlist_change_rel", "playlist_delete", "play_audio"]);
 const strMap = (o) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])) : null);
 async function ym(op, { id = null, query = null, form = null, json = null } = {}) {
   const body = await invoke(YM_WRITE.has(op) ? "ym_write" : "ym_read",
@@ -4389,8 +4389,14 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
       if (b) audio.src = curBlob = URL.createObjectURL(b);
       else {
         curFromWa = false; wReport({ source: "provider" });
-        const url = await directLink(t.id);
+        let url = await directLink(t.id);
         if (my !== playSeq) return;
+        // с визуализатором звук идёт через звуковой граф: файл Яндекса (без CORS) там молчит — берём его целиком, как в обычном пути
+        if (wantViz) {
+          const buf = await invoke("fetch_bytes", { url });
+          if (my !== playSeq) return;
+          url = curBlob = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+        }
         audio.src = url;
       }
       seekResume();

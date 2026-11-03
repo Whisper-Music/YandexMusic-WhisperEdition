@@ -140,6 +140,11 @@ struct Op {
 }
 
 const TRACK_IDS: &[&str] = &["track-ids"];
+/// Отчёт о прослушивании (plays.js). uid в форме подставляет Rust (send_api) — JS его не знает и подменить не может.
+const PLAY_AUDIO: &[&str] = &[
+    "track-id", "album-id", "playlist-id", "from", "from-cache", "play-id", "uid", "timestamp", "client-now",
+    "track-length-seconds", "total-played-seconds", "end-position-seconds",
+];
 
 const fn op(name: &'static str, write: bool, verb: Verb, path: &'static str, id: Id, query: &'static [&'static str], body: Body) -> Op {
     Op { name, write, verb, path, id, query, body }
@@ -176,6 +181,8 @@ const OPS: &[Op] = &[
     op("playlist_change", true, Verb::Post, "/users/{uid}/playlists/{id}/change", Id::Kind, &[], Body::Form(&["kind", "revision", "diff"])),
     op("playlist_change_rel", true, Verb::Post, "/users/{uid}/playlists/{id}/change-relative", Id::Kind, &[], Body::Form(&["kind", "revision", "diff"])),
     op("playlist_delete", true, Verb::Post, "/users/{uid}/playlists/{id}/delete", Id::Kind, &[], Body::None),
+    // прослушивание засчитывается автору — откуда бы ни шёл звук (Яндекс, Whisper Archive, скачанный файл)
+    op("play_audio", true, Verb::Post, "/play-audio", Id::No, &[], Body::Form(PLAY_AUDIO)),
 ];
 
 const MAX_QUERY_VALUE: usize = 512;
@@ -356,8 +363,18 @@ async fn send_api(
     form: Option<&HashMap<String, String>>,
     json: Option<&serde_json::Value>,
 ) -> Result<(u16, String), String> {
-    let uid = if op.path.contains("{uid}") { Some(current_uid().await?) } else { None };
-    send_with(op, uid.as_deref(), id, query, form, json).await
+    let uid_field = matches!(op.body, Body::Form(f) if f.contains(&"uid"));
+    let uid = if op.path.contains("{uid}") || uid_field { Some(current_uid().await?) } else { None };
+    // поле uid в форме — всегда свой номер, что бы ни прислал JS
+    let with_uid = match (uid_field, uid.as_deref()) {
+        (true, Some(u)) => {
+            let mut m = form.cloned().unwrap_or_default();
+            m.insert("uid".into(), u.into());
+            Some(m)
+        }
+        _ => None,
+    };
+    send_with(op, uid.as_deref(), id, query, with_uid.as_ref().or(form), json).await
 }
 
 async fn send_with(
@@ -653,7 +670,34 @@ pub async fn fetch_bytes(url: String) -> Result<tauri::ipc::Response, String> {
 pub fn app_origin(origin: Option<&str>) -> Option<&'static str> {
     const ORIGINS: [&str; 3] = ["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"];
     let o = origin?;
-    ORIGINS.iter().copied().find(|x| *x == o)
+    if let Some(x) = ORIGINS.iter().copied().find(|x| *x == o) {
+        return Some(x);
+    }
+    // `tauri dev` без devUrl открывает страницы со своего сервера http://127.0.0.1:<порт> (обычно 1430) —
+    // как nav_allowed в lib.rs, только в отладочной сборке; в выпуске этого адреса нет
+    if cfg!(debug_assertions) { dev_origin(o) } else { None }
+}
+
+fn dev_origin(o: &str) -> Option<&'static str> {
+    let u = Url::parse(o).ok()?;
+    let host = u.host_str()?;
+    // Origin — ровно «схема://хост:порт», без пути и прочего
+    if u.scheme() != "http" || !matches!(host, "127.0.0.1" | "localhost") || u.port().is_none() || u.origin().ascii_serialization() != o {
+        return None;
+    }
+    // ответ ждёт &'static str (контракт с ядром — core/rust/whisper/stream.rs): адрес сервера разработки один,
+    // строка запоминается один раз
+    static SEEN: OnceLock<std::sync::Mutex<Vec<&'static str>>> = OnceLock::new();
+    let mut v = SEEN.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(x) = v.iter().copied().find(|x| *x == o) {
+        return Some(x);
+    }
+    if v.len() >= 4 {
+        return None;
+    }
+    let s: &'static str = Box::leak(o.to_string().into_boxed_str());
+    v.push(s);
+    Some(s)
 }
 
 #[cfg(test)]
@@ -720,6 +764,7 @@ mod tests {
     fn read_write_split() {
         assert!(find_op("like_add").unwrap().write);
         assert!(find_op("playlist_delete").unwrap().write);
+        assert!(find_op("play_audio").unwrap().write);
         assert!(!find_op("likes").unwrap().write);
         assert!(find_op("http_request").is_none());
         let r = tauri::async_runtime::block_on(run_op(false, "like_add".into(), None, None, None, None));
@@ -814,5 +859,10 @@ mod tests {
         assert_eq!(app_origin(Some("https://evil.example")), None);
         assert_eq!(app_origin(Some("null")), None);
         assert_eq!(app_origin(None), None);
+        // сервер разработки — только в отладке и только ровный Origin
+        assert_eq!(app_origin(Some("http://127.0.0.1:1430")), if cfg!(debug_assertions) { Some("http://127.0.0.1:1430") } else { None });
+        assert_eq!(app_origin(Some("http://127.0.0.1:1430/x")), None);
+        assert_eq!(app_origin(Some("http://127.0.0.1")), None);
+        assert_eq!(app_origin(Some("http://evil.localhost:1430")), None);
     }
 }

@@ -18,7 +18,8 @@
   // что не уходит в копию ни при каких условиях
   const SECRET_RE = /token|secret|passw|cookie|session|credential|api[_-]?key/i;
   // данные аккаунта и производные кэши: на другом аккаунте или компьютере они только навредят
-  const SKIP = new Set(["ym_token", "ym_uid", "ym_liked_ids", "ym_disliked_ids", "ym_boot", "wa_index", "wa_index_mine", "wa_email"]);
+  const SKIP = new Set(["ym_token", "ym_uid", "ym_liked_ids", "ym_disliked_ids", "ym_boot", "wa_index", "wa_index_mine", "wa_email",
+  "ym_plays_pending", "ym_plays_cur"]);   // неотправленные отчёты о прослушиваниях: из копии ушли бы второй раз
   const lsOk = (k) => typeof k === "string" && k.length > 0 && k.length <= 120 && !SECRET_RE.test(k) && !SKIP.has(k);
   // IndexedDB «whisper-edition» → группы копии
   const GROUPS = [

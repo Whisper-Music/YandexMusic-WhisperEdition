@@ -21,6 +21,7 @@
     "allow-wa-room-suggest",
     "allow-wa-room-dismiss",
     "allow-wa-room-transfer",
+    "allow-wa-room-ping",
     "allow-room-link-take"
   ]
 }

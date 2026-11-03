@@ -65,6 +65,7 @@ const COMMANDS: &[&str] = &[
     "wa_room_suggest",
     "wa_room_dismiss",
     "wa_room_transfer",
+    "wa_room_ping",
     "room_link_take",
     "app_ready",
     "discord_config",
