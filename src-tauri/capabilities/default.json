@@ -53,6 +53,7 @@
     "allow-desktop-wallpaper",
     "allow-download-track",
     "allow-download-delete",
+    "allow-sys-notify",
     "allow-cache-info",
     "allow-cache-ids",
     "allow-cache-config",

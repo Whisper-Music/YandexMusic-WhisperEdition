@@ -36,6 +36,8 @@
   <link rel="stylesheet" href="core/obs.css" />
   <script src="core/obs.js" defer></script>
   <script src="update.js" defer></script>
+  <!-- системные уведомления (notify.rs): приглашения и подмигивания в комнате; настройки — Приложение → Уведомления -->
+  <script src="notify.js" defer></script>
   <script src="core/together.js" defer></script>
   <script src="listenstats.js" defer></script>
   <script src="plays.js" defer></script>
@@ -269,8 +271,16 @@
           </div>
           <p id="setNote" class="status"></p>
         </div>
+        <div class="card" id="introCard" data-tab="look">
+          <h3>Интро тем <i class="hint" title="Заставка при запуске у некоторых тем (секция whisper-intro в файле .wmt). Щелчок или любая клавиша пропускают её.">i</i></h3>
+          <label class="switch" title="Выключи, чтобы приложение открывалось сразу, без заставки темы"><input type="checkbox" id="inOn" /><i></i><span>Показывать интро при запуске</span></label>
+          <div id="inList" class="inlist"></div>
+          <p class="status" id="inNote"></p>
+        </div>
         <div class="card" id="layoutCard" data-tab="ui">
           <h3>Расположение</h3>
+          <div class="lyrow lyrow-ui"><span>Вид интерфейса</span><div class="lyseg" data-k="ui"><button class="chip" data-v="normal">Обычный</button><button class="chip" data-v="super" title="Боковая панель — колонка значков, плеер — компактная панель снизу. Переключить: Ctrl+Shift+M или двойной щелчок по пустому месту панели">Мини</button></div></div>
+          <p class="status lysuper-note">Мини: Ctrl+Shift+M или двойной щелчок по пустому месту панели — переключить вид. Боковая и нижняя панели ниже настраиваются для обычного вида.</p>
           <div class="lyrow"><span>Боковая панель</span><div class="lyseg" data-k="side"><button class="chip" data-v="left">Слева</button><button class="chip" data-v="right" title="Закреплённые альбомы и артисты тоже переедут вправо">Справа</button></div></div>
           <div class="lyrow"><span>Закреплённые</span><div class="lyseg" data-k="pins"><button class="chip" data-v="top" title="Закладками над панелями">Сверху</button><button class="chip" data-v="side" title="Колонкой с обложками у боковой панели — как папки в Telegram">Сбоку</button></div></div>
           <div class="lyrow"><span>Вид боковой панели</span><div class="lyseg" data-k="sb"><button class="chip" data-v="full">Обычный</button><button class="chip" data-v="mini" title="Узкая полоса со значками, подписи — при наведении">Свёрнутый</button></div></div>
@@ -409,6 +419,14 @@
             <div class="row"><button type="button" class="nav active" id="updInstall">Обновить и перезапустить</button><button type="button" class="nav" id="updPage">Страница выпуска</button></div>
           </div>
           <p class="status" id="updNote"></p>
+        </div>
+        <div class="card" id="ntCard" data-tab="app">
+          <h3>Уведомления <i class="hint" title="Системные уведомления Windows / Linux. В открытом окне и так появляется подсказка внизу.">i</i></h3>
+          <label class="switch" title="Друг позвал тебя в комнату «Слушать вместе»"><input type="checkbox" id="ntInvite" /><i></i><span>Приглашения в комнату</span></label>
+          <label class="switch" title="Участник комнаты подмигнул тебе: попросил переключить трек, сделать тише…"><input type="checkbox" id="ntWink" /><i></i><span>Подмигивания в комнате</span></label>
+          <label class="switch" title="Выключено — системное уведомление только когда окно свёрнуто или в фоне"><input type="checkbox" id="ntAlways" /><i></i><span>Даже когда окно открыто</span></label>
+          <div class="row"><button type="button" class="nav" id="ntTest">Проверить</button></div>
+          <p class="status" id="ntNote"></p>
         </div>
         <div class="card colbreak" data-tab="app">
           <h3>Статистика</h3>

@@ -87,6 +87,9 @@ src/                      фронтенд (без сборки, файлы от
   errinfo.js              понятные ошибки: window.errExplain(e, ctx) → где проблема (Яндекс, сеть, устройство, декодер,
                           файл, архив) и что делать; исходный текст — в title строки состояния; последняя — window.errLast
   lsguard.js              БЕЗ defer, сразу после boot.js: замечает повреждённые записи localStorage до main.js (window.__lsCheck)
+  notify.js               системные уведомления (Rust — notify.rs, tauri-plugin-notification): приглашение в комнату и
+                          «подмигнуть»; общие модули зовут kit.notify → window.sysNotify. Настройки — Приложение →
+                          Уведомления (localStorage ym_notify; по умолчанию — только когда окно свёрнуто или в фоне)
   backup.js/.css          резервная копия .wbak (настройки, закреплённые, темы, фоны, статистика; токенов нет — список
                           исключений SECRET_RE/SKIP), автокопии настроек и восстановление; Настройки → Приложение
 src-tauri/
@@ -184,14 +187,18 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
   Карточка — прямой ребёнок `.settings`: `<div class="card" data-tab="…">`. Без `data-tab` попадает в «Интеграции».
 - Два столбца (CSS columns, ≥1100px): карточки идут **в порядке разметки**, правый столбец начинается с карточки `.colbreak`
   (одна на вкладку). Баланс высоты столбцов подбирается переносом `.colbreak`.
-- Сейчас: Оформление — слева Стиль, Цвета, Шрифт; справа Фон. Интерфейс — Расположение, Эффекты и анимации | Визуализатор, Маскот, Закреплённые.
-  Воспроизведение — Режим сна | Скачивание треков. Интеграции — Whisper Archive (вставляет core/archive.js первой, через kit.settingsCard в yandex.js) | Discord, OBS.
+- Сейчас: Оформление — слева Стиль, Цвета, Шрифт; справа Фон, Интро тем (theme.js → paintIntro). Интерфейс — Расположение, Эффекты и анимации | Визуализатор, Маскот, Закреплённые.
+  Воспроизведение — Режим сна | Скачивание треков. Приложение — Трей, Обновления, Уведомления | Статистика, Резервная копия, Сброс. Интеграции — Whisper Archive (вставляет core/archive.js первой, через kit.settingsCard в yandex.js) | Discord, OBS.
 - Настройки оформления — `cfg` (localStorage `ym_cfg3`, `saveCfg()`, `applyCfg()`, `syncControls()`), значения стиля — `cfg.s[стиль]`.
   Отдельные модули хранят своё под своими ключами (`ym_font`, `ym_hotkeys`, …).
 
 ### Расположение и закреплённые (`layout.js` / `layout.css`)
 - Режимы — атрибуты на `<html>`, хранятся в localStorage `ym_layout`: `data-ly-side` (left|right), `data-ly-sb` (full|mini),
-  `data-ly-pl` (full|mini), `data-ly-time` (always|hover), `data-ly-pins` (top|side), `data-ly-pinhide` (off|on);
+  `data-ly-pl` (full|mini), `data-ly-time` (always|hover), `data-ly-pins` (top|side), `data-ly-pinhide` (off|on),
+  `data-ly-ui` (normal|super — мини-вид: боковая — плавающая колонка значков, плеер — плитка с обложкой + «таблетка»,
+  «⋮» (#smMore) → столбик .pright, `html.sm-open`; layout.js на это время ставит sb=mini, pins=top и переносит
+  #likeBtn/#disBtn в .ctrls, перемешивание/повтор — в .pright, по меткам-комментариям возвращает; Ctrl+Shift+M или
+  двойной щелчок по пустому месту .side/.player — `window.layoutToggleSuper()`);
   служебные: `data-ly-sw`/`data-ly-ph` (свой размер панелей), `data-ly-sbw` (s|xs — узкая боковая панель, по замеру ширины).
   Переключатели — `.lyseg[data-k="…"] .chip[data-v="…"]` (сами подхватываются), чекбокс `#pinHide`. `window.layoutSet(k, v)`.
   Тема с `"layout": "fixed"` → `layoutLock(true)`: действуют значения по умолчанию, выбор пользователя сохраняется.
@@ -249,6 +256,8 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
 @@ css whisper-music           ← CSS
 @@ settings whisper-obs        ← JSON (виджет OBS)
 @@ css whisper-obs             ← CSS (виджет OBS)
+@@ settings whisper-intro      ← JSON { "name", "duration" (с, 0.3…10) } — интро при запуске
+@@ css whisper-intro           ← CSS интро (обычно body::before/after); подключается только на время интро, выключается
 @@ asset имя base64|text       ← устаревшее: ресурс внутри текста (файл в архиве главнее)
 ```
 Секция длится до следующей строки с `@@`. Строка внутри секции не может начинаться с `@@`. Неизвестные секции пропускаются.
@@ -350,6 +359,13 @@ CSS без привязки к стилю, после встроенного. Р
 `.w-play > i` (скрыт; включать `display: grid`), `.w-deco > i×6` (скрыт; слой inset:0, у `i` есть ::before/::after).
 Переменные на `#w`: `--a --b --alpha --p --cover`. Ресурсы `url(asset:…)` встраиваются (≤1,5 МБ каждый);
 `@import`, `url(http…)`, `image-set` вырезаются. Перекрыть встроенные виды — селекторами через `#w`.
+
+### Интро (`whisper-intro`)
+Заставка при запуске (ASCII, Madk1d, lazzy2wice). theme.js → `playIntro()`: CSS секции привязывается к стилю
+(`TC.introCss`) и ставится в `DynCss("wmt-intro")` на `duration` (+0,3 с), потом снимается; щелчок или клавиша —
+сразу. Не показывается: выключено (Оформление → Интро тем; localStorage `ym_intro` `{ on, off: [id] }`), анимации
+выключены, `prefers-reduced-motion`. Пока идёт — `html.intro-on`. Интро в `css whisper-music` выключить нельзя —
+в новых темах только отдельной секцией. Подробно — WMT-FORMAT.md, раздел 5б.
 
 ### Как в приложении
 - «Сохранить стиль в файл…» — выгружает правила текущего стиля уже без привязки (архив, если есть фон).

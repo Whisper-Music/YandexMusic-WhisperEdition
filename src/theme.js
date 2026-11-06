@@ -109,6 +109,96 @@
     DynCss.set("wmt-" + id, css);
     themeReady.add(id);
   }
+  // ---------- интро темы: «@@ css whisper-intro» (+ «@@ settings whisper-intro» { name, duration }) ----------
+  // Заставка при запуске. CSS интро подключается только на время интро (DynCss «wmt-intro») и убирается — так его
+  // можно выключить совсем или у отдельного стиля (Оформление → Интро тем). Щелчок или любая клавиша — пропустить.
+  // Анимации выключены (или система просит меньше движения) — интро не показывается.
+  const INTRO = TC.INTRO || "whisper-intro";
+  const INTRO_KEY = "ym_intro";              // { on: bool, off: [id стилей, у которых интро выключено] }
+  const intro = (() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(INTRO_KEY) || "{}") || {};
+      return { on: v.on !== false, off: Array.isArray(v.off) ? v.off.filter((x) => typeof x === "string").slice(0, 100) : [] };
+    } catch { return { on: true, off: [] }; }
+  })();
+  const introSave = () => { try { localStorage.setItem(INTRO_KEY, JSON.stringify(intro)); } catch {} };
+  const introOf = (id) => meta.get(id)?.intro || null;
+  const motionOff = () => document.documentElement.dataset.anim === "off" || !!matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  let introNow = null;                        // идёт интро: { urls, stop, timer }
+  function introStop() {
+    if (!introNow) return;
+    clearTimeout(introNow.timer);
+    removeEventListener("pointerdown", introNow.stop, true);
+    removeEventListener("keydown", introNow.stop, true);
+    DynCss.remove("wmt-intro");
+    for (const u of introNow.urls) URL.revokeObjectURL(u);
+    document.documentElement.classList.remove("intro-on");
+    introNow = null;
+  }
+  // шторка запуска (boot.js, html.booting) ещё закрывает окно — интро ждёт её, иначе начало пройдёт под шторкой
+  const afterBoot = () => new Promise((res) => {
+    const t0 = Date.now();
+    const tick = () => (!document.documentElement.classList.contains("booting") || Date.now() - t0 > 4000 ? res() : requestAnimationFrame(tick));
+    tick();
+  });
+  // force — «Показать» в настройках: и при выключенном интро
+  async function playIntro(id, { force = false, th = null } = {}) {
+    if (!introOf(id)) return false;
+    if (!force && (!intro.on || intro.off.includes(id) || motionOff())) return false;
+    try { th = th || (await loadStored(id)); } catch { return false; }
+    if (!force) await afterBoot();
+    if (!th || cfg.style !== id) return false;          // пока грузилось, переключили стиль
+    const r = TC.introCss(th, id, { core: CORE, mutedIn: MUTED_IN });
+    if (!r) return false;
+    introStop();
+    const stop = (e) => { if (e?.type === "keydown" && ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return; introStop(); };
+    introNow = { urls: r.urls, stop, timer: setTimeout(introStop, r.duration * 1000 + 300) };
+    document.documentElement.classList.add("intro-on");
+    DynCss.set("wmt-intro", r.css);
+    // пропуск — со следующего действия (щелчок по «Показать» сам интро не обрывает)
+    setTimeout(() => { if (introNow?.stop === stop) { addEventListener("pointerdown", stop, true); addEventListener("keydown", stop, true); } }, 200);
+    return true;
+  }
+  window.wmtIntro = { play: (id = cfg.style) => playIntro(id, { force: true }), stop: introStop, has: (id = cfg.style) => !!introOf(id) };
+
+  // Оформление → «Интро тем»: общий выключатель и список стилей, у которых есть интро
+  function paintIntro() {
+    const card = document.getElementById("introCard");
+    if (!card) return;
+    const on = document.getElementById("inOn");
+    if (on) { on.checked = intro.on; on.onchange = () => { intro.on = on.checked; introSave(); paintIntro(); }; }
+    const list = document.getElementById("inList"), note = document.getElementById("inNote");
+    if (!list) return;
+    list.textContent = "";
+    const withIntro = cfg.themes.filter((t) => introOf(t.id));
+    for (const t of withIntro) {
+      const it = introOf(t.id), cur = cfg.style === t.id;
+      const row = document.createElement("div"); row.className = "inrow" + (cur ? " cur" : "");
+      const lb = document.createElement("label"); lb.className = "switch";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !intro.off.includes(t.id); cb.disabled = !intro.on;
+      cb.onchange = () => { intro.off = intro.off.filter((x) => x !== t.id); if (!cb.checked) intro.off.push(t.id); introSave(); };
+      const tx = document.createElement("span");
+      tx.textContent = (t.author ? `${t.author} · ` : "") + t.name;
+      const sm = document.createElement("small");
+      sm.textContent = [it.name, `${String(it.duration).replace(".", ",")} с`].filter(Boolean).join(" · ");
+      tx.append(sm);
+      lb.append(cb, document.createElement("i"), tx);
+      row.append(lb);
+      if (cur) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "nav"; b.textContent = "Показать";
+        b.title = "Посмотреть интро сейчас — щелчок или клавиша пропускают его";
+        b.onclick = () => playIntro(t.id, { force: true });
+        row.append(b);
+      }
+      list.append(row);
+    }
+    if (note) {
+      note.textContent = !withIntro.length ? "Пока ни у одного установленного стиля нет интро. Оно бывает у тем из библиотеки — например, ASCII или Madk1d."
+        : motionOff() ? "Анимации интерфейса выключены (Интерфейс → Эффекты и анимации) — интро не показывается."
+        : "Щелчок или любая клавиша пропускают интро.";
+    }
+  }
+
   // ---------- виджет для OBS: «@@ css whisper-obs» и «@@ settings whisper-obs» (чистит core/theme-css.js) ----------
   const obsOf = (th) => TC.obsCss(th);
   window.wmtObs = (id) => meta.get(id)?.obs || null;
@@ -204,13 +294,14 @@
     await IDB.set(KEY(id), typeof data === "string" ? data : new Blob([data]));      // храним как есть: текст или архив
     if (known >= 0) cfg.themes[known] = entry; else cfg.themes.push(entry);
     const settings = th.settings(APP);
-    meta.set(id, { manifest: m, tokens: th.tokens, settings, obs: obsOf(th) });
+    meta.set(id, { manifest: m, tokens: th.tokens, settings, obs: obsOf(th), intro: TC.introInfo(th) });
     setFeatures(id, settings);
     cfg.s[id] = defaultsFrom({ tokens: th.tokens, settings }, base);
     inject(id, th);
     await applyThemeBg(th, id);
     cfg.style = id;
     applyCfg(); saveCfg(); syncControls(); renderCards();
+    playIntro(id, { th });                 // у новой темы есть интро — сразу видно, какое (если интро не выключены)
     note(`${known >= 0 ? "Стиль обновлён" : "Добавлен стиль"} «${entry.name}» (основа — ${NAMES[base]})${th.background ? "" : ", без фоновой картинки"}.`, true);
     showToast(`Стиль «${entry.name}» ${known >= 0 ? "обновлён" : "добавлен"}`, 3500, { kind: "ok" });
   }
@@ -288,7 +379,12 @@
     const obsSettings = orig?.settings(OBS) || {};
     // общая секция ролей: у своего стиля — как была в файле; у копии встроенного — заготовка-подсказка
     const coreCss = orig?.css(CORE) || "/* Общие правила для всех приложений Whisper (Yandex, VK…): пиши по ролям, а не по классам.\n   Например: [data-w=\"search\"] { border-radius: 0; } — любой поиск в любом приложении;\n   [data-w=\"player.volume\"] { … } — громкость в плеере. Список ролей — docs/CORE.md, раздел «Роли».\n   Правила из «@@ css whisper-music» ниже идут после этих и главнее. */";
-    const theme = { comment, manifest, tokens, settings: { [APP]: settings, [OBS]: obsSettings }, css: { [CORE]: coreCss, [APP]: css, [OBS]: obsCss } };
+    // интро своего стиля — как было в его файле (у копии встроенного интро нет — секции не будет)
+    const theme = {
+      comment, manifest, tokens,
+      settings: { [APP]: settings, [OBS]: obsSettings, [INTRO]: orig?.settings(INTRO) || {} },
+      css: { [CORE]: coreCss, [APP]: css, [OBS]: obsCss, [INTRO]: orig?.css(INTRO) || "" },
+    };
     const data = await WMT.pack({ ...theme, background, files });
     return { manifest, data, archive: !!background || files.length > 0, text: WMT.serialize(theme) };
   }
@@ -352,6 +448,7 @@
     }
     applyView();
     syncControls();
+    paintIntro();
   }
 
   // ---------- вид списка стилей: обычные карточки или компактно (кружочки) ----------
@@ -406,6 +503,9 @@
       await importSafe(new Uint8Array(await f.arrayBuffer()));         // текст или архив — разберётся WMT.open
     };
     document.getElementById("wmtSave").onclick = exportCurrent;
+    // сменили стиль (в том числе встроенный — его карточки обрабатывает main.js) — «Показать» у нового текущего
+    pick.addEventListener("click", () => setTimeout(paintIntro));
+    document.getElementById("cAnim")?.addEventListener("change", () => setTimeout(paintIntro));
     $("#settingsBtn").addEventListener("click", () => renderCards());      // превью карточек — с уже загруженными фонами
   }
 
@@ -458,6 +558,7 @@
   // аварийный выход: свой стиль сломал вид окна — Ctrl+Shift+Backspace возвращает встроенный
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.shiftKey && e.key === "Backspace") {
+      introStop();
       cfg.style = "royal"; applyCfg(); saveCfg(); syncControls();
       showToast("Включён встроенный стиль «Королевский»", 3500, { kind: "ok" });
     }
@@ -466,12 +567,13 @@
   // ---------- запуск: подключить сохранённые стили ----------
   (async () => {
     mountUi();
-    let changed = false;
+    let changed = false, curTh = null;
     for (const t of [...cfg.themes]) {
       try {
         const th = await loadStored(t.id);
         if (!th) throw new Error("нет файла");
-        meta.set(t.id, { manifest: th.manifest, tokens: th.tokens, settings: th.settings(APP), obs: obsOf(th) });
+        if (t.id === cfg.style) curTh = th;              // интро текущего стиля — без второго чтения из IndexedDB
+        meta.set(t.id, { manifest: th.manifest, tokens: th.tokens, settings: th.settings(APP), obs: obsOf(th), intro: TC.introInfo(th) });
         const au = authorOf(th.manifest);                 // темы, загруженные до появления подписи автора
         if ((t.author || "") !== au) { t.author = au; changed = true; }
         setFeatures(t.id, th.settings(APP));
@@ -485,6 +587,7 @@
     if (changed) saveCfg();
     applyCfg(); renderCards();
     window.bootMark?.("themes");      // boot.js: CSS своих тем подключены — можно показывать интерфейс
+    if (curTh && cfg.style) playIntro(cfg.style, { th: curTh });      // интро — после шторки запуска
   })();
 
   window.wmtInternals = { splitTop, scopeSel, scopeCss, cssParse, extractCss, buildFile, importText };      // для отладки и тестов

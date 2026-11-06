@@ -15,6 +15,7 @@ mod hotkeys;
 mod lyrics;
 mod mini;
 mod net;
+mod notify;
 #[path = "../../src/core/rust/obs.rs"]
 mod obs;
 mod power;
@@ -191,6 +192,8 @@ pub fn run() {
         .plugin(hotkeys::plugin())
         // обновления из GitHub Releases — только через команды update.rs, у страницы прямого доступа к плагину нет
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // системные уведомления — только через команду notify::sys_notify, у страницы прямого доступа к плагину нет
+        .plugin(tauri_plugin_notification::init())
         // Whisper Archive: потоковое воспроизведение треков архива (wa://localhost/track/<id>,
         // на Windows — http://wa.localhost/...). Только для главного окна: окно входа Яндекса
         // и любые внешние страницы получить треки архива этим путём не могут.
@@ -306,6 +309,8 @@ pub fn run() {
             whisper::rooms::wa_room_transfer,
             whisper::rooms::wa_room_ping,
             whisper::rooms::wa_room_missing,
+            whisper::rooms::wa_room_wink,
+            notify::sys_notify,
             whisper::rooms::wa_room_friends,
             whisper::rooms::wa_room_friend_forget,
             whisper::rooms::wa_room_invite,

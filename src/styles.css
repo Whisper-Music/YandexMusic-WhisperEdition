@@ -145,6 +145,10 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 .volpop { transition: opacity .15s .3s, transform .15s .3s, visibility 0s .45s; }
 .volwrap:hover .volpop, .volwrap:focus-within .volpop { transition-delay: 0s; }
 .volpop::after { content: ""; position: absolute; left: -16px; right: -16px; top: 100%; height: 16px; }
+/* Открытая «Очередь и история» (.qpanel, z-index 9) стоит над плеером, и ползунок громкости уходил под неё.
+   Пока ползунок открыт — плеер выше панели. .volwrap — для тем, где плеер разобран (display: contents, retro-tv). */
+html:has(.player .volwrap:hover, .player .volwrap:focus-within) .player,
+.player .volwrap:hover, .player .volwrap:focus-within { z-index: 10 !important; }
 .volval { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .volbox { position: relative; width: 28px; height: 110px; }
 .volbox input { position: absolute; left: 50%; top: 50%; width: 110px; transform: translate(-50%, -50%) rotate(-90deg); }

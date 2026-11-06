@@ -75,6 +75,8 @@ const COMMANDS: &[&str] = &[
     "wa_room_transfer",
     "wa_room_ping",
     "wa_room_missing",
+    "wa_room_wink",
+    "sys_notify",
     "wa_room_friends",
     "wa_room_friend_forget",
     "wa_room_invite",

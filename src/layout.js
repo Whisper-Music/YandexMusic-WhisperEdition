@@ -11,9 +11,10 @@
     time: ["always", "hover"],
     pins: ["top", "side"],          // закреплённые: полосой закладок сверху или колонкой у боковой панели (как папки в Telegram)
     pinhide: ["off", "on"],         // закреплённые спрятаны и выезжают при наведении на край (Интерфейс → «Скрывать закреплённые»)
+    ui: ["normal", "super"],        // мини-вид: боковая панель — плавающая колонка значков, плеер — «таблетка» снизу
   };
   // sw — ширина боковой панели, ph — высота нижней (px, перетаскиванием за край); 0 — размер по умолчанию
-  const ly = { side: "left", sb: "full", pl: "full", time: "always", pins: "top", pinhide: "off", sw: 0, ph: 0 };
+  const ly = { side: "left", sb: "full", pl: "full", time: "always", pins: "top", pinhide: "off", ui: "normal", sw: 0, ph: 0 };
   const SW_MIN = 170, SW_MAX = 440, PH_GROW = 160;
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || "null");
@@ -26,8 +27,10 @@
   const root = document.documentElement;
   // стиль оформления задаёт расположение сам (settings → "layout": "fixed"): режимы не применяются,
   // но выбор пользователя сохраняется и вернётся вместе с другим стилем
-  const DEF = { side: "left", sb: "full", pl: "full", time: "always", pins: "top", pinhide: "off" };
+  const DEF = { side: "left", sb: "full", pl: "full", time: "always", pins: "top", pinhide: "off", ui: "normal" };
   let locked = false;
+  const moved = [];                 // мини-вид: переставленные кнопки плеера и метки их мест (superDom)
+  let smBtn = null;                 // мини-вид: кнопка «⋮» в таблетке
   window.layoutLock = (on) => {
     if (locked === !!on) return;
     locked = !!on; apply();
@@ -41,28 +44,36 @@
     noPinHide = !!on; apply();
     window.dispatchEvent(new Event("resize"));
   };
-  const eff = (k) => (locked ? DEF[k] : k === "pinhide" && noPinHide ? "off" : ly[k]);
+  // в мини-вид боковая панель — всегда значками (правила свёрнутой панели), нижняя — своя раскладка,
+  // закреплённые — закладками сверху (колонке сбоку негде встать); выбор пользователя для обычного вида сохраняется
+  const isSuper = () => !locked && ly.ui === "super";
+  const SUPER = { sb: "mini", pl: "full", pins: "top" };
+  const eff = (k) => (locked ? DEF[k] : isSuper() && k in SUPER ? SUPER[k] : k === "pinhide" && noPinHide ? "off" : ly[k]);
   function apply() {
     for (const k of Object.keys(OPTS)) root.setAttribute("data-ly-" + k, eff(k));
+    superDom(isSuper());
     // свои размеры панелей (CSS-правила в layout.css действуют, только пока стоит атрибут)
-    const useSw = !locked && ly.sw > 0 && ly.sb !== "mini";
-    const usePh = !locked && ly.ph > 0 && ly.pl !== "mini";
+    const useSw = !locked && !isSuper() && ly.sw > 0 && ly.sb !== "mini";
+    const usePh = !locked && !isSuper() && ly.ph > 0 && ly.pl !== "mini";
     if (useSw) { root.style.setProperty("--ly-sw", ly.sw + "px"); root.setAttribute("data-ly-sw", ""); }
     else { root.style.removeProperty("--ly-sw"); root.removeAttribute("data-ly-sw"); }
     if (usePh) { root.style.setProperty("--ly-ph", ly.ph + "px"); root.setAttribute("data-ly-ph", ""); }
     else { root.style.removeProperty("--ly-ph"); root.removeAttribute("data-ly-ph"); }
-    document.querySelectorAll(".lyhandle").forEach((h) => (h.hidden = locked));
+    document.querySelectorAll(".lyhandle").forEach((h) => (h.hidden = locked || isSuper()));
     document.getElementById("layoutCard")?.classList.toggle("lylock", locked);
+    document.getElementById("layoutCard")?.classList.toggle("lysuper", isSuper());
     // в свёрнутой панели подписей не видно — показываем их подсказкой
     const fold = document.getElementById("sideFold");
+    const sbMini = eff("sb") === "mini";
     if (fold) fold.hidden = locked;
     if (fold) {
       fold.textContent = "Свернуть";
-      fold.title = ly.sb === "mini" ? "Развернуть панель" : "Свернуть панель";
-      fold.setAttribute("aria-expanded", ly.sb === "mini" ? "false" : "true");
+      // в мини-вид эта кнопка возвращает обычный вид
+      fold.title = isSuper() ? "Обычный вид (Ctrl+Shift+M)" : sbMini ? "Развернуть панель" : "Свернуть панель";
+      fold.setAttribute("aria-expanded", sbMini ? "false" : "true");
     }
     document.querySelectorAll(".side > .nav:not(.sidefold)").forEach((b) => {
-      if (ly.sb === "mini") { if (!b.title) { b.title = b.textContent.trim(); b.dataset.lyTitle = "1"; } }
+      if (sbMini) { if (!b.title) { b.title = b.textContent.trim(); b.dataset.lyTitle = "1"; } }
       else if (b.dataset.lyTitle) { b.removeAttribute("title"); delete b.dataset.lyTitle; }
     });
     const ph = document.getElementById("pinHide");
@@ -78,6 +89,105 @@
     });
   }
   apply();
+
+  // ---------- мини-вид ----------
+  // Боковая панель — плавающая колонка значков слева по центру (правила свёрнутой панели + layout.css), плеер —
+  // «таблетка» по центру снизу: слева плитка с обложкой и автором, в таблетке линия и кнопки ♥ ⏮ ⏯ ⏭ ✕ и «⋮».
+  // «⋮» открывает над правым краем столбик значков: «Слушать вместе», сон, очередь и история, громкость, «⋯», режимы.
+  // Лайк и дизлайк на это время переезжают в ряд кнопок, перемешивание и повтор — в столбик (на месте остаются
+  // метки-комментарии, по ним всё возвращается). Ничего не пересоздаётся: те же кнопки с теми же id и обработчиками.
+  // (moved и smBtn объявлены выше, рядом с locked: apply() зовёт superDom ещё при загрузке скрипта)
+  function superDom(on) {
+    const ctrls = document.querySelector(".player .ctrls"), pright = document.querySelector(".player .pright");
+    if (!ctrls || !pright) return;                                   // разметки ещё нет (скрипт в <head>) — позже, из init()
+    const has = moved.length > 0;
+    if (on === has) return;
+    if (on) {
+      const put = (id, where) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const mark = document.createComment("ly-super:" + id);
+        el.before(mark); moved.push([el, mark]); where(el);
+      };
+      put("likeBtn", (el) => ctrls.prepend(el));
+      put("disBtn", (el) => ctrls.append(el));
+      put("shuffleBtn", (el) => pright.prepend(el));
+      put("repeatBtn", (el) => pright.prepend(el));
+      if (!smBtn) {
+        smBtn = document.createElement("button");
+        smBtn.id = "smMore"; smBtn.type = "button"; smBtn.className = "smmore";
+        smBtn.title = "Ещё: слушать вместе, сон, очередь, громкость";
+        smBtn.setAttribute("aria-haspopup", "true");
+        smBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>';
+        smBtn.onclick = (e) => { e.stopPropagation(); smOpen(!root.classList.contains("sm-open")); };
+      }
+      ctrls.append(smBtn);
+    } else {
+      smOpen(false);
+      while (moved.length) { const [el, mark] = moved.pop(); mark.replaceWith(el); }
+      smBtn?.remove();
+    }
+    // Плитка, таблетка и столбик — каждая своя панель: класс .panel, чтобы их оформляли стиль и темы
+    // (рамки «Мела», орнамент «Королевского»…) так же, как боковую панель. Свой фон у обёртки .player снят (layout.css).
+    for (const el of document.querySelectorAll(".player > .pinfo, .player > .pcenter, .player > .pright")) {
+      if (on && !el.classList.contains("panel")) { el.classList.add("panel"); el.dataset.lyPanel = "1"; }
+      else if (!on && el.dataset.lyPanel) { el.classList.remove("panel"); delete el.dataset.lyPanel; }
+    }
+    tileTitle(on);
+  }
+  // название и автор — во всплывающей подсказке плитки (если не влезли целиком)
+  let tileObs = null;
+  function tileTitle(on) {
+    const tile = document.querySelector(".player .pinfo"), t = document.getElementById("pTitle"), a = document.getElementById("pArtist");
+    if (!tile || !t) return;
+    const upd = () => { tile.title = [t.textContent.trim(), a?.textContent.trim()].filter(Boolean).join(" — "); };
+    if (on) {
+      upd();
+      if (!tileObs && "MutationObserver" in window) {
+        tileObs = new MutationObserver(upd);
+        for (const n of [t, a]) if (n) tileObs.observe(n, { childList: true, characterData: true, subtree: true });
+      }
+    } else {
+      tileObs?.disconnect(); tileObs = null;
+      tile.removeAttribute("title");
+    }
+  }
+  function smOpen(v) {
+    root.classList.toggle("sm-open", !!v);
+    smBtn?.setAttribute("aria-expanded", v ? "true" : "false");
+  }
+  // столбик закрывается щелчком мимо него и Esc (громкость и меню «⋯» внутри работают как обычно)
+  document.addEventListener("pointerdown", (e) => {
+    if (!root.classList.contains("sm-open")) return;
+    if (e.target.closest?.(".player .pright, #smMore, .tmenu, .modal")) return;
+    smOpen(false);
+  }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("sm-open")) smOpen(false); });
+
+  // Включить и выключить: Ctrl+Shift+M (в окне, не в полях ввода) или двойной щелчок по пустому месту боковой или
+  // нижней панели (не по кнопкам, линии и подписям). В мини-вид ещё — кнопка-стрелка внизу колонки.
+  let hintShown = false;
+  function toggleSuper() {
+    if (locked) { if (typeof showToast === "function") showToast("Стиль задаёт расположение сам — мини-вид с ним не работает", 3500); return; }
+    set("ui", isSuper() ? "normal" : "super");
+    if (isSuper() && !hintShown && typeof showToast === "function") {
+      hintShown = true;
+      showToast("Мини-вид: Ctrl+Shift+M или двойной щелчок по пустому месту панели — обычный вид", 5000);
+    }
+  }
+  window.layoutToggleSuper = toggleSuper;
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey && e.shiftKey && !e.altKey && e.code === "KeyM")) return;
+    if (e.target.closest?.("input, textarea, [contenteditable]") || document.querySelector(".modal")) return;
+    e.preventDefault(); toggleSuper();
+  });
+  const EMPTY_SKIP = "button, a, input, select, textarea, label, [role=button], .seekrow, .meta, .cover, .volpop, .sbox, .lyhandle, .roomline";
+  document.addEventListener("dblclick", (e) => {
+    const t = e.target;
+    if (!t.closest?.(".side, .player") || t.closest(EMPTY_SKIP)) return;
+    window.getSelection?.()?.removeAllRanges();
+    toggleSuper();
+  });
 
   function set(k, v) {
     if (!OPTS[k]?.includes(v) || ly[k] === v) return;
@@ -180,7 +290,7 @@
     const side = document.querySelector(".side");
     if (!side) return;
     const w = side.getBoundingClientRect().width;
-    const lvl = locked || ly.sb === "mini" || !w ? "" : w < 205 ? "xs" : w < 240 ? "s" : "";
+    const lvl = locked || eff("sb") === "mini" || !w ? "" : w < 205 ? "xs" : w < 240 ? "s" : "";
     if (lvl) { if (root.getAttribute("data-ly-sbw") !== lvl) root.setAttribute("data-ly-sbw", lvl); }
     else root.removeAttribute("data-ly-sbw");
   }
@@ -224,13 +334,17 @@
     const keep = () => { clearTimeout(tClose); tClose = 0; };
 
     // ---- сверху ----
-    // граница — верх поиска в боковой панели (в свёрнутой панели — кружок поиска); без поиска — верх панели + 24px
+    // граница — верх поиска в боковой панели (в свёрнутой панели — кружок поиска); без поиска — верх панели + 24px.
+    // Но не ниже верха основной части окна: в мини-виде колонка с поиском висит посередине окна, и закладки
+    // открывались от наведения на жанры и заголовки страницы. Зона — только полоса у самого верха, над страницей.
     const searchTop = () => {
+      const main = document.querySelector(".main")?.getBoundingClientRect();
+      const cap = main && main.height ? main.top + 4 : Infinity;
       const s = document.querySelector(".side .sbox") || document.getElementById("search");
       const r = s?.getBoundingClientRect();
-      if (r && r.height) return r.top;
+      if (r && r.height) return Math.min(r.top, cap);
       const side = document.querySelector(".side")?.getBoundingClientRect();
-      return side ? side.top + 24 : 80;
+      return Math.min(side ? side.top + 24 : 80, cap);
     };
     document.addEventListener("pointermove", (e) => {
       if (!on() || root.getAttribute("data-ly-pins") !== "top") return;
@@ -271,7 +385,7 @@
     if (side && !document.getElementById("sideFold")) {
       const b = document.createElement("button");
       b.className = "nav sidefold"; b.id = "sideFold"; b.type = "button";
-      b.onclick = () => set("sb", ly.sb === "mini" ? "full" : "mini");
+      b.onclick = () => (isSuper() ? set("ui", "normal") : set("sb", ly.sb === "mini" ? "full" : "mini"));
       side.append(b);
     }
 

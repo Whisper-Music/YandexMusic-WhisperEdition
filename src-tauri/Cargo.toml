@@ -42,6 +42,9 @@ tauri-plugin-global-shortcut = "2"
 # а выпуски собираются в новом формате (createUpdaterArtifacts: true) — сам .exe/.msi/.AppImage.
 # Заодно уходит crate zip 4.x с уязвимостями распаковки (RUSTSEC-2026-0367/0368/0369).
 tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
+# системные уведомления (notify.rs): друг зовёт в комнату, участник подмигнул — когда окно свёрнуто или в фоне.
+# Windows — всплывающее уведомление центра уведомлений, Linux — через D-Bus (org.freedesktop.Notifications)
+tauri-plugin-notification = "2"
 
 
 # режим экономии в трее: доступ к движку окна WebView2 (версии те же, что уже тянет Tauri — ничего нового не скачивается)
