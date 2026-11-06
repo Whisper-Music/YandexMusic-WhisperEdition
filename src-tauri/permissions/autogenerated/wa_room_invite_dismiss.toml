@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-invite-dismiss"
+description = "Enables the wa_room_invite_dismiss command without any pre-configured scope."
+commands.allow = ["wa_room_invite_dismiss"]
+
+[[permission]]
+identifier = "deny-wa-room-invite-dismiss"
+description = "Denies the wa_room_invite_dismiss command without any pre-configured scope."
+commands.deny = ["wa_room_invite_dismiss"]

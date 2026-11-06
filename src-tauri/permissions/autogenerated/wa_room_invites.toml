@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-invites"
+description = "Enables the wa_room_invites command without any pre-configured scope."
+commands.allow = ["wa_room_invites"]
+
+[[permission]]
+identifier = "deny-wa-room-invites"
+description = "Denies the wa_room_invites command without any pre-configured scope."
+commands.deny = ["wa_room_invites"]

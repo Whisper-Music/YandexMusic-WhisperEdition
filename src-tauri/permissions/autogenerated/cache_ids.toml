@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cache-ids"
+description = "Enables the cache_ids command without any pre-configured scope."
+commands.allow = ["cache_ids"]
+
+[[permission]]
+identifier = "deny-cache-ids"
+description = "Denies the cache_ids command without any pre-configured scope."
+commands.deny = ["cache_ids"]

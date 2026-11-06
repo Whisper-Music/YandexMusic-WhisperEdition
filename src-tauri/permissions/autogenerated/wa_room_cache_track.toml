@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-cache-track"
+description = "Enables the wa_room_cache_track command without any pre-configured scope."
+commands.allow = ["wa_room_cache_track"]
+
+[[permission]]
+identifier = "deny-wa-room-cache-track"
+description = "Denies the wa_room_cache_track command without any pre-configured scope."
+commands.deny = ["wa_room_cache_track"]

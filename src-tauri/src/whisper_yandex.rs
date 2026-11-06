@@ -6,6 +6,31 @@
 
 use crate::whisper::{upload, WaResponse};
 
+/// mp3 трека с Яндекса по номеру (адрес Rust получает сам) — для архива и для кэша комнаты.
+async fn yandex_audio(track_id: &str) -> Result<Vec<u8>, String> {
+    let audio_url = crate::net::track_mp3_url(track_id)
+        .await
+        .map_err(|e| format!("не удалось получить трек с Яндекса: {e}"))?;
+    let audio = crate::net::fetch_media(&audio_url)
+        .await
+        .map_err(|e| format!("не удалось скачать трек с Яндекса: {e}"))?;
+    if audio.len() > upload::MAX_TRACK_UPLOAD {
+        return Err("трек больше 100 МБ — архив такие не принимает".into());
+    }
+    Ok(audio)
+}
+
+/// «Слушать вместе»: скачивает трек с Яндекса и кладёт во временный кэш комнаты на сервере архива — гости, у которых
+/// этого трека нет, слушают его оттуда. В архив (альбомы) ничего не сохраняется; файл пропадает вместе с комнатой.
+#[tauri::command]
+pub async fn wa_room_cache_track(code: String, track_id: String, file_name: String) -> Result<WaResponse, String> {
+    let up = upload::begin(None, None)?;
+    let audio = yandex_audio(&track_id).await?;
+    let track = upload::TrackFile::new(&file_name, &audio)
+        .ok_or_else(|| "Яндекс отдал файл в неизвестном формате".to_string())?;
+    up.to_room_cache(&code, track).await
+}
+
 /// Скачивает трек с Яндекса и сохраняет в архив.
 ///  * `album_id` задан — трек добавляется в этот альбом (он должен принадлежать владельцу ключа);
 ///  * иначе создаётся новый приватный альбом `album_title` с обложкой: `cover_url` (адрес Яндекса)
@@ -23,15 +48,7 @@ pub async fn wa_save_track(
     let up = upload::begin(album_id.as_deref(), cover_bytes.as_ref().map(|b| b.len()))?;
 
     // ссылку на файл Rust получает сам по номеру трека — произвольный адрес для скачивания интерфейс не передаёт
-    let audio_url = crate::net::track_mp3_url(&track_id)
-        .await
-        .map_err(|e| format!("не удалось получить трек с Яндекса: {e}"))?;
-    let audio = crate::net::fetch_media(&audio_url)
-        .await
-        .map_err(|e| format!("не удалось скачать трек с Яндекса: {e}"))?;
-    if audio.len() > upload::MAX_TRACK_UPLOAD {
-        return Err("трек больше 100 МБ — архив такие не принимает".into());
-    }
+    let audio = yandex_audio(&track_id).await?;
     let track = upload::TrackFile::new(&file_name, &audio)
         .ok_or_else(|| "Яндекс отдал файл в неизвестном формате".to_string())?;
 

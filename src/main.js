@@ -4310,18 +4310,25 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
   // (или снова включался кнопкой «Играть»), хотя в плеере уже название и обложка нового.
   if (!audio.paused) audio.pause();
   resumeOnNet = false;
-  curLocal = false; curFromWa = false;      // флаги прошлого трека не должны влиять на разбор ошибки этого
+  curLocal = false; curFromWa = false; curCache = false;      // флаги прошлого трека не должны влиять на разбор ошибки этого
   try {
     // Скачанный трек играет с диска (ymlocal://, Rust отдаёт файл кусками) — без единого запроса в сеть.
     // Иначе источники ядра (Whisper.sources — Whisper Archive, core/archive.js): трек есть в архиве — играет поток оттуда
     // (wa://, кусками), иначе версия Яндекса.
-    const local = got.has(String(t.id)) ? LOCAL_BASE + "track/" + encodeURIComponent(String(t.id)) : "";
+    // Кэш приложения (cache.js / cache.rs): тот же ymlocal://, Rust сам ищет трек сначала среди скачанных, потом в кэше.
+    // Скачанный главнее архива; кэш — после архива (версия из архива, если она есть, выбрана пользователем),
+    // а без интернета — сразу.
+    const LOCAL_URL = LOCAL_BASE + "track/" + encodeURIComponent(String(t.id));
+    const inCache = !got.has(String(t.id)) && !!window.appCache?.has(String(t.id));
+    let local = got.has(String(t.id)) || (inCache && !navigator.onLine) ? LOCAL_URL : "";
     // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
     if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");
-    if (local) backfillMeta([t]);
+    if (local && !inCache) backfillMeta([t]);
     const wa = local ? null : (await window.Whisper?.sources.resolve(t, queue[i + 1])) || null;
     if (my !== playSeq) return;
-    wReport({ source: local ? "local" : wa ? wa.source : "provider" });     // печать «WA» на обложке и т.п.
+    if (!local && !wa && inCache) local = LOCAL_URL;
+    curCache = !!local && inCache;
+    wReport({ source: curCache ? "cache" : local ? "local" : wa ? wa.source : "provider" });     // печать «WA» на обложке и т.п.
     curFromWa = !!wa; curLocal = !!local;
     let src = null;
     if (audio._native) {
@@ -4368,7 +4375,9 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
       if (my !== playSeq) return;
       // скачанный файл не открылся (удалён или не читается) — забываем его и играем трек обычным путём
       if (local && err?.name === "NotSupportedError") {
-        curLocal = false; got.delete(String(t.id)); syncGot();
+        curLocal = false;
+        if (curCache) { curCache = false; window.appCache?.forget(String(t.id)); }       // файл кэша повреждён
+        else { got.delete(String(t.id)); syncGot(); }
         return play(i, resumeAt);
       }
       // свой движок: файл из архива не скачался (нет доступа, архив недоступен) — сразу версия Яндекса
@@ -4632,6 +4641,7 @@ function applyViz() {
 // Раньше анализ подключался только при старте СЛЕДУЮЩЕГО трека, поэтому сразу после включения визуализатор
 // просто переливался. Теперь уже играющий трек незаметно переводится на анализируемый плеер с той же позиции.
 let vizSwapSeq = 0;
+let curCache = false;           // текущий трек играет из кэша приложения (cache.js), а не из скачанных
 let curFromWa = false;          // текущий трек играет из Whisper Archive (поток wa:// или, запасной путь, файл в curBlob)
 async function ensureVizAudio() {
   if (!vizWanted() || audioViz || needLoad || !audio || !audio.src || current < 0 || !queue[current]) return;

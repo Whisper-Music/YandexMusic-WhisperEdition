@@ -167,6 +167,8 @@
     stream: async (t) => ({ kind: "url", url: await directLink(String(t.id)), mime: "audio/mpeg" }),
     // «Сохранить в архив» (core/archive.js): mp3 и обложку Rust скачивает с Яндекса сам по номеру трека (whisper_yandex.rs)
     archiveSave: (t, args) => invoke("wa_save_track", { trackId: String(t.id), ...args }),
+    // «Слушать вместе» (core/together.js): трек во временный кэш комнаты для гостей, у которых его нет (не в архив)
+    roomCache: (t, code) => invoke("wa_room_cache_track", { code, trackId: String(t.id), fileName: String(t.title || "Трек") }),
     // «Слушать вместе» (core/together.js): трек в формате сервера комнат и обратно (сервер хранит поля Яндекса)
     toRoom: (t) => { const r = t.raw || {}; return {
       id: String(t.id),
@@ -338,6 +340,15 @@
     // значок «скачан» — перед временем и кнопками строки, а не в самом конце
     decorateRow: (li, t, before) => { syncGotRow(li); const gm = li.querySelector(".gotmark"); if (gm && before) li.insertBefore(gm, before); },
     icon: (name) => ICON[name] || "",
+    // лайк в строке общих модулей (история и очередь, core/queue.js): та же кнопка .likebtn, что в списках, —
+    // refreshHearts() обновляет её по li[data-id] вместе со всеми остальными сердечками
+    likeButton: (t) => {
+      const raw = t.raw || t, b = document.createElement("button");
+      b.className = "likebtn";
+      setHeart(b, likedIds.has(String(raw.id)));
+      b.onclick = (e) => { e.stopPropagation(); toggleLike(raw); };
+      return b;
+    },
     // виджет OBS (core/obs.js): цвета стиля — при динамическом фоне из обложки (getComputedStyle не годится:
     // --accent зарегистрирован как <color> и читается как rgb(), а виджету нужен #rrggbb); оформление — секции
     // whisper-obs своего стиля (theme.js → wmtObs); заливка ползунков рисуется main.js (fill)

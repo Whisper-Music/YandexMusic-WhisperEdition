@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cache-open-dir"
+description = "Enables the cache_open_dir command without any pre-configured scope."
+commands.allow = ["cache_open_dir"]
+
+[[permission]]
+identifier = "deny-cache-open-dir"
+description = "Denies the cache_open_dir command without any pre-configured scope."
+commands.deny = ["cache_open_dir"]

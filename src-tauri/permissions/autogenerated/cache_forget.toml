@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cache-forget"
+description = "Enables the cache_forget command without any pre-configured scope."
+commands.allow = ["cache_forget"]
+
+[[permission]]
+identifier = "deny-cache-forget"
+description = "Denies the cache_forget command without any pre-configured scope."
+commands.deny = ["cache_forget"]

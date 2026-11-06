@@ -13,6 +13,7 @@
     "allow-wa-stream",
     "allow-wa-prefetch",
     "allow-wa-save-track",
+    "allow-wa-room-cache-track",
     "allow-wa-room-create",
     "allow-wa-room-get",
     "allow-wa-room-join",
@@ -22,6 +23,13 @@
     "allow-wa-room-dismiss",
     "allow-wa-room-transfer",
     "allow-wa-room-ping",
-    "allow-room-link-take"
+    "allow-wa-room-missing",
+    "allow-wa-room-friends",
+    "allow-wa-room-friend-forget",
+    "allow-wa-room-invite",
+    "allow-wa-room-invites",
+    "allow-wa-room-invite-dismiss",
+    "allow-room-link-take",
+    "allow-open-link-take"
   ]
 }

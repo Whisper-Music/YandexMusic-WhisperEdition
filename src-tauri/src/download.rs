@@ -623,10 +623,12 @@ pub fn open_local(app: &AppHandle, id: &str) -> Option<(std::fs::File, PathBuf, 
     if !id_ok(id) {
         return None;
     }
-    let p = {
+    let found = {
         let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        PathBuf::from(read_index(app).get(id)?.path())
+        read_index(app).get(id).map(|e| PathBuf::from(e.path()))
     };
+    // не скачан — может быть в кэше приложения (cache.rs: популярные и проигранные треки плейлиста)
+    let Some(p) = found else { return crate::cache::open(app, id) };
     match open_audio(&p, &roots(app)) {
         Ok((f, len)) => Some((f, p, len)),
         Err(e) => {

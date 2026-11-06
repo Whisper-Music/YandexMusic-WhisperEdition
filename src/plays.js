@@ -64,13 +64,40 @@
   function finish() {
     if (!cur) return;
     const s = cur; cur = null; saveCur();
+    if (s.wait) { s.done = true; return; }             // ещё не ясно, есть ли трек на Яндексе: итог отправит проверка
     queueReport(form(s, true));
   }
 
-  // прошлый запуск закрылся посреди трека — его итог ещё не отправлен
+  // прошлый запуск закрылся посреди трека — его итог ещё не отправлен (если «начал» вообще уходил)
   const left = load(CUR_KEY, null);
-  if (left?.playId && left.trackId) queueReport(form(left, true));
+  if (left?.playId && left.trackId && !left.wait) queueReport(form(left, true));
   try { localStorage.removeItem(CUR_KEY); } catch {}
+
+  // ---------- трек из архива ведущего «Слушать вместе» ----------
+  // Гостю приходит номер трека с Яндекса ведущего и файл из его архива (waShared, core/together.js). Если у гостя этого
+  // трека на Яндексе нет (недоступен в его стране, удалён, ведущий слушает другой сервис и номер чужой), звук идёт
+  // только из архива — и Яндексу о таком прослушивании не сообщаем: засчитывать нечего (или засчитался бы чужой трек).
+  const shared = (t) => !!(t?.waShared || t?.raw?.waShared);
+  const norm = (s) => String(s ?? "").normalize("NFKC").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const onYandex = new Map();                          // номер трека → Promise<boolean> (на время запуска)
+  function checkOnYandex(id, t) {
+    if (onYandex.has(id)) return onYandex.get(id);
+    const p = (async () => {
+      try {
+        const [y] = await W.provider().tracks([id]);
+        if (!y?.id || y.available === false) return false;
+        // номер тот же, а трек другой (номер из другого сервиса) — не он
+        const same = norm(y.title) === norm(t.title) || (t.artists || []).some((a) => (y.artists || []).some((b) => norm(a?.name) && norm(a.name) === norm(b?.name)));
+        return same;
+      } catch (e) {
+        // Яндекс ответил, что такого трека нет, — нет; сеть и прочее — не знаем, отчёт подождёт в очереди как обычно
+        return !/^HTTP (400|404)\b/.test(String(e?.message || e));
+      }
+    })();
+    onYandex.set(id, p);
+    if (onYandex.size > 200) onYandex.delete(onYandex.keys().next().value);
+    return p;
+  }
 
   W.on("start", ({ track: t }) => {
     const id = ymId(t);
@@ -80,16 +107,28 @@
     finish();
     if (!/^\d{1,20}$/.test(id)) return;                // не трек Яндекса — засчитывать нечего
     const r = t.raw || {};
-    cur = {
+    const s = cur = {
       playId: uuid(), trackId: id, albumId: r.albums?.[0]?.id != null ? String(r.albums[0].id) : "",
       from: fromOf(W.player.state().context), len: (t.durationMs || r.durationMs || 0) / 1000,
       played: 0, pos: 0, cache: false, at: new Date().toISOString(),
     };
-    saveCur();
-    queueReport(form(cur, false));
+    if (!shared(t)) { saveCur(); queueReport(form(s, false)); return; }
+    // трек из архива ведущего: сначала узнаём, есть ли он у гостя на Яндексе; пока не ясно, «начал» не отправляется
+    s.wait = true;
+    checkOnYandex(id, t).then((ok) => {
+      if (!ok) {
+        s.skip = true;
+        if (cur === s) { cur = null; saveCur(); }      // звучит только из архива — прослушивание не считаем
+        return;
+      }
+      s.wait = false;
+      queueReport(form(s, false));
+      if (s.done) queueReport(form(s, true));          // трек успел закончиться, пока шла проверка
+      else if (cur === s) saveCur();
+    });
   });
   // скачанный файл — from-cache, как у официального клиента в офлайне
-  W.on("source", ({ source }) => { if (cur) { cur.cache = source === "local"; saveCur(); } });
+  W.on("source", ({ source }) => { if (cur) { cur.cache = source === "local" || source === "cache"; saveCur(); } });
 
   // Сколько реально звучало: считаем по секундам, только пока трек играет (не пауза, не загрузка, не буферизация).
   let last = performance.now(), n = 0;

@@ -211,6 +211,10 @@ html:root[data-ly-side="right"] .lyh-side { justify-self: start; margin-right: 0
 }
 .lyh-side::after { top: 50%; left: 4px; width: 4px; height: 56px; transform: translateY(-50%); }
 .lyh-pl::after { left: 50%; top: 4px; width: 64px; height: 4px; transform: translateX(-50%); }
+/* Окно громкости (и другие всплывающие окна плеера) выходят выше панели — прямо через эту ручку. Ручка лежит поверх
+   (z-index 20) и забирала курсор на верхней границе панели: :hover у громкости пропадал, окно закрывалось.
+   Пока открыто окно плеера, ручка мышь не ловит — приоритет у окна. */
+html:has(.player .volwrap:hover, .player .volwrap:focus-within) .lyh-pl { pointer-events: none; }
 .lyhandle:hover::after { opacity: .55; }
 .lyhandle.drag::after { opacity: .9; }
 /* во время перетаскивания: курсор не меняется над другими элементами, текст не выделяется */

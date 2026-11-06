@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-missing"
+description = "Enables the wa_room_missing command without any pre-configured scope."
+commands.allow = ["wa_room_missing"]
+
+[[permission]]
+identifier = "deny-wa-room-missing"
+description = "Denies the wa_room_missing command without any pre-configured scope."
+commands.deny = ["wa_room_missing"]

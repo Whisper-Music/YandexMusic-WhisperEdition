@@ -39,6 +39,10 @@
   <script src="core/together.js" defer></script>
   <script src="listenstats.js" defer></script>
   <script src="plays.js" defer></script>
+  <!-- кэш приложения: популярные нескачанные треки и проигранное из текущего плейлиста (cache.rs) -->
+  <script src="cache.js" defer></script>
+  <!-- «Поделиться» в меню трека и ссылки whisper:// / music.yandex.* — открываются здесь, а не в браузере -->
+  <script src="share.js" defer></script>
   <link rel="stylesheet" href="backup.css" />
   <script src="backup.js" defer></script>
   <script src="cli.js" defer></script>
@@ -323,6 +327,24 @@
             <button class="nav" id="dlReset">По умолчанию</button>
           </div>
           <p class="status" id="dlNote"></p>
+        </div>
+        <div class="card" id="cacheCard" data-tab="play">
+          <h3>Кэш <i class="hint" title="Нескачанные треки, которые ты слушаешь чаще всего, и уже проигранное из текущего плейлиста лежат на диске — играют сразу и без интернета. Скачанные треки в кэш не попадают.">i</i></h3>
+          <div class="lyrow"><span>Размер</span><div class="lyseg" id="cacheLimit">
+            <button class="chip" data-v="0" title="Кэш выключен и очищен">Выкл</button>
+            <button class="chip" data-v="512">500 МБ</button>
+            <button class="chip" data-v="1024">1 ГБ</button>
+            <button class="chip" data-v="2048">2 ГБ</button>
+            <button class="chip" data-v="5120">5 ГБ</button>
+            <button class="chip" data-v="10240">10 ГБ</button>
+          </div></div>
+          <label class="switch" title="Проигранные треки текущего альбома или плейлиста остаются на диске, пока ты его слушаешь; переключился на другой — удаляются. Популярные треки остаются"><input type="checkbox" id="cachePl" /><i></i><span>Сохранять текущий плейлист</span></label>
+          <div class="dlpath"><small>Папка кэша</small><span id="cachePath">—</span></div>
+          <p class="status" id="cacheNote"></p>
+          <div class="row">
+            <button class="nav" id="cacheOpen">Открыть папку</button>
+            <button class="nav danger" id="cacheClear">Очистить кэш</button>
+          </div>
         </div>
         <div class="card" id="outCard" data-tab="out">
           <h3>Устройство вывода <i class="hint" title="Для названий устройств Windows просит доступ к микрофону — Whisper берёт его на мгновение и ничего не записывает.">i</i></h3>

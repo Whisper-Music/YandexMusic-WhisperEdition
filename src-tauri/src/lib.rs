@@ -2,6 +2,7 @@ mod audiodev;
 mod auth;
 mod backup;
 mod bg;
+mod cache;
 mod deeplink;
 mod desktop;
 // Discord и виджет OBS — общие, из ядра (подмодуль src/core); своё у приложения — в whisper_host.rs
@@ -257,6 +258,14 @@ pub fn run() {
             secret::secret_backend,
             download::download_track,
             download::download_delete,
+            // кэш приложения: популярные нескачанные треки и проигранное из текущего плейлиста (cache.rs)
+            cache::cache_info,
+            cache::cache_ids,
+            cache::cache_config,
+            cache::cache_clear,
+            cache::cache_forget,
+            cache::cache_open_dir,
+            cache::cache_played,
             download::downloaded_ids,
             download::downloaded_tracks,
             download::downloaded_meta,
@@ -285,6 +294,7 @@ pub fn run() {
             whisper::auth::wa_auth_request_code,
             whisper::auth::wa_auth_issue,
             whisper_yandex::wa_save_track,
+            whisper_yandex::wa_room_cache_track,
             whisper::stream::wa_prefetch,
             whisper::rooms::wa_room_create,
             whisper::rooms::wa_room_get,
@@ -295,6 +305,12 @@ pub fn run() {
             whisper::rooms::wa_room_dismiss,
             whisper::rooms::wa_room_transfer,
             whisper::rooms::wa_room_ping,
+            whisper::rooms::wa_room_missing,
+            whisper::rooms::wa_room_friends,
+            whisper::rooms::wa_room_friend_forget,
+            whisper::rooms::wa_room_invite,
+            whisper::rooms::wa_room_invites,
+            whisper::rooms::wa_room_invite_dismiss,
             discord::discord_config,
             discord::discord_status,
             discord::discord_retry,
@@ -317,11 +333,12 @@ pub fn run() {
             update::update_check,
             update::update_install,
             deeplink::room_link_take,
+            deeplink::open_link_take,
             winstate::app_ready
         ])
         .setup(|app| {
             secret::init(app.handle());
-            deeplink::init(app.handle()); // ссылки whisper://room/КОД (приглашения в комнату)
+            deeplink::init(app.handle()); // ссылки whisper://room/КОД (приглашения в комнату) и whisper://track|album|artist/…
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_min_size(Some(tauri::LogicalSize::new(780.0, 540.0)));
                 let _ = w.set_decorations(false);
