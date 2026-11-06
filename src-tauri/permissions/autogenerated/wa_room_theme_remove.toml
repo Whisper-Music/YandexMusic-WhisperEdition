@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-theme-remove"
+description = "Enables the wa_room_theme_remove command without any pre-configured scope."
+commands.allow = ["wa_room_theme_remove"]
+
+[[permission]]
+identifier = "deny-wa-room-theme-remove"
+description = "Denies the wa_room_theme_remove command without any pre-configured scope."
+commands.deny = ["wa_room_theme_remove"]

@@ -3301,6 +3301,29 @@ toast.className = "toast"; toast.hidden = true;
 toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
 document.body.append(toast);
 let toastTimer = 0;
+// Подсказка — во внутреннем углу между боковой панелью и плеером (там, где они сходятся), а не посреди окна:
+// так она не закрывает список и обложку. Место меряем на каждый показ — у тем и «Расположения» панели где угодно.
+// Плеер не снизу, боковая панель спрятана или узкое окно — переменные снимаются, и CSS ставит её по центру.
+function placeToast() {
+  const vars = ["--toast-l", "--toast-r", "--toast-b", "--toast-t", "--toast-w"];
+  const clear = () => vars.forEach((v) => toast.style.removeProperty(v));
+  const side = document.querySelector(".app > .side") || document.querySelector(".side");
+  const pl = document.querySelector(".player");
+  if (!side || !pl || innerWidth < 700) return clear();
+  const rs = side.getBoundingClientRect(), rp = pl.getBoundingClientRect();
+  const shown = (r) => r.width > 40 && r.height > 40;
+  if (!shown(rs) || !shown(rp) || rp.top < innerHeight * 0.5 || rs.bottom < innerHeight * 0.5) return clear();
+  const gap = 12, onRight = rs.left + rs.width / 2 > innerWidth / 2;
+  const room = onRight ? rs.left - gap * 2 : innerWidth - rs.right - gap * 2;
+  if (room < 260) return clear();
+  const set = (k, v) => toast.style.setProperty(k, v);
+  set("--toast-b", Math.round(innerHeight - rp.top + gap) + "px");
+  set("--toast-t", "none");
+  set("--toast-w", Math.round(Math.min(560, room)) + "px");
+  if (onRight) { set("--toast-l", "auto"); set("--toast-r", Math.round(innerWidth - rs.left + gap) + "px"); }
+  else { set("--toast-l", Math.round(rs.right + gap) + "px"); set("--toast-r", "auto"); }
+}
+addEventListener("resize", () => { if (!toast.hidden) placeToast(); });
 function showToast(text, ms = 3500, { kind = "", action = null } = {}) {
   toast.textContent = "";
   toast.className = "toast" + (kind ? " " + kind : "");
@@ -3311,6 +3334,7 @@ function showToast(text, ms = 3500, { kind = "", action = null } = {}) {
     b.onclick = () => { toast.hidden = true; clearTimeout(toastTimer); action.fn(); };
     toast.append(b);
   }
+  try { placeToast(); } catch {}
   toast.hidden = false;
   clearTimeout(toastTimer);
   if (ms) toastTimer = setTimeout(() => { toast.hidden = true; }, ms);

@@ -427,6 +427,11 @@
 
   // для библиотеки тем (themelib.js): установка тем же путём, что «Загрузить тему…», и версия установленной темы
   window.wmtImport = (bytes) => importSafe(bytes);
+  // «Темы комнаты» (core/together.js через kit.themeExport): текущий стиль файлом .wmt — так же, как «Сохранить в файл…»
+  window.wmtExportCurrent = async () => {
+    const { manifest, data } = await buildFile(cfg.style);
+    return { id: manifest.id, name: manifest.name, author: manifest.author || "", bytes: data };
+  };
   window.wmtVersion = (id) => String(meta.get(id)?.manifest?.version || "");
 
   // основной и второй цвета своего стиля — как в его файле (кнопка «Цвета темы» в настройках)

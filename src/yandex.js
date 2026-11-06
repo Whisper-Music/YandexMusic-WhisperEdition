@@ -340,6 +340,9 @@
     // значок «скачан» — перед временем и кнопками строки, а не в самом конце
     decorateRow: (li, t, before) => { syncGotRow(li); const gm = li.querySelector(".gotmark"); if (gm && before) li.insertBefore(gm, before); },
     icon: (name) => ICON[name] || "",
+    // «Темы комнаты» (core/together.js): текущий стиль файлом .wmt и установка присланной темы (theme.js)
+    themeExport: () => window.wmtExportCurrent?.() ?? null,
+    themeImport: (bytes) => window.wmtImport?.(bytes) ?? false,
     // лайк в строке общих модулей (история и очередь, core/queue.js): та же кнопка .likebtn, что в списках, —
     // refreshHearts() обновляет её по li[data-id] вместе со всеми остальными сердечками
     likeButton: (t) => {

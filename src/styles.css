@@ -1667,9 +1667,12 @@ a { color: var(--accent); }
 .tmenu button svg { width: 18px; height: 18px; flex: none; color: var(--accent); }
 .tmenu button:hover { background: rgba(255,255,255,.1); }
 
+/* место — во внутреннем углу между нижней и боковой панелью: --toast-* ставит placeToast() в main.js
+   (по замеру .side и .player); без замера (панели спрятаны темой) — по центру над плеером, как раньше */
 .toast {
-  position: fixed; z-index: 70; left: 50%; bottom: 120px; transform: translateX(-50%);
-  max-width: min(640px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px;
+  position: fixed; z-index: 70; left: var(--toast-l, 50%); right: var(--toast-r, auto); bottom: var(--toast-b, 120px);
+  transform: var(--toast-t, translateX(-50%));
+  max-width: var(--toast-w, min(640px, calc(100vw - 32px))); padding: 10px 16px; border-radius: 12px;
   font-size: 13px; color: var(--text); overflow-wrap: anywhere; text-align: center;
   background: rgba(18, 12, 38, 0.96); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);

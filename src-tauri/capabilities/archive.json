@@ -29,6 +29,9 @@
     "allow-wa-room-invite",
     "allow-wa-room-invites",
     "allow-wa-room-invite-dismiss",
+    "allow-wa-room-theme-share",
+    "allow-wa-room-theme-get",
+    "allow-wa-room-theme-remove",
     "allow-room-link-take",
     "allow-open-link-take"
   ]
