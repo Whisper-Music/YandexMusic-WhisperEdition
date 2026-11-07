@@ -3042,7 +3042,10 @@ function setHeart(b, on) {
 }
 // своя версия из «Студии» (studio.js): номер «studio-…», лайк у неё локальный — Яндекс о ней не знает
 function isStudio(id) { return String(id).startsWith("studio-"); }
-function isLiked(id) { return isStudio(id) ? !!window.studioLiked?.(String(id)) : likedIds.has(String(id)); }
+// версия, которой с тобой поделились (studio.js → studioOpenShared): «wa-<трек архива>», играет из Whisper Archive.
+// Это не трек Яндекса — лайкать, скачивать и добавлять в плейлисты нечего
+function isShared(id) { return String(id).startsWith("wa-"); }
+function isLiked(id) { return isStudio(id) ? !!window.studioLiked?.(String(id)) : !isShared(id) && likedIds.has(String(id)); }
 function refreshHearts() {
   document.querySelectorAll(".list li").forEach((li) => {
     const b = li.querySelector(".likebtn");
@@ -3065,6 +3068,7 @@ async function loadLikedIds() {
 async function toggleLike(t) {
   if (!t) return;
   if (isStudio(t.id)) { await window.studioToggleLike?.(t); refreshHearts(); return; }
+  if (isShared(t.id)) { showToast("Это чужая версия из Whisper Archive — лайкнуть её здесь нельзя", 3500); return; }
   const id = String(t.id), albumId = albumOf(t), was = likedIds.has(id);
   was ? likedIds.delete(id) : likedIds.add(id);
   if (!was) likeTs.set(id, Date.now());               // новый лайк — самый свежий (версии студии встают по времени)
@@ -3095,7 +3099,7 @@ function saveDislikes() { try { localStorage.setItem("ym_disliked_ids", JSON.str
 // «Не нравится»: трек уходит в дизлайки Яндекса (волна его больше не предложит), из лайков он убирается,
 // а если он сейчас играет — сразу включается следующий.
 async function toggleDislike(t) {
-  if (!t || isStudio(t.id)) return;     // у своей версии «Не нравится» нет
+  if (!t || isStudio(t.id) || isShared(t.id)) return;     // у версий «Не нравится» нет
   const id = String(t.id), albumId = albumOf(t), was = dislikedIds.has(id), wasLiked = likedIds.has(id);
   const isCur = queue[current] && String(queue[current].id) === id;
   was ? dislikedIds.delete(id) : dislikedIds.add(id);
@@ -3578,9 +3582,9 @@ function trackMenuMain(t, ctx) {
   const bottom = tmenuBtn?.id === "pMore";                       // меню нижней панели
   // своя версия из «Студии»: Яндекс о ней не знает — без плейлистов и скачивания, только пункты модулей
   // (архив, сама студия) и звук
-  if (isStudio(t.id)) {
+  if (isStudio(t.id) || isShared(t.id)) {
     if (bottom) { menuSpeed(); menuSep(); }
-    window.Whisper?.ui.trackMenu.build(t, ctx);
+    if (isStudio(t.id)) window.Whisper?.ui.trackMenu.build(t, ctx);     // у чужой версии пунктов модулей нет
     menuSep();
     if (window.eqOpen) menuItem(ICON.eq || "", "Эквалайзер", () => window.eqOpen());
     if (bottom) { window.outMenu?.(t, ctx); window.soundMenu?.(t, ctx); }
@@ -4493,9 +4497,9 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     // а без интернета — сразу.
     const LOCAL_URL = LOCAL_BASE + "track/" + encodeURIComponent(String(t.id));
     const inCache = !got.has(String(t.id)) && !!window.appCache?.has(String(t.id));
-    // своя версия из «Студии» (studio.js, studio-…) — файл на диске, как скачанный. Чужая (гость «Слушать вместе»,
-    // _room — трек комнаты) — её у нас нет: играет то, чем поделился ведущий (источники ядра, архив)
-    const studio = isStudio(t.id) && !t._room;
+    // своя версия из «Студии» (studio.js, studio-…) — файл на диске, как скачанный. Чужая (гость «Слушать вместе»:
+    // её нет в своём списке студии, studioHas) — у нас её нет: играет то, чем поделился ведущий (источники ядра, архив)
+    const studio = isStudio(t.id) && !t._room && window.studioHas?.(String(t.id)) !== false;
     let local = studio || got.has(String(t.id)) || (inCache && !navigator.onLine) ? LOCAL_URL : "";
     // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
     if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");

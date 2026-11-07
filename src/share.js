@@ -36,6 +36,10 @@
 
   // Ссылка → { kind, id, album, at }. Понимает whisper://, страницу архива /s/… и music.yandex.(ru|com|by|kz|uz).
   // Только номера: всё лишнее (?utm, #, хвосты) отбрасывается.
+  // Своя версия трека из Студии (через Whisper Archive): whisper://wa/{альбом}?k={ключ} и страница /s/v/{альбом}#k={ключ}
+  // → { kind: "wa", id: альбом, key }.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const KEY_RE = /^[A-Za-z0-9_-]{20,200}$/;
   function parseLink(text) {
     const s = String(text || "").trim();
     if (!s || s.length > 500) return null;
@@ -48,9 +52,16 @@
     if (proto === "whisper:") {
       // whisper://track/1 → host «track», путь «/1»; whisper:/track/1 → весь путь
       path = (u.host + u.pathname).replace(/^\/+/, "");
+      const w = path.match(/^wa\/([0-9a-f-]{36})\/?$/i), key = u.searchParams.get("k") || "";
+      if (w) return UUID_RE.test(w[1]) && KEY_RE.test(key) ? { kind: "wa", id: w[1].toLowerCase(), key } : null;
     } else if (proto === "https:" || proto === "http:") {
       const h = u.hostname.toLowerCase().replace(/^www\./, "");
       if (/^(origin\.)?whisper-archive\.ru$/.test(h)) {
+        const v = u.pathname.match(/^\/s\/v\/([0-9a-f-]{36})\/?$/i);
+        if (v) {
+          const key = new URLSearchParams(u.hash.replace(/^#/, "")).get("k") || "";
+          return UUID_RE.test(v[1]) && KEY_RE.test(key) ? { kind: "wa", id: v[1].toLowerCase(), key } : null;
+        }
         const p = u.pathname.match(/^\/s\/(.+)$/);
         if (!p) return null;
         path = p[1];
@@ -138,6 +149,7 @@
   let opening = 0;
   async function openTarget(L) {
     if (!L) return false;
+    if (L.kind === "wa") { window.studioOpenShared?.(L.id, L.key); return true; }     // studio.js
     if (L.kind === "album") { navigate(() => showAlbum(L.id)); return true; }
     if (L.kind === "artist") { navigate(() => showArtist(L.id)); return true; }
     const my = ++opening;

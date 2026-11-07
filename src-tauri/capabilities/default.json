@@ -53,6 +53,7 @@
     "allow-desktop-wallpaper",
     "allow-download-track",
     "allow-studio-source",
+    "allow-studio-info",
     "allow-studio-save",
     "allow-studio-list",
     "allow-studio-update",

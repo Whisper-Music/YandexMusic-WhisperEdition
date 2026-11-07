@@ -63,8 +63,13 @@
     catch (e) { it.liked = !want; toast("Не удалось изменить лайк: " + err(e), 5000); }
     paintList(); refreshHearts(); likesRedraw();
   };
+  // своя ли это версия (main.js → play: своя играет с диска; чужая — из комнаты или архива). Пока список не загружен —
+  // null: «не знаю», и плеер пробует диск, как раньше
+  let loaded = false;
+  window.studioHas = (id) => (loaded ? !!byId(String(id)) : null);
   async function loadItems() {
     try { items = await invoke("studio_list"); } catch { items = []; }
+    loaded = true;
     paintList(); refreshHearts();
     if (items.some((x) => x.liked)) likesRedraw();
   }
@@ -127,11 +132,83 @@
       ed.buf = buf; ed.dur = buf.duration; ed.peaks = peaksOf(buf, 1200); ed.loading = false;
       ed.a = Math.min(at, Math.max(0, buf.duration - MIN_LEN));
       ed.b = Math.min(buf.duration, ed.a + 30);
+      loadInfo(my);
     } catch (e) {
       if (my !== loadSeq) return;
       ed.loading = false; ed.error = "Не удалось загрузить трек: " + err(e);
     }
     paintEditor(); draw();
+  }
+
+  // ---------- сводка о треке ----------
+  // Файл (формат, битрейт, частота, каналы, откуда взят) — studio_info (Rust, по тому же файлу, что в памяти);
+  // по звуку — темп, тональность, громкость (studioinfo.js, считает здесь, ~0,5 с — после отрисовки волны);
+  // остальное — из описания трека Яндекса (альбом, год, жанр, лейбл).
+  async function loadInfo(my) {
+    ed.info = { file: null, sound: null };
+    paintInfo();
+    invoke("studio_info", { trackId: String(ed.t.id) })
+      .then((f) => { if (my === loadSeq && ed) { ed.info.file = f; paintInfo(); } })
+      .catch(() => {});
+    setTimeout(() => {
+      if (my !== loadSeq || !ed?.buf || !window.studioAnalyze) return;
+      const s = window.studioAnalyze(ed.buf);
+      if (my === loadSeq && ed) { ed.info.sound = s; paintInfo(); }
+    }, 60);
+  }
+  const num1 = (v, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toString().replace(".", ",").replace("-", "−");
+  const tempoWord = (b) => (b < 66 ? "медленно — ларго, адажио" : b < 76 ? "неспешно — адажио" : b < 108 ? "умеренно — анданте, модерато"
+    : b < 120 ? "оживлённо — аллегретто" : b < 156 ? "быстро — аллегро" : b < 176 ? "очень быстро — виваче" : "стремительно — престо");
+  const sureWord = (s) => (s >= 0.6 ? "" : s >= 0.3 ? "примерно" : "оценка неуверенная");
+  const mb = (n) => (n >= 1024 * 1024 ? num1(n / 1024 / 1024) + " МБ" : Math.round(n / 1024) + " КБ");
+  const MODE = { stereo: "стерео", joint: "стерео (joint stereo)", dual: "два моно-канала", mono: "моно" };
+  function paintInfo() {
+    const box = $s("stuInfo");
+    if (!box) return;
+    if (!ed?.buf) { box.hidden = true; return; }
+    box.hidden = false;
+    const t = ed.t, al = t.albums?.[0] || {}, f = ed.info?.file, s = ed.info?.sound;
+    const wait = "считаю…";
+    const rows = [];
+    const add = (label, value, sub = "", title = "") => rows.push({ label, value, sub, title });
+    // по звуку
+    if (!s) add("Темп", wait);
+    else if (s.bpm) add("Темп", `${num1(s.bpm, s.bpm % 1 ? 1 : 0)} BPM`, [tempoWord(s.bpm), sureWord(s.bpmSure)].filter(Boolean).join(" · "),
+      "Оценка по ударам в середине трека. Бывает, что верный темп — вдвое меньше или больше");
+    else add("Темп", "—", "не удалось определить");
+    if (!s) add("Тональность", wait);
+    else if (s.key) add("Тональность", s.key, [s.keyShort, sureWord(s.keySure)].filter(Boolean).join(" · "),
+      "Оценка по нотам за весь трек (профили Крумхансла). У модальной и атональной музыки может ошибаться");
+    else add("Тональность", "—", "не удалось определить");
+    if (s && s.rmsDb != null && isFinite(s.rmsDb)) add("Громкость", `${num1(s.rmsDb)} дБ RMS`, `пик ${num1(s.peakDb)} дБFS`,
+      "Средняя громкость (RMS) и самый громкий момент относительно максимума");
+    add("Длительность", fmt(ed.dur, false), f ? `${f.frames.toLocaleString("ru-RU")} кадров mp3` : "");
+    // файл
+    if (f) {
+      add("Формат", "MP3", f.codec);
+      add("Битрейт", `${f.bitrate} кбит/с`, f.vbr ? "переменный (VBR)" : "постоянный (CBR)");
+      add("Частота", `${num1(f.sampleRate / 1000)} кГц`, MODE[f.mode] || (f.channels === 1 ? "моно" : "стерео"));
+      add("Размер", mb(f.size), f.fromDisk ? "файл с диска (скачан или в кэше)" : "файл с Яндекс Музыки");
+    } else add("Формат", wait);
+    // описание трека
+    if (al.title) add("Альбом", al.title, [al.year, al.type === "single" ? "сингл" : ""].filter(Boolean).join(" · "));
+    if (al.genre) add("Жанр", String(al.genre));
+    const label = (al.labels || []).map((x) => (typeof x === "string" ? x : x?.name)).filter(Boolean)[0];
+    if (label) add("Лейбл", label);
+    if (t.version) add("Версия", t.version);
+    if (t.contentWarning === "explicit") add("Текст", "18+", "есть ненормативная лексика");
+    box.textContent = "";
+    for (const r of rows) {
+      const cell = document.createElement("div");
+      cell.className = "stuinfo-i";
+      if (r.title) cell.title = r.title;
+      const dt = document.createElement("dt"); dt.textContent = r.label;
+      const dd = document.createElement("dd"); dd.textContent = r.value;
+      if (r.value === wait) dd.classList.add("wait");
+      cell.append(dt, dd);
+      if (r.sub) { const sm = document.createElement("small"); sm.textContent = r.sub; cell.append(sm); }
+      box.append(cell);
+    }
   }
   function peaksOf(buf, n) {
     const out = new Float32Array(n), chs = Math.min(2, buf.numberOfChannels), len = buf.length;
@@ -216,6 +293,7 @@
       $s("stuName").value = `${t.title || "Трек"} (обрезка)`; $s("stuName").dataset.for = String(t.id);
     }
     paintPlayBtn();
+    paintInfo();
   }
 
   // перетаскивание: ближняя граница едет за курсором, щелчок мимо — переносит ближнюю границу туда
@@ -446,14 +524,59 @@
       const r = await invoke("wa_album_share", { id: album });
       if (r.status === 404) { const s2 = sharedAll(); delete s2[it.id]; saveShared(s2); throw new Error("альбом этой версии в архиве удалён — нажми «Поделиться» ещё раз"); }
       if (r.status < 200 || r.status >= 300) throw new Error(httpErr(r, "Не удалось получить ссылку"));
-      const url = String(bodyOf(r)?.url || "");
+      let url = String(bodyOf(r)?.url || "");
       if (!/^https:\/\//.test(url)) throw new Error("архив не вернул ссылку");
-      const s3 = sharedAll(); s3[it.id] = { album, url }; saveShared(s3);
+      // приглашение ведёт не на страницу альбома, а на выбор «слушать в приложении / на сайте» (share.html, /s/v/…)
+      if (/\/invite\/[A-Za-z0-9_-]+$/.test(url)) url += "?to=version";
+      const s3 = sharedAll(); s3[it.id] = { album }; saveShared(s3);      // ссылку (в ней ключ) не храним — сервер выдаст ту же
       if (await copyText(url)) toast("Ссылка на версию скопирована — отправь её другу", 4000, { kind: "ok" });
       else toast(url, 10000);
     } catch (e) { toast("Не получилось поделиться: " + err(e), 7000); }
     sharing.delete(it.id);
   }
+  // ---------- открыть версию, которой поделились (ссылка whisper://wa/… или /s/v/… → share.js) ----------
+  // Ключ приглашения отдаётся архиву один раз (wa_invite_open): сервер запоминает доступ для твоего ключа (лайк альбома),
+  // дальше трек играет из архива как обычно (core/archive.js, waShared). Номер в плеере — «wa-<трек>»: это не трек
+  // Яндекса (main.js: без лайка, «Не нравится», плейлистов и скачивания).
+  const durSec = (v) => {
+    if (typeof v === "number" && isFinite(v)) return v > 36000 ? v / 1000 : v;
+    const m = /^(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?$/.exec(String(v || ""));
+    return m ? (+(m[1] || 0)) * 86400 + (+m[2]) * 3600 + (+m[3]) * 60 + (+m[4]) : 0;
+  };
+  let openingShared = 0;
+  window.studioOpenShared = async (albumId, key) => {
+    if (!UUID.test(String(albumId || "")) || !/^[A-Za-z0-9_-]{20,200}$/.test(String(key || ""))) return;
+    const my = ++openingShared;
+    let token = false;
+    try { token = await invoke("wa_token_exists"); } catch {}
+    if (!token) {
+      toast("Чтобы слушать версию в приложении, войди в Whisper Archive: Настройки → Интеграции. Или открой ссылку в браузере", 8000);
+      return;
+    }
+    toast("Открываю версию…", 2000);
+    try {
+      const r = await invoke("wa_invite_open", { id: albumId, key });
+      if (my !== openingShared) return;
+      if (r.status === 404 || r.status === 403) throw new Error("ссылка устарела или её отозвали — попроси прислать новую");
+      if (r.status < 200 || r.status >= 300) throw new Error(httpErr(r, "архив не открыл версию"));
+      const a = bodyOf(r) || {};
+      const list = (Array.isArray(a.tracks) ? a.tracks : []).filter((x) => UUID.test(String(x?.id || "")));
+      if (!list.length) throw new Error("в альбоме версии нет треков");
+      const author = String(a.author || "").slice(0, 120);
+      const raws = list.map((x) => ({
+        id: "wa-" + String(x.id).toLowerCase(),
+        title: String(x.title || a.title || "Версия").slice(0, 200),
+        artists: author ? [{ name: author }] : [],
+        durationMs: Math.round(durSec(x.duration) * 1000),
+        waShared: String(x.id).toLowerCase(),                 // core/archive.js: играет файл архива по этому номеру
+        waAlbum: albumId,
+      }));
+      stopPreview();
+      W.queue.play(raws, 0);
+      toast(`«${raws[0].title}»${author ? ` от ${author}` : ""} — играет из Whisper Archive`, 4000, { kind: "ok" });
+    } catch (e) { if (my === openingShared) toast("Не удалось открыть версию: " + err(e), 7000); }
+  };
+
   // обложка для альбома, если у исходного трека её нет: заливка цветами стиля с названием
   async function plainCover(title) {
     const S = 600, c = document.createElement("canvas"); c.width = c.height = S;

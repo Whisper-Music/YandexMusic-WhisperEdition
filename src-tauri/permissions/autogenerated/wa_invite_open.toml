@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-invite-open"
+description = "Enables the wa_invite_open command without any pre-configured scope."
+commands.allow = ["wa_invite_open"]
+
+[[permission]]
+identifier = "deny-wa-invite-open"
+description = "Denies the wa_invite_open command without any pre-configured scope."
+commands.deny = ["wa_invite_open"]

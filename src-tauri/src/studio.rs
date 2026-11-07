@@ -236,7 +236,8 @@ fn mp3_cut(b: &[u8], start_ms: u64, end_ms: u64) -> Result<(Vec<u8>, u64, u64), 
 // исходник: последний трек держим в памяти (разметка, прослушивание и сохранение — без повторной загрузки)
 // ---------------------------------------------------------------------------
 
-static SRC: Mutex<Option<(String, Arc<Vec<u8>>)>> = Mutex::new(None);
+// (номер трека, файл, взят с диска — скачанный или из кэша; иначе — с Яндекса)
+static SRC: Mutex<Option<(String, Arc<Vec<u8>>, bool)>> = Mutex::new(None);
 
 fn track_num(id: &str) -> Result<String, String> {
     let n = id.split(':').next().unwrap_or("");
@@ -251,10 +252,15 @@ fn is_mp3(b: &[u8]) -> bool {
 }
 
 async fn source(app: &AppHandle, track_id: &str) -> Result<Arc<Vec<u8>>, String> {
+    source_from(app, track_id).await.map(|x| x.0)
+}
+
+/// Файл трека и откуда он: true — с диска (скачанный или кэш), false — с Яндекса.
+async fn source_from(app: &AppHandle, track_id: &str) -> Result<(Arc<Vec<u8>>, bool), String> {
     let id = track_num(track_id)?;
-    if let Some((k, v)) = SRC.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+    if let Some((k, v, f)) = SRC.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         if *k == id {
-            return Ok(v.clone());
+            return Ok((v.clone(), *f));
         }
     }
     // скачанный — с диска (если это mp3), иначе — с Яндекса
@@ -267,6 +273,7 @@ async fn source(app: &AppHandle, track_id: &str) -> Result<Arc<Vec<u8>>, String>
             }
         }
     }
+    let from_disk = bytes.is_some();
     let bytes = match bytes {
         Some(b) => b,
         None => {
@@ -282,8 +289,85 @@ async fn source(app: &AppHandle, track_id: &str) -> Result<Arc<Vec<u8>>, String>
         }
     };
     let v = Arc::new(bytes);
-    *SRC.lock().unwrap_or_else(|e| e.into_inner()) = Some((id, v.clone()));
-    Ok(v)
+    *SRC.lock().unwrap_or_else(|e| e.into_inner()) = Some((id, v.clone(), from_disk));
+    Ok((v, from_disk))
+}
+
+/// Что видно о файле mp3 без декодирования (сводка в студии; темп, тональность и громкость считает studio.js по звуку).
+#[derive(Serialize, Default, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Mp3Info {
+    /// «MPEG-1 Layer III» и т. п.
+    pub codec: String,
+    /// средний битрейт, кбит/с
+    pub bitrate: u32,
+    /// переменный битрейт (VBR) — у кадров разный битрейт или есть заголовок Xing
+    pub vbr: bool,
+    pub sample_rate: u32,
+    pub channels: u8,
+    /// stereo | joint | dual | mono
+    pub mode: String,
+    pub frames: usize,
+    pub duration_ms: u64,
+    pub size: u64,
+    /// есть теги ID3v2 (размер, байт)
+    pub id3: u64,
+}
+
+fn mp3_info(b: &[u8]) -> Option<Mp3Info> {
+    let f = frames(b);
+    let &(first, _, _) = f.first()?;
+    let (_, _, sr, ver, mode) = frame_at(b, first)?;
+    let layer_ver = match ver {
+        3 => "MPEG-1",
+        2 => "MPEG-2",
+        _ => "MPEG-2.5",
+    };
+    // VBR: служебный кадр Xing перед звуком (у CBR от LAME — «Info») или у кадров разные битрейты
+    let i0 = id3_len(b);
+    let xing = frame_at(b, i0).is_some_and(|(_, _, _, v, m)| i0 < first && is_vbr_tag(b, i0, v, m))
+        && b.get(i0..).is_some_and(|x| x.windows(4).take(64).any(|w| w == b"Xing" || w == b"VBRI"));
+    let mut br = std::collections::HashSet::new();
+    for &(i, _, _) in f.iter().step_by((f.len() / 400).max(1)) {
+        if let Some(h) = b.get(i + 2) {
+            br.insert(h >> 4);
+        }
+        if br.len() > 1 {
+            break;
+        }
+    }
+    let duration_ms = duration_ms(b);
+    let audio_bytes: usize = f.iter().map(|x| x.1).sum();
+    let bitrate = if duration_ms > 0 { (audio_bytes as f64 * 8.0 / duration_ms as f64).round() as u32 } else { 0 };
+    Some(Mp3Info {
+        codec: format!("{layer_ver} Layer III"),
+        bitrate,
+        vbr: xing || br.len() > 1,
+        sample_rate: sr,
+        channels: if mode == 3 { 1 } else { 2 },
+        mode: ["stereo", "joint", "dual", "mono"][mode as usize & 3].into(),
+        frames: f.len(),
+        duration_ms,
+        size: b.len() as u64,
+        id3: i0 as u64,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceInfo {
+    /// с диска (скачанный или кэш) или с Яндекса
+    pub from_disk: bool,
+    #[serde(flatten)]
+    pub mp3: Mp3Info,
+}
+
+/// Сводка о файле трека в студии (формат, битрейт, частота, каналы…). Файл тот же, что у studio_source (уже в памяти).
+#[tauri::command]
+pub async fn studio_info(app: AppHandle, track_id: String) -> Result<SourceInfo, String> {
+    let (b, from_disk) = source_from(&app, &track_id).await?;
+    let mp3 = tauri::async_runtime::spawn_blocking(move || mp3_info(&b)).await.map_err(|e| e.to_string())?;
+    Ok(SourceInfo { from_disk, mp3: mp3.ok_or("Не удалось разобрать файл трека")? })
 }
 
 /// Файл трека для разметки в студии (рисует волну и даёт послушать отрезок) — «сырыми» байтами, в JS это ArrayBuffer.
@@ -528,6 +612,17 @@ mod tests {
             b.extend(frame(false));
         }
         assert_eq!(frames(&b).len(), 10);
+    }
+
+    #[test]
+    fn info() {
+        let b = mp3(100);
+        let i = mp3_info(&b).unwrap();
+        assert_eq!(i.codec, "MPEG-1 Layer III");
+        assert_eq!((i.sample_rate, i.channels, i.mode.as_str(), i.frames, i.vbr), (44100, 2, "joint", 100, false));
+        assert!((127..=129).contains(&i.bitrate), "{}", i.bitrate);
+        assert_eq!(i.id3, 15);
+        assert!(mp3_info(b"nope").is_none());
     }
 
     #[test]

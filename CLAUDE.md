@@ -100,7 +100,15 @@ src/                      фронтенд (без сборки, файлы от
                           видны в «Лайках» (main.js withStudioLikes — по времени лайка: likeTs от Яндекса / likedAt версии).
                           Выключается в Настройки → Приложение (ym_studio_on, класс html.no-studio). «Слушать вместе»:
                           гостям — studio_room_cache (yandex.js roomCache), у гостя трек комнаты (_room) не ищется на диске.
-                          Прослушивание версии plays.js засчитывает исходнику (raw.studio.src)
+                          Прослушивание версии plays.js засчитывает исходнику (raw.studio.src). Своя ли версия — window.studioHas
+                          (чужая studio-… на диске не ищется). provider.localOnly (yandex.js) — ведущий делится версией сразу.
+                          Ссылка: /invite/{ключ}?to=version → сайт /s/v/{альбом}#k=… (выбор «в приложении / на сайте») →
+                          whisper://wa/{альбом}?k=… (deeplink.rs) → share.js → studioOpenShared → wa_invite_open (ядро: лайк альбома
+                          с cookie приглашения = доступ для ключа). Такие треки в плеере — «wa-<трек архива>» с waShared
+                          (main.js isShared: без лайка, плейлистов, скачивания; в комнату не раздаются)
+  studioinfo.js           сводка о треке в студии по звуку: window.studioAnalyze(AudioBuffer) → темп (BPM, автокорреляция
+                          огибающей атак), тональность (хрома + профили Крумхансла), громкость (RMS, пик); формат файла —
+                          studio_info (studio.rs: кодек, битрейт, VBR, частота, каналы, размер, с диска или с Яндекса)
   cache.js/.css           кэш (Rust — cache.rs): популярные, текущий плейлист и последние N треков «Моей волны»
                           (wave_max, по умолчанию 20; context.type "radio"); полоса занятого места по видам
 src-tauri/

@@ -137,6 +137,10 @@
       return { tracks: ents("track", r?.tracks?.results), artists: ents("artist", r?.artists?.results), albums: ents("album", r?.albums?.results), playlists: ents("playlist", r?.playlists?.results), best };
     },
     async tracks(ids) {
+      // не номера Яндекса (версии из Студии studio-…, версии по ссылке wa-…) — у Яндекса их нет: «не найдено» сразу,
+      // без запроса (core/together.js по 404 ищет трек дальше и быстро понимает, что у гостя его нет)
+      ids = ids.filter((x) => /^\d{1,20}(:\d{1,20})?$/.test(String(x)));
+      if (!ids.length) throw new Error("HTTP 404: не трек Яндекса");
       const out = [];
       for (let i = 0; i < ids.length; i += 100) out.push(...ents("track", await ym("tracks", { form: { "track-ids": ids.slice(i, i + 100).join(",") } })));
       return out;
@@ -171,9 +175,16 @@
       ? invoke("studio_to_archive", { id: String(t.id), ...args })
       : invoke("wa_save_track", { trackId: String(t.id), ...args }),
     // «Слушать вместе» (core/together.js): трек во временный кэш комнаты для гостей, у которых его нет (не в архив)
+    // своя версия из Студии — своим файлом; чужая (wa-…, открыта по ссылке-приглашению) — её автор не разрешал
+    // раздавать дальше, в комнату она не уходит
     roomCache: (t, code) => String(t.id).startsWith("studio-")
       ? invoke("studio_room_cache", { code, id: String(t.id), fileName: String(t.title || "Версия") })
-      : invoke("wa_room_cache_track", { code, trackId: String(t.id), fileName: String(t.title || "Трек") }),
+      : String(t.id).startsWith("wa-")
+        ? Promise.reject(new Error("это чужая версия по ссылке — пусть друзья откроют ту же ссылку сами"))
+        : invoke("wa_room_cache_track", { code, trackId: String(t.id), fileName: String(t.title || "Трек") }),
+    // трек есть только у тебя (своя версия из Студии): у гостей «Слушать вместе» его не будет ни на одном сервисе —
+    // ведущий делится им сразу, не дожидаясь галочки «Делиться треками» (core/together.js)
+    localOnly: (t) => String(t?.id ?? "").startsWith("studio-"),
     // «Слушать вместе» (core/together.js): трек в формате сервера комнат и обратно (сервер хранит поля Яндекса)
     toRoom: (t) => { const r = t.raw || {}; return {
       id: String(t.id),

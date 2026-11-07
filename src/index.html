@@ -48,6 +48,7 @@
   <script src="share.js" defer></script>
   <!-- «Студия»: обрезка треков, свои версии (studio.rs) -->
   <link rel="stylesheet" href="studio.css" />
+  <script src="studioinfo.js" defer></script>
   <script src="studio.js" defer></script>
   <link rel="stylesheet" href="backup.css" />
   <script src="backup.js" defer></script>
@@ -202,6 +203,8 @@
               <div class="stutx"><b id="stuTitle"></b><span id="stuArtist"></span></div>
               <button id="stuClose" type="button" class="round" title="Закрыть трек">✕</button>
             </div>
+            <!-- сводка о треке: темп, тональность, формат, громкость… (studio.js + studioinfo.js) -->
+            <dl id="stuInfo" class="stuinfo" hidden></dl>
             <div id="stuWave" class="stuwave" title="Тяни границы мышью; колесо — точнее (с Shift — по секунде)">
               <canvas id="stuCanvas"></canvas>
               <div id="stuSel" class="stusel"></div>

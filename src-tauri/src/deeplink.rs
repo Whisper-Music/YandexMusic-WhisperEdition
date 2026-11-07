@@ -79,6 +79,12 @@ pub fn open_target(url: &Url) -> Option<String> {
             None => digits(id),
         },
         "album" | "artist" => digits(id),
+        // whisper://wa/{альбом}?k={ключ} — своя версия трека (Студия), которой поделились через Whisper Archive:
+        // альбом — UUID, ключ приглашения — base64url. → "wa/{альбом}?k={ключ}"
+        "wa" => {
+            let key = invite_key(url)?;
+            return uuid(id).then(|| format!("wa/{}?k={key}", id.to_ascii_lowercase()));
+        }
         _ => false,
     };
     if !ok {
@@ -89,6 +95,16 @@ pub fn open_target(url: &Url) -> Option<String> {
         Some(s) => format!("{kind}/{id}?t={s}"),
         None => format!("{kind}/{id}"),
     })
+}
+
+fn uuid(s: &str) -> bool {
+    s.len() == 36 && s.bytes().enumerate().all(|(i, b)| if matches!(i, 8 | 13 | 18 | 23) { b == b'-' } else { b.is_ascii_hexdigit() })
+}
+
+/// ?k=… — ключ приглашения Whisper Archive: base64url, 20…200 знаков
+fn invite_key(url: &Url) -> Option<String> {
+    let v = url.query_pairs().find(|(k, _)| k == "k")?.1;
+    ((20..=200).contains(&v.len()) && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')).then(|| v.into_owned())
 }
 
 /// ?t=83 → Some(83): 1…86400 секунд, только цифры (не больше 6 знаков)
@@ -199,5 +215,15 @@ mod tests {
         assert_eq!(open("whisper://track/12345?t=1e3").as_deref(), Some("track/12345"));
         assert_eq!(open("whisper://track/12345?t=9999999").as_deref(), Some("track/12345"));
         assert_eq!(open("whisper://album/678?t=83").as_deref(), Some("album/678"));
+        // своя версия трека через архив
+        let k = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd";
+        assert_eq!(
+            open(&format!("whisper://wa/0F8FAD5B-D9CB-469F-A165-70867728950E?k={k}")).as_deref(),
+            Some(format!("wa/0f8fad5b-d9cb-469f-a165-70867728950e?k={k}").as_str())
+        );
+        assert_eq!(open("whisper://wa/0f8fad5b-d9cb-469f-a165-70867728950e"), None); // без ключа
+        assert_eq!(open("whisper://wa/0f8fad5b-d9cb-469f-a165-70867728950e?k=short"), None);
+        assert_eq!(open(&format!("whisper://wa/../x?k={k}")), None);
+        assert_eq!(open(&format!("whisper://wa/0f8fad5b-d9cb-469f-a165-70867728950e?k={k}%22x")), None);
     }
 }

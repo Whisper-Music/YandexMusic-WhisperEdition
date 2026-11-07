@@ -294,6 +294,7 @@ pub fn run() {
             whisper::wa_albums_mine,
             whisper::wa_album,
             whisper::wa_album_share,
+            whisper::wa_invite_open,
             whisper::wa_me,
             whisper::wa_stream,
             whisper::auth::wa_auth_request_code,
@@ -301,6 +302,7 @@ pub fn run() {
             whisper_yandex::wa_save_track,
             // «Студия» (studio.rs): обрезка треков, свои версии с локальным лайком, отправка в архив
             studio::studio_source,
+            studio::studio_info,
             studio::studio_save,
             studio::studio_list,
             studio::studio_update,
