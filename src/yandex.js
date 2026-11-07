@@ -166,9 +166,14 @@
     },
     stream: async (t) => ({ kind: "url", url: await directLink(String(t.id)), mime: "audio/mpeg" }),
     // «Сохранить в архив» (core/archive.js): mp3 и обложку Rust скачивает с Яндекса сам по номеру трека (whisper_yandex.rs)
-    archiveSave: (t, args) => invoke("wa_save_track", { trackId: String(t.id), ...args }),
+    // своя версия из «Студии» (studio.rs) уходит в архив своим файлом, а не треком с Яндекса
+    archiveSave: (t, args) => String(t.id).startsWith("studio-")
+      ? invoke("studio_to_archive", { id: String(t.id), ...args })
+      : invoke("wa_save_track", { trackId: String(t.id), ...args }),
     // «Слушать вместе» (core/together.js): трек во временный кэш комнаты для гостей, у которых его нет (не в архив)
-    roomCache: (t, code) => invoke("wa_room_cache_track", { code, trackId: String(t.id), fileName: String(t.title || "Трек") }),
+    roomCache: (t, code) => String(t.id).startsWith("studio-")
+      ? invoke("studio_room_cache", { code, id: String(t.id), fileName: String(t.title || "Версия") })
+      : invoke("wa_room_cache_track", { code, trackId: String(t.id), fileName: String(t.title || "Трек") }),
     // «Слушать вместе» (core/together.js): трек в формате сервера комнат и обратно (сервер хранит поля Яндекса)
     toRoom: (t) => { const r = t.raw || {}; return {
       id: String(t.id),
@@ -349,7 +354,7 @@
     likeButton: (t) => {
       const raw = t.raw || t, b = document.createElement("button");
       b.className = "likebtn";
-      setHeart(b, likedIds.has(String(raw.id)));
+      setHeart(b, isLiked(String(raw.id)));
       b.onclick = (e) => { e.stopPropagation(); toggleLike(raw); };
       return b;
     },

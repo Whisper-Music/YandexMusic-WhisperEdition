@@ -92,6 +92,17 @@ src/                      фронтенд (без сборки, файлы от
                           Уведомления (localStorage ym_notify; по умолчанию — только когда окно свёрнуто или в фоне)
   backup.js/.css          резервная копия .wbak (настройки, закреплённые, темы, фоны, статистика; токенов нет — список
                           исключений SECRET_RE/SKIP), автокопии настроек и восстановление; Настройки → Приложение
+  studio.js/.css          «Студия» (кнопка #studioBtn под «Настройками», страница #studioPage): обрезка трека без
+                          перекодирования (studio.rs режет mp3 по кадрам), «Мои версии» с номерами studio-<32 hex> — играют
+                          как скачанные (download::open_local → studio::open), лайк локальный (main.js isStudio/isLiked,
+                          window.studioLiked/studioToggleLike), в архив — archiveSave → studio_to_archive, «Поделиться» —
+                          свой приватный альбом + wa_album_share (ссылка-приглашение; ym_studio_shared). Лайкнутые версии
+                          видны в «Лайках» (main.js withStudioLikes — по времени лайка: likeTs от Яндекса / likedAt версии).
+                          Выключается в Настройки → Приложение (ym_studio_on, класс html.no-studio). «Слушать вместе»:
+                          гостям — studio_room_cache (yandex.js roomCache), у гостя трек комнаты (_room) не ищется на диске.
+                          Прослушивание версии plays.js засчитывает исходнику (raw.studio.src)
+  cache.js/.css           кэш (Rust — cache.rs): популярные, текущий плейлист и последние N треков «Моей волны»
+                          (wave_max, по умолчанию 20; context.type "radio"); полоса занятого места по видам
 src-tauri/
   src/lib.rs              регистрация модулей и команд (generate_handler!), трей, окно
   src/*.rs                net (запросы к Яндексу), auth/secret (токен в keyring), download, engine (WASAPI),

@@ -1,10 +1,12 @@
 // cache.js — кэш приложения (Rust: src-tauri/src/cache.rs). Нескачанные треки на диске:
 //   * популярные — дослушанные 3 раза и больше (считает Rust), живут дольше всех;
 //   * текущий плейлист — уже проигранные треки того, что слушается сейчас (альбом, плейлист, лайки);
-//     переключился на другое — они удаляются (популярные остаются).
+//     переключился на другое — они удаляются (популярные остаются);
+//   * «Моя волна» — последние дослушанные треки волны (по умолчанию 20; Rust сам убирает старые).
 // Трек «дослушан», когда сыграла половина (или 4 минуты) — тогда Rust решает, класть ли его в кэш, и качает сам.
 // Играет кэш main.js → play(): тем же ymlocal://, что и скачанные (window.appCache.has). Без интернета — сразу из кэша.
-// Настройки — карточка «Кэш» во вкладке «Воспроизведение»: размер (Выкл — кэш очищен), «Сохранять текущий плейлист».
+// Настройки — карточка «Кэш» во вкладке «Воспроизведение»: размер (Выкл — кэш очищен), «Сохранять текущий плейлист»,
+// сколько треков волны хранить; полоса — сколько места занято и чем.
 (() => {
   const W = window.Whisper;
   if (!W) return;
@@ -24,13 +26,15 @@
 
   // ---------- что слушается: ключ плейлиста ----------
   // Плейлист — то, что слушается по порядку: альбом, плейлист, лайки, артист. Волна, комната и одиночные треки — нет
-  // (их проигранное не копится, а прошлый плейлист при переходе на них очищается).
+  // (прошлый плейлист при переходе на них очищается). У волны свой счёт — последние N треков (isWave).
   function ctxKey() {
     const c = W.player.state().context || {};
     if (!["album", "playlist", "likes", "artist"].includes(c.type)) return null;
     const id = String(c.id || W.queue.list()?.[0]?.id || "");
     return (c.type + ":" + id).replace(/[^A-Za-z0-9:_-]/g, "").slice(0, 120) || null;
   }
+  // играет «Моя волна» (и волны по артисту, альбому, жанру — yandex.js: context.type "radio")
+  const isWave = () => W.player.state().context?.type === "radio";
 
   // ---------- дослушан ли трек ----------
   let started = null, reported = "", source = "";
@@ -47,7 +51,7 @@
     if (!/^\d{1,20}$/.test(id)) return;                    // не трек Яндекса
     // скачан или играет из архива — в кэш не нужен (но прослушивание посчитается для «популярных»)
     const downloaded = (typeof got !== "undefined" && got.has(id)) || source === "archive" || source === "local";
-    invoke("cache_played", { id, ctx: keepPl ? ctxKey() : null, downloaded })
+    invoke("cache_played", { id, ctx: keepPl ? ctxKey() : null, wave: isWave(), downloaded })
       .then((inCache) => { if (inCache) ids.add(id); else if (!downloaded) ids.delete(id); refreshInfo(); })
       .catch(() => {});
   }, 3000);
@@ -72,14 +76,36 @@
     $c("cachePl").disabled = i.limit_mb === 0;
     $c("cachePath").textContent = i.dir;
     $c("cachePath").title = i.dir;
+    for (const b of $c("cacheWave").querySelectorAll(".chip")) {
+      b.classList.toggle("active", +b.dataset.v === i.wave_max);
+      b.disabled = i.limit_mb === 0;
+    }
     $c("cacheNote").textContent = i.limit_mb === 0 ? "Кэш выключен."
-      : i.count ? `${i.count} ${plural(i.count, ["трек", "трека", "треков"])} · ${mb(i.bytes)} из ${mb(i.limit_mb * 1024 * 1024)}` + (i.popular ? ` · популярных: ${i.popular}` : "")
+      : i.count ? `${i.count} ${plural(i.count, ["трек", "трека", "треков"])} · занято ${mb(i.bytes)} из ${mb(i.limit_mb * 1024 * 1024)}`
       : "Пока пусто — треки появятся, когда ты их послушаешь.";
+    paintBar(i);
     $c("cacheClear").disabled = !i.count;
+  }
+  // полоса занятого места: популярные, плейлист, волна — доли от лимита; подпись под ней — сколько каждого
+  function paintBar(i) {
+    const bar = $c("cacheBar"), leg = $c("cacheLegend");
+    if (!bar || !leg) return;
+    const lim = i.limit_mb * 1024 * 1024;
+    bar.hidden = leg.hidden = !(i.limit_mb > 0 && i.count > 0);
+    if (bar.hidden) return;
+    const part = (b) => Math.min(100, (b / Math.max(lim, i.bytes, 1)) * 100).toFixed(2) + "%";
+    bar.querySelector('[data-k="pop"]').style.width = part(i.pop_bytes);
+    bar.querySelector('[data-k="pl"]').style.width = part(i.pl_bytes);
+    bar.querySelector('[data-k="wave"]').style.width = part(i.wave_bytes);
+    const row = (k, n, b) => { const el = leg.querySelector(`[data-k="${k}"]`); el.hidden = !n; el.querySelector("b").textContent = `${n} · ${mb(b)}`; };
+    row("pop", i.popular, i.pop_bytes);
+    row("pl", i.pl_count, i.pl_bytes);
+    row("wave", i.wave_count, i.wave_bytes);
+    leg.querySelector('[data-k="free"] b').textContent = mb(Math.max(0, lim - i.bytes));
   }
   async function config(args) {
     try {
-      const left = await invoke("cache_config", { limitMb: null, playlist: null, ...args });
+      const left = await invoke("cache_config", { limitMb: null, playlist: null, waveMax: null, ...args });
       ids.clear(); for (const id of left) ids.add(String(id));
     } catch (e) { $c("cacheNote").textContent = "Не удалось сохранить: " + (e?.message || e); }
     refreshInfo();
@@ -93,6 +119,10 @@
       config({ limitMb: v });
     });
     $c("cachePl").onchange = (e) => config({ playlist: e.target.checked });
+    $c("cacheWave").addEventListener("click", (e) => {
+      const b = e.target.closest(".chip");
+      if (b && !b.disabled) config({ waveMax: +b.dataset.v });
+    });
     $c("cacheOpen").onclick = () => invoke("cache_open_dir").catch((e) => { $c("cacheNote").textContent = "Не удалось открыть папку: " + (e?.message || e); });
     $c("cacheClear").onclick = async () => {
       if (!(await modal({ title: "Очистить кэш?", text: "Треки из кэша будут удалены с диска. Скачанные треки останутся.", ok: "Очистить", danger: true }))) return;

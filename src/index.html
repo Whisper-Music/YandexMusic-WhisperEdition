@@ -42,9 +42,13 @@
   <script src="listenstats.js" defer></script>
   <script src="plays.js" defer></script>
   <!-- кэш приложения: популярные нескачанные треки и проигранное из текущего плейлиста (cache.rs) -->
+  <link rel="stylesheet" href="cache.css" />
   <script src="cache.js" defer></script>
   <!-- «Поделиться» в меню трека и ссылки whisper:// / music.yandex.* — открываются здесь, а не в браузере -->
   <script src="share.js" defer></script>
+  <!-- «Студия»: обрезка треков, свои версии (studio.rs) -->
+  <link rel="stylesheet" href="studio.css" />
+  <script src="studio.js" defer></script>
   <link rel="stylesheet" href="backup.css" />
   <script src="backup.js" defer></script>
   <script src="cli.js" defer></script>
@@ -111,6 +115,7 @@
       <button class="nav active" id="likes">Лайки</button>
       <button class="nav" id="statsBtn">Статистика</button>
       <button class="nav" id="settingsBtn">Настройки</button>
+      <button class="nav" id="studioBtn">Студия</button>
       <div class="spacer"></div>
       <button class="nav" id="profile">Профиль</button>
     </aside>
@@ -183,6 +188,53 @@
           <button id="waveBtn" class="wavebtn" title="Моя волна"></button>
         </div>
         <button id="vizFsBtn" class="vizfsbtn" title="Визуализатор на весь экран (F)" aria-label="Визуализатор на весь экран"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </section>
+
+      <!-- «Студия» (studio.js): обрезка трека и свои версии с локальным лайком -->
+      <section id="studioPage" class="studio" hidden>
+        <div class="card stucut">
+          <div class="stuhead"><h3>Обрезать трек</h3></div>
+          <button id="stuTake" type="button" class="nav active stutake" hidden>Обрезать играющий трек</button>
+          <p id="stuEmpty" class="stuhint">Включи трек и нажми «Обрезать играющий трек» — или выбери «Обрезать в студии» в меню «⋯» любого трека. Получится своя версия: она сохранится у тебя, её можно лайкнуть, отправить в архив и поделиться ссылкой.</p>
+          <div id="stuEditor" hidden>
+            <div class="stutrack">
+              <img id="stuCover" alt="" />
+              <div class="stutx"><b id="stuTitle"></b><span id="stuArtist"></span></div>
+              <button id="stuClose" type="button" class="round" title="Закрыть трек">✕</button>
+            </div>
+            <div id="stuWave" class="stuwave" title="Тяни границы мышью; колесо — точнее (с Shift — по секунде)">
+              <canvas id="stuCanvas"></canvas>
+              <div id="stuSel" class="stusel"></div>
+              <i class="stuh" data-h="a"></i><i class="stuh" data-h="b"></i>
+              <i id="stuHead" class="stuplay" hidden></i>
+              <p id="stuState" class="stustate" hidden></p>
+            </div>
+            <div class="sturow">
+              <label class="stutime">Начало <input id="stuA" type="text" inputmode="decimal" spellcheck="false" /></label>
+              <button id="stuFromNow" type="button" class="nav" title="Начало — с того места, что звучит сейчас">⇤ отсюда</button>
+              <span class="stulen">длина <b id="stuLen">0 с</b></span>
+              <button id="stuToNow" type="button" class="nav" title="Конец — на том месте, что звучит сейчас">досюда ⇥</button>
+              <label class="stutime">Конец <input id="stuB" type="text" inputmode="decimal" spellcheck="false" /></label>
+            </div>
+            <div class="sturow">
+              <button id="stuPlay" type="button" class="nav stuplaybtn"></button>
+              <button id="stuTail" type="button" class="nav" title="Последние 3 секунды отрезка — проверить, где он кончается">Конец отрезка</button>
+              <input id="stuName" class="field stuname" type="text" maxlength="200" placeholder="Название версии" spellcheck="false" />
+              <button id="stuSave" type="button" class="nav active">Сохранить версию</button>
+            </div>
+          </div>
+        </div>
+        <div class="card stumine">
+          <div class="stuhead">
+            <h3>Мои версии</h3>
+            <div id="stuFilter" class="chips">
+              <button type="button" class="chip active" data-f="all">Все</button>
+              <button type="button" class="chip" data-f="liked">Любимые</button>
+            </div>
+          </div>
+          <ul id="stuList" class="list stulist"></ul>
+          <p id="stuNone" class="status"></p>
+        </div>
       </section>
 
       <section id="statsPage" class="stats" hidden>
@@ -339,7 +391,7 @@
           <p class="status" id="dlNote"></p>
         </div>
         <div class="card" id="cacheCard" data-tab="play">
-          <h3>Кэш <i class="hint" title="Нескачанные треки, которые ты слушаешь чаще всего, и уже проигранное из текущего плейлиста лежат на диске — играют сразу и без интернета. Скачанные треки в кэш не попадают.">i</i></h3>
+          <h3>Кэш <i class="hint" title="Нескачанные треки, которые ты слушаешь чаще всего, уже проигранное из текущего плейлиста и последние треки Моей волны лежат на диске — играют сразу и без интернета. Скачанные треки в кэш не попадают.">i</i></h3>
           <div class="lyrow"><span>Размер</span><div class="lyseg" id="cacheLimit">
             <button class="chip" data-v="0" title="Кэш выключен и очищен">Выкл</button>
             <button class="chip" data-v="512">500 МБ</button>
@@ -349,8 +401,22 @@
             <button class="chip" data-v="10240">10 ГБ</button>
           </div></div>
           <label class="switch" title="Проигранные треки текущего альбома или плейлиста остаются на диске, пока ты его слушаешь; переключился на другой — удаляются. Популярные треки остаются"><input type="checkbox" id="cachePl" /><i></i><span>Сохранять текущий плейлист</span></label>
+          <div class="lyrow" title="Последние дослушанные треки Моей волны остаются на диске: назад, история и без интернета — сразу с диска. Старые уходят сами"><span>Моя волна</span><div class="lyseg" id="cacheWave">
+            <button class="chip" data-v="0" title="Треки волны не кэшировать">Выкл</button>
+            <button class="chip" data-v="10">10</button>
+            <button class="chip" data-v="20">20</button>
+            <button class="chip" data-v="50">50</button>
+            <button class="chip" data-v="100">100</button>
+          </div></div>
           <div class="dlpath"><small>Папка кэша</small><span id="cachePath">—</span></div>
           <p class="status" id="cacheNote"></p>
+          <div id="cacheBar" class="cachebar" hidden><i data-k="pop"></i><i data-k="pl"></i><i data-k="wave"></i></div>
+          <div id="cacheLegend" class="cachelegend" hidden>
+            <span data-k="pop"><i></i>Популярные <b></b></span>
+            <span data-k="pl"><i></i>Плейлист <b></b></span>
+            <span data-k="wave"><i></i>Моя волна <b></b></span>
+            <span data-k="free"><i></i>Свободно <b></b></span>
+          </div>
           <div class="row">
             <button class="nav" id="cacheOpen">Открыть папку</button>
             <button class="nav danger" id="cacheClear">Очистить кэш</button>
@@ -432,6 +498,10 @@
           <h3>Статистика</h3>
           <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
           <div class="row"><button type="button" class="nav" id="lsClear">Очистить записанное</button></div>
+        </div>
+        <div class="card" id="stuCard" data-tab="app">
+          <h3>Студия</h3>
+          <label class="switch" title="Обрезка треков и свои версии. Выключишь — пропадут кнопка в боковой панели и «Обрезать в студии» в меню трека; сохранённые версии останутся и будут играть"><input type="checkbox" id="stuOn" /><i></i><span>Показывать «Студию»</span></label>
         </div>
         <div class="card" id="bkCard" data-tab="app">
           <h3>Резервная копия <i class="hint" title="Вход в Яндекс и ключ Whisper Archive в копию не попадают — на другом компьютере войди заново.">i</i></h3>

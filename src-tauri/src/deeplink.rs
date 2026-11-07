@@ -65,6 +65,8 @@ fn digits(s: &str) -> bool {
 }
 
 /// whisper://track/12345:678 → "track/12345:678"; album и artist — только номер. Иначе None.
+/// У трека можно ?t=СЕКУНДЫ — «поделиться с этого момента» (share.js): → "track/12345:678?t=83".
+/// Секунды — только цифры, не больше суток; что-то другое — ссылка открывается с начала трека.
 pub fn open_target(url: &Url) -> Option<String> {
     let (kind, segs) = parts(url)?;
     if segs.len() != 1 {
@@ -79,7 +81,24 @@ pub fn open_target(url: &Url) -> Option<String> {
         "album" | "artist" => digits(id),
         _ => false,
     };
-    ok.then(|| format!("{kind}/{id}"))
+    if !ok {
+        return None;
+    }
+    let at = if kind == "track" { start_at(url) } else { None };
+    Some(match at {
+        Some(s) => format!("{kind}/{id}?t={s}"),
+        None => format!("{kind}/{id}"),
+    })
+}
+
+/// ?t=83 → Some(83): 1…86400 секунд, только цифры (не больше 6 знаков)
+fn start_at(url: &Url) -> Option<u32> {
+    let v = url.query_pairs().find(|(k, _)| k == "t")?.1;
+    if v.is_empty() || v.len() > 6 || !v.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let s: u32 = v.parse().ok()?;
+    (1..=86_400).contains(&s).then_some(s)
 }
 
 fn put(slot: &Mutex<Option<String>>, v: String) {
@@ -173,5 +192,12 @@ mod tests {
         assert_eq!(open("whisper://track/1/2"), None);
         assert_eq!(open("whisper://room/K7QH2M"), None);
         assert_eq!(open("https://music.yandex.ru/track/1"), None);
+        // «с этого момента»
+        assert_eq!(open("whisper://track/12345:678?t=83").as_deref(), Some("track/12345:678?t=83"));
+        assert_eq!(open("whisper://track/12345?x=1&t=5").as_deref(), Some("track/12345?t=5"));
+        assert_eq!(open("whisper://track/12345?t=0").as_deref(), Some("track/12345"));
+        assert_eq!(open("whisper://track/12345?t=1e3").as_deref(), Some("track/12345"));
+        assert_eq!(open("whisper://track/12345?t=9999999").as_deref(), Some("track/12345"));
+        assert_eq!(open("whisper://album/678?t=83").as_deref(), Some("album/678"));
     }
 }

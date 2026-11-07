@@ -21,6 +21,7 @@ mod obs;
 mod power;
 mod secret;
 mod sleep;
+mod studio;
 mod theme;
 mod themelib;
 mod thumbbar;
@@ -292,11 +293,21 @@ pub fn run() {
             whisper::wa_token_clear,
             whisper::wa_albums_mine,
             whisper::wa_album,
+            whisper::wa_album_share,
             whisper::wa_me,
             whisper::wa_stream,
             whisper::auth::wa_auth_request_code,
             whisper::auth::wa_auth_issue,
             whisper_yandex::wa_save_track,
+            // «Студия» (studio.rs): обрезка треков, свои версии с локальным лайком, отправка в архив
+            studio::studio_source,
+            studio::studio_save,
+            studio::studio_list,
+            studio::studio_update,
+            studio::studio_delete,
+            studio::studio_export,
+            studio::studio_to_archive,
+            studio::studio_room_cache,
             whisper_yandex::wa_room_cache_track,
             whisper::stream::wa_prefetch,
             whisper::rooms::wa_room_create,

@@ -371,13 +371,82 @@
     }
   }
 
+  // ---------- поиск в свёрнутой панели: плавающее окошко ----------
+  // В полосе поиск — кружок. Раньше по клику поле раскрывалось вбок прямо поверх страницы и закрывало её начало.
+  // Теперь это окошко с ручкой сверху: тащишь за ручку — переезжает, куда удобно (место запоминается, ym_sfloat),
+  // двойной щелчок по ручке — обратно к панели. Окошко живёт, пока поле в фокусе (Esc или щелчок мимо — закрыть).
+  // Панель — containing block для position: fixed (у неё backdrop-filter, в мини-виде ещё и transform), поэтому
+  // положение задаётся в координатах окна, а смещение до панели меряется и вычитается (place).
+  const SF_KEY = "ym_sfloat", SF_W = 320, SF_H = 66;
+  function initSearchFloat(box, inner, grip, input) {
+    let pos = null;                     // { x, y } — левый верхний угол окошка в координатах окна
+    try { const v = JSON.parse(localStorage.getItem(SF_KEY) || "null"); if (Number.isFinite(v?.x) && Number.isFinite(v?.y)) pos = { x: v.x, y: v.y }; } catch {}
+    const mini = () => eff("sb") === "mini";
+    const clamp = (p) => ({
+      x: Math.round(Math.min(Math.max(8, p.x), Math.max(8, innerWidth - SF_W - 8))),
+      y: Math.round(Math.min(Math.max(8, p.y), Math.max(8, innerHeight - SF_H - 8))),
+    });
+    // по умолчанию — рядом с кружком поиска, с внешней от панели стороны
+    const home = () => {
+      const r = box.getBoundingClientRect(), right = root.getAttribute("data-ly-side") === "right";
+      return clamp({ x: right ? r.left - SF_W - 12 : r.right + 12, y: r.top - 16 });
+    };
+    function place(p) {
+      // где окажется окошко при left/top = 0 — это и есть смещение containing block
+      inner.style.setProperty("--sf-x", "0px"); inner.style.setProperty("--sf-y", "0px");
+      const o = inner.getBoundingClientRect();
+      inner.style.setProperty("--sf-x", Math.round(p.x - o.left) + "px");
+      inner.style.setProperty("--sf-y", Math.round(p.y - o.top) + "px");
+    }
+    const open = () => {
+      if (!mini() || box.classList.contains("sfloat")) return;
+      box.classList.add("sfloat");
+      place(clamp(pos || home()));
+    };
+    const close = () => { box.classList.remove("sfloat"); inner.style.removeProperty("--sf-x"); inner.style.removeProperty("--sf-y"); };
+    input.addEventListener("focus", open);
+    input.addEventListener("blur", () => { if (!root.classList.contains("sf-drag")) close(); });
+    addEventListener("resize", () => { if (box.classList.contains("sfloat")) place(clamp(pos || home())); });
+    // ручка: тянуть, не забирая фокус у поля (иначе окошко закрылось бы)
+    grip.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      const r = inner.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      root.classList.add("sf-drag");
+      const move = (ev) => { pos = clamp({ x: ev.clientX - dx, y: ev.clientY - dy }); place(pos); };
+      const up = () => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+        root.classList.remove("sf-drag");
+        if (pos) { try { localStorage.setItem(SF_KEY, JSON.stringify(pos)); } catch {} }
+        input.focus();
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
+    grip.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      pos = null; try { localStorage.removeItem(SF_KEY); } catch {}
+      place(home()); input.focus();
+    });
+  }
+
   function init() {
     // поиск — в обёртку: в свёрнутой панели он кружок со значком и раскрывается поверх контента
     const s = document.getElementById("search");
-    if (s && !s.parentElement.classList.contains("sbox")) {
+    if (s && !s.closest(".sbox")) {
       const box = document.createElement("div");
       box.className = "sbox";
-      s.before(box); box.append(s);
+      const inner = document.createElement("div");
+      inner.className = "sinner";
+      const grip = document.createElement("div");
+      grip.className = "sgrip"; grip.title = "Потяни, чтобы передвинуть поиск\nДвойной щелчок — на место у панели";
+      grip.setAttribute("aria-hidden", "true");
+      s.before(box); inner.append(grip, s); box.append(inner);
+      initSearchFloat(box, inner, grip, s);
     }
 
     // кнопка сворачивания прямо на панели — в самом низу

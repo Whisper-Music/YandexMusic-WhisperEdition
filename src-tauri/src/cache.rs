@@ -3,6 +3,8 @@
 //   * «популярные» — трек дослушали POP_PLAYS раз: ложится в кэш и живёт дольше всех (удаляется последним);
 //   * «текущий плейлист» — уже проигранные треки того, что сейчас слушается (альбом, плейлист, лайки…):
 //     при переключении на другой плейлист такие треки (если они не популярные) удаляются;
+//   * «Моя волна» — дослушанные треки волны: последние wave_max (по умолчанию 20), старые уходят сами;
+//     смена плейлиста их не трогает (волна — не плейлист);
 //   * лимит размера: переполнилось — сначала уходят треки плейлиста (старые первыми), потом популярные
 //     с наименьшим числом прослушиваний. Лимит 0 — кэш выключен (и очищен).
 //
@@ -28,6 +30,9 @@ const POP_PLAYS: u32 = 3;
 const PLAYS_MAX: usize = 5000;
 const DEFAULT_LIMIT_MB: u64 = 1024;
 const MAX_LIMIT_MB: u64 = 100 * 1024;
+/// Сколько треков «Моей волны» держать по умолчанию и не больше какого числа.
+const DEFAULT_WAVE_MAX: u32 = 20;
+const MAX_WAVE: u32 = 500;
 static LOCK: Mutex<()> = Mutex::new(());
 static INFLIGHT: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
@@ -40,6 +45,9 @@ struct Item {
     pop: bool,
     #[serde(default)]
     pl: bool,
+    /// дослушан в «Моей волне»
+    #[serde(default)]
+    wave: bool,
     last: u64,
 }
 
@@ -58,6 +66,9 @@ struct Index {
     /// ключ текущего плейлиста (src/cache.js: «album:123», «likes»…); другой — треки прошлого удаляются
     #[serde(default)]
     current: Option<String>,
+    /// сколько последних треков «Моей волны» хранить (0 — волну не кэшировать)
+    #[serde(default = "wave_default")]
+    wave_max: u32,
     #[serde(default)]
     items: HashMap<String, Item>,
     #[serde(default)]
@@ -68,9 +79,13 @@ fn yes() -> bool {
     true
 }
 
+fn wave_default() -> u32 {
+    DEFAULT_WAVE_MAX
+}
+
 impl Default for Index {
     fn default() -> Self {
-        Self { limit_mb: DEFAULT_LIMIT_MB, playlist: true, current: None, items: HashMap::new(), plays: HashMap::new() }
+        Self { limit_mb: DEFAULT_LIMIT_MB, playlist: true, current: None, wave_max: DEFAULT_WAVE_MAX, items: HashMap::new(), plays: HashMap::new() }
     }
 }
 
@@ -140,13 +155,26 @@ fn evict(d: &std::path::Path, idx: &mut Index, keep: Option<&str>) {
     }
 }
 
+/// Треки только из волны (не популярные и не из плейлиста): остаются последние wave_max, старые удаляются.
+fn trim_wave(d: &std::path::Path, idx: &mut Index) {
+    let mut w: Vec<(String, u64)> = idx.items.iter().filter(|(_, it)| it.wave && !it.pop && !it.pl).map(|(id, it)| (id.clone(), it.last)).collect();
+    if w.len() <= idx.wave_max as usize {
+        return;
+    }
+    w.sort_by(|a, b| b.1.cmp(&a.1)); // свежие первыми
+    for (id, _) in w.into_iter().skip(idx.wave_max as usize) {
+        remove_item(d, idx, &id);
+    }
+}
+
 /// Другой плейлист — проигранные треки прошлого (кроме популярных) больше не нужны.
+/// Треки волны остаются: у них свой счёт (trim_wave).
 fn switch_playlist(d: &std::path::Path, idx: &mut Index, ctx: Option<&str>) {
     if idx.current.as_deref() == ctx {
         return;
     }
     idx.current = ctx.map(str::to_string);
-    let old: Vec<String> = idx.items.iter().filter(|(_, it)| it.pl && !it.pop).map(|(id, _)| id.clone()).collect();
+    let old: Vec<String> = idx.items.iter().filter(|(_, it)| it.pl && !it.pop && !it.wave).map(|(id, _)| id.clone()).collect();
     for id in old {
         remove_item(d, idx, &id);
     }
@@ -180,19 +208,47 @@ pub struct CacheInfo {
     popular: usize,
     limit_mb: u64,
     playlist: bool,
+    wave_max: u32,
+    /// занято по видам (каждый трек считается один раз: популярный → плейлист → волна)
+    pop_bytes: u64,
+    pl_bytes: u64,
+    wave_bytes: u64,
+    pl_count: usize,
+    wave_count: usize,
+}
+
+/// Вид трека в кэше для подсчёта места: 0 — популярный, 1 — плейлист, 2 — волна.
+fn kind(it: &Item) -> u8 {
+    if it.pop {
+        0
+    } else if it.pl {
+        1
+    } else if it.wave {
+        2
+    } else {
+        1
+    }
 }
 
 #[tauri::command]
 pub fn cache_info(app: AppHandle) -> Result<CacheInfo, String> {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let idx = read(&app);
+    let sum = |k: u8| idx.items.values().filter(|i| kind(i) == k).map(|i| i.size).sum::<u64>();
+    let cnt = |k: u8| idx.items.values().filter(|i| kind(i) == k).count();
     Ok(CacheInfo {
         dir: dir(&app)?.to_string_lossy().into_owned(),
         bytes: idx.items.values().map(|i| i.size).sum(),
         count: idx.items.len(),
-        popular: idx.items.values().filter(|i| i.pop).count(),
+        popular: cnt(0),
         limit_mb: idx.limit_mb,
         playlist: idx.playlist,
+        wave_max: idx.wave_max,
+        pop_bytes: sum(0),
+        pl_bytes: sum(1),
+        wave_bytes: sum(2),
+        pl_count: cnt(1),
+        wave_count: cnt(2),
     })
 }
 
@@ -203,9 +259,10 @@ pub fn cache_ids(app: AppHandle) -> Vec<String> {
     read(&app).items.into_keys().collect()
 }
 
-/// Настройки: лимит (МБ, 0 — кэш выключен) и «сохранять текущий плейлист». Возвращает номера, что остались.
+/// Настройки: лимит (МБ, 0 — кэш выключен), «сохранять текущий плейлист» и сколько треков «Моей волны» хранить
+/// (0 — волну не кэшировать). Возвращает номера, что остались.
 #[tauri::command]
-pub fn cache_config(app: AppHandle, limit_mb: Option<u64>, playlist: Option<bool>) -> Result<Vec<String>, String> {
+pub fn cache_config(app: AppHandle, limit_mb: Option<u64>, playlist: Option<bool>, wave_max: Option<u32>) -> Result<Vec<String>, String> {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let d = dir(&app)?;
     let mut idx = read(&app);
@@ -217,6 +274,10 @@ pub fn cache_config(app: AppHandle, limit_mb: Option<u64>, playlist: Option<bool
         if !on {
             switch_playlist(&d, &mut idx, None);
         }
+    }
+    if let Some(n) = wave_max {
+        idx.wave_max = n.min(MAX_WAVE);
+        trim_wave(&d, &mut idx);
     }
     if idx.limit_mb == 0 {
         let ids: Vec<String> = idx.items.keys().cloned().collect();
@@ -275,10 +336,10 @@ pub fn cache_open_dir(app: AppHandle) -> Result<(), String> {
 }
 
 /// Трек дослушан (src/cache.js). `ctx` — ключ текущего плейлиста (None — волна и прочее, не плейлист),
-/// `downloaded` — трек уже скачан (тогда только счётчик). Решает, класть ли трек в кэш, и при необходимости
+/// `wave` — играет «Моя волна», `downloaded` — трек уже скачан (тогда только счётчик). Решает, класть ли трек в кэш, и при необходимости
 /// скачивает его с Яндекса. Возвращает true, если трек теперь в кэше.
 #[tauri::command]
-pub async fn cache_played(app: AppHandle, id: String, ctx: Option<String>, downloaded: bool) -> Result<bool, String> {
+pub async fn cache_played(app: AppHandle, id: String, ctx: Option<String>, wave: Option<bool>, downloaded: bool) -> Result<bool, String> {
     if !id_ok(&id) {
         return Ok(false);
     }
@@ -302,21 +363,23 @@ pub async fn cache_played(app: AppHandle, id: String, ctx: Option<String>, downl
             }
         }
         let in_pl = idx.playlist && ctx.is_some();
+        let in_wave = wave == Some(true) && ctx.is_none() && idx.wave_max > 0;
         let target = if idx.playlist { ctx.clone() } else { None };
         switch_playlist(&d, &mut idx, target.as_deref());
         let mut need = false;
         if let Some(it) = idx.items.get_mut(&id) {
             it.pop |= pop;
             it.pl |= in_pl;
+            it.wave |= in_wave;
             it.last = t;
-        } else if !downloaded && idx.limit_mb > 0 && (pop || in_pl) {
+        } else if !downloaded && idx.limit_mb > 0 && (pop || in_pl || in_wave) {
             need = true;
         }
         write(&app, &idx)?;
         if !need {
             return Ok(idx.items.contains_key(&id));
         }
-        (pop, in_pl)
+        (pop, in_pl, in_wave)
     };
     // один и тот же трек не качаем дважды одновременно
     {
@@ -335,7 +398,7 @@ pub async fn cache_played(app: AppHandle, id: String, ctx: Option<String>, downl
     res
 }
 
-async fn fetch_into(app: &AppHandle, d: &std::path::Path, id: &str, (pop, pl): (bool, bool)) -> Result<bool, String> {
+async fn fetch_into(app: &AppHandle, d: &std::path::Path, id: &str, (pop, pl, wave): (bool, bool, bool)) -> Result<bool, String> {
     let url = net::track_mp3_url(id).await?;
     let bytes = net::fetch_media(&url).await?;
     if bytes.len() < 1024 {
@@ -343,7 +406,7 @@ async fn fetch_into(app: &AppHandle, d: &std::path::Path, id: &str, (pop, pl): (
     }
     let ext = if bytes.starts_with(b"fLaC") { "flac" } else if bytes.len() > 8 && &bytes[4..8] == b"ftyp" { "m4a" } else { "mp3" };
     std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    let item = Item { size: bytes.len() as u64, ext: ext.into(), pop, pl, last: now() };
+    let item = Item { size: bytes.len() as u64, ext: ext.into(), pop, pl, wave, last: now() };
     let tmp = d.join(format!(".{id}.part"));
     {
         let mut f = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
@@ -352,13 +415,14 @@ async fn fetch_into(app: &AppHandle, d: &std::path::Path, id: &str, (pop, pl): (
     drop(bytes);
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut idx = read(app);
-    // пока качали, кэш выключили или сменился плейлист (а трек не популярный) — не нужен
-    if idx.limit_mb == 0 || (!pop && pl && !idx.playlist) {
+    // пока качали, кэш выключили, отключили плейлист или волну (а трек не популярный) — не нужен
+    if idx.limit_mb == 0 || (!pop && pl && !idx.playlist) || (!pop && !pl && wave && idx.wave_max == 0) {
         let _ = std::fs::remove_file(&tmp);
         return Ok(false);
     }
     std::fs::rename(&tmp, file_of(d, id, &item)).map_err(|e| e.to_string())?;
     idx.items.insert(id.to_string(), item);
+    trim_wave(d, &mut idx);
     evict(d, &mut idx, Some(id));
     write(app, &idx)?;
     Ok(idx.items.contains_key(id))
@@ -369,7 +433,22 @@ mod tests {
     use super::*;
 
     fn it(size: u64, pop: bool, pl: bool, last: u64) -> Item {
-        Item { size, ext: "mp3".into(), pop, pl, last }
+        Item { size, ext: "mp3".into(), pop, pl, wave: false, last }
+    }
+
+    #[test]
+    fn wave_trim_and_switch() {
+        let d = std::env::temp_dir().join(format!("yd-cache-wave-{}", std::process::id()));
+        let mut idx = Index { wave_max: 2, current: Some("album:1".into()), ..Default::default() };
+        for (id, last) in [("1", 10), ("2", 30), ("3", 20)] {
+            idx.items.insert(id.into(), Item { wave: true, ..it(1, false, false, last) });
+        }
+        idx.items.insert("4".into(), Item { wave: true, ..it(1, true, false, 1) }); // популярный — не в счёт волны
+        trim_wave(&d, &mut idx);
+        assert!(!idx.items.contains_key("1") && idx.items.contains_key("2") && idx.items.contains_key("3") && idx.items.contains_key("4"));
+        // смена плейлиста треки волны не трогает
+        switch_playlist(&d, &mut idx, Some("album:2"));
+        assert!(idx.items.contains_key("2") && idx.items.contains_key("3"));
     }
 
     #[test]

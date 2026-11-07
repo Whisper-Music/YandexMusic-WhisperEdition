@@ -1490,7 +1490,7 @@ $("#profile").onclick = async () => {
 };
 // Всё, что относится к аккаунту: очередь и место в треке, лайки, закладки, станция волны, «уже слышал», история
 // прослушивания и поиска, свои обложки плейлистов. Настройки приложения, стили и скачанные треки остаются.
-const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_search_hist", "ym_history"];
+const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_search_hist", "ym_search_picks", "ym_history"];
 async function forgetAccountData() {
   for (const k of [...ACCOUNT_KEYS, LEGACY_TOKEN_KEY]) { try { localStorage.removeItem(k); } catch {} }
   try {
@@ -1550,7 +1550,7 @@ function renderList(tracks, append = false, opts = {}) {
     li.onclick = () => { wave.on = false; queue = arr; playCtx = opts.ctx || "other"; playAlbum = opts.album || null; play(i); };
     const hb = document.createElement("button");
     hb.className = "likebtn";
-    setHeart(hb, likedIds.has(String(t.id)));
+    setHeart(hb, isLiked(String(t.id)));
     hb.onclick = (e) => { e.stopPropagation(); toggleLike(t); };
     const mb = document.createElement("button");
     mb.className = "morebtn"; mb.title = "Ещё"; mb.innerHTML = ICON.more;
@@ -1656,7 +1656,7 @@ function resetView() {
   shown = []; $("#list").innerHTML = ""; $("#list").hidden = false;
   $("#more").hidden = true; $("#status").textContent = "";
   $("#chips").hidden = true; $("#lkFind").hidden = true; $("#lastAlbum").hidden = true; $("#similar").hidden = true;
-  $("#wavePage").hidden = true; $("#settingsPage").hidden = true; $("#statsPage").hidden = true;
+  $("#wavePage").hidden = true; $("#settingsPage").hidden = true; $("#statsPage").hidden = true; $("#studioPage").hidden = true;
   $("#plPage").hidden = true; $("#plBar").hidden = true; $("#plRecs").hidden = true; $("#plCreateBtn").hidden = true;
   curPl = null; recArr.length = 0; $("#plRecList").innerHTML = "";
   dlCur = null; $("#dlAllBtn").hidden = true;
@@ -1818,7 +1818,7 @@ function syncIcons() {
 var thumbKey = "";       // var: syncIcons может сработать раньше этой строки
 function thumbSync() {
   const t = queue[current];
-  const st = { has: !!t, playing: !!audio && !audio.paused, liked: !!t && likedIds.has(String(t.id)) };
+  const st = { has: !!t, playing: !!audio && !audio.paused, liked: !!t && isLiked(String(t.id)) };
   const k = JSON.stringify(st);
   if (k === thumbKey) return;
   thumbKey = k;
@@ -1880,7 +1880,7 @@ async function showLikes(tab = likesTab) {
       $("#status").textContent = i + 100 < ids.length ? `Загружено ${acc.length} из ${ids.length}…` : "";
     }
     likes.tracks = mergeLikesAdded(acc); likes.done = true; likesSrc = likes.tracks;
-    if (likes.tracks !== acc) redrawLikes(); else lkFindCount(true);
+    if (likes.tracks !== acc || window.studioLikedList?.().length) redrawLikes(); else lkFindCount(true);
     backfillMeta(acc);
   } catch (e) {
     if (my !== nav) return;
@@ -1928,8 +1928,34 @@ function lkFindCount(final = false) {
   else if ($("#status").textContent === "Ничего не найдено") $("#status").textContent = "";
 }
 function renderLikes() {
-  renderList(likesFilter(likesSrc), false, LK);
+  renderList(likesFilter(withStudioLikes(likesSrc)), false, LK);
   lkFindCount(true);
+}
+// Лайкнутые версии из «Студии» (studio.js) — среди лайков Яндекса, по времени лайка: у лайков Яндекса оно
+// приходит с сервера (timestamp, rememberLikes), у новых — момент нажатия, у версий — studio.rs (likedAt).
+// Трек без известного времени (офлайн: скачанный, но не лайкнутый) — после всех версий.
+const likeTs = new Map();
+// studio.js: лайк версии изменился — перерисовать открытые «Лайки» как есть (и во время загрузки, и офлайн),
+// не подменяя список, который сейчас показан
+function likesStudioChanged() {
+  if (!likesOpen()) return;
+  const main = document.querySelector(".main"), top = main.scrollTop;
+  renderLikes();
+  main.scrollTop = top;
+}
+function withStudioLikes(list) {
+  const st = window.studioLikedList?.() || [];
+  if (!st.length) return list;
+  st.sort((a, b) => b.at - a.at);
+  const out = [];
+  let k = 0;
+  for (const t of list) {
+    const ts = likeTs.get(String(t.id));
+    while (k < st.length && (ts === undefined || st[k].at >= ts)) out.push(st[k++].raw);
+    out.push(t);
+  }
+  while (k < st.length) out.push(st[k++].raw);
+  return out;
 }
 function lkFindShow() {
   $("#lkFind").hidden = false;
@@ -1974,6 +2000,8 @@ function rememberLikes(lib) {
     .slice()
     .sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
   likedIds = new Set(list.map((t) => String(t.id)));
+  likeTs.clear();
+  for (const t of list) likeTs.set(String(t.id), Date.parse(t.timestamp) || 0);
   try { localStorage.setItem("ym_liked_ids", JSON.stringify(list.map((t) => String(t.id)))); } catch {}
   return list;
 }
@@ -2727,6 +2755,48 @@ function pushSearchHist(q) {
 }
 const searchOpen = () => document.querySelector(".main").dataset.page === "search";
 
+// «Открывал из поиска»: треки, альбомы и артисты, по которым кликнули в результатах, — карточками с обложкой
+// над историей запросов. Хранится коротко: id, название, подпись, ссылка на обложку; у трека — сам трек без лишних полей
+// (по нему его и включаем). Строку результата с её сущностью связывает searchPickOf (заполняет showSearch / renderBest).
+const SEARCH_PICKS_KEY = "ym_search_picks", SEARCH_PICKS_MAX = 20;
+const PICK_TYPES = ["track", "album", "artist"];
+const searchPicks = lsJSON(SEARCH_PICKS_KEY, [], Array.isArray)
+  .filter((p) => p && PICK_TYPES.includes(p.type) && p.id != null && typeof p.title === "string")
+  .slice(0, SEARCH_PICKS_MAX);
+const searchPickOf = new WeakMap();          // li результата → { type, x }
+function saveSearchPicks() { try { localStorage.setItem(SEARCH_PICKS_KEY, JSON.stringify(searchPicks)); } catch {} }
+// трек — только то, что нужно, чтобы показать и включить его (как в ym_last)
+const slimTrack = (t) => ({
+  id: t.id, title: t.title, version: t.version, durationMs: t.durationMs, available: t.available, coverUri: t.coverUri,
+  artists: (t.artists || []).map((a) => ({ id: a.id, name: a.name })),
+  albums: (t.albums || []).slice(0, 1).map((a) => ({ id: a.id, title: a.title, coverUri: a.coverUri })),
+});
+function pushSearchPick(type, x) {
+  if (!PICK_TYPES.includes(type) || x?.id == null) return;
+  const artists = (x.artists || []).map((a) => a.name).filter(Boolean).join(", ");
+  const artUri = type === "artist" ? x.cover?.uri || x.ogImage : null;
+  const p = {
+    type, id: String(x.id),
+    title: String((type === "artist" ? x.name : x.title) || "").slice(0, 200),
+    sub: type === "artist" ? "" : artists.slice(0, 200),
+    img: (type === "artist" ? (artUri ? cover({ coverUri: artUri }, "200x200") : "") : cover(x, "200x200")) || "",
+    at: Date.now(),
+  };
+  if (!p.title) return;
+  if (type === "track") p.track = slimTrack(x);
+  const i = searchPicks.findIndex((q) => q.type === type && String(q.id) === p.id);
+  if (i >= 0) searchPicks.splice(i, 1);
+  searchPicks.unshift(p);
+  if (searchPicks.length > SEARCH_PICKS_MAX) searchPicks.length = SEARCH_PICKS_MAX;
+  saveSearchPicks();
+}
+function openSearchPick(p) {
+  if (p.type === "album") return navigate(() => showAlbum(p.id));
+  if (p.type === "artist") return navigate(() => showArtist(p.id));
+  if (!p.track) return;
+  wave.on = false; queue = [p.track]; playCtx = "other"; playAlbum = null; play(0);
+}
+
 function searchChips(active) {
   setChips([["track", "Треки"], ["artist", "Артисты"], ["album", "Альбомы"], ["history", "История"]], active, (t) => {
     if (t === "history") return goTop(() => showSearch(searchQ, true));
@@ -2779,6 +2849,11 @@ async function showSearch(q, historyTab = false) {
   if (type === "track") renderList(items);
   else if (type === "artist") renderArtists(items);
   else renderAlbums(items, true);
+  // строки результатов — по порядку те же items (у треков — по data-id): клик по строке попадёт в «Открывал»
+  [...$("#list").children].forEach((li, k) => {
+    const x = type === "track" ? items.find((t) => String(t.id) === li.dataset.id) : items[k];
+    if (x) searchPickOf.set(li, { type, x });
+  });
   if (bestOk) renderBest(best.type, best.result);
   $("#status").textContent = items.length || bestOk ? "" : "Ничего не найдено";
 }
@@ -2787,6 +2862,7 @@ async function showSearch(q, historyTab = false) {
 function renderBest(type, x) {
   const li = document.createElement("li");
   li.className = "best";
+  searchPickOf.set(li, { type, x });
   const artUri = x.cover?.uri || x.ogImage;
   const imgUrl = type === "artist" ? (artUri ? cover({ coverUri: artUri }, "200x200") : "") : cover(x, "200x200");
   li.append(mkImg(imgUrl, type === "artist" ? "rnd" : ""));
@@ -2821,7 +2897,7 @@ function renderBest(type, x) {
     pb.onclick = (e) => { e.stopPropagation(); start(); };
     const hb = document.createElement("button");
     hb.className = "likebtn";
-    setHeart(hb, likedIds.has(String(x.id)));
+    setHeart(hb, isLiked(String(x.id)));
     hb.onclick = (e) => { e.stopPropagation(); toggleLike(x); };
     const mb = document.createElement("button");
     mb.className = "morebtn"; mb.title = "Ещё"; mb.innerHTML = ICON.more;
@@ -2846,14 +2922,65 @@ function renderBest(type, x) {
   $("#list").prepend(li);
 }
 
+// «Открывал»: горизонтальная лента карточек (обложка, название, подпись) — над списком запросов
+const PICK_LABEL = { track: "Трек", album: "Альбом", artist: "Артист" };
+function searchPicksRow() {
+  const li = document.createElement("li");
+  li.className = "histpicks";
+  const head = document.createElement("small");
+  head.className = "histhead"; head.textContent = "Открывал";
+  const row = document.createElement("div");
+  row.className = "spicks";
+  for (const p of searchPicks) {
+    const c = document.createElement("div");
+    c.className = "spick" + (p.type === "artist" ? " artist" : "");
+    c.tabIndex = 0; c.setAttribute("role", "button");
+    c.title = [p.title, p.sub].filter(Boolean).join(" — ");
+    const img = mkImg(safeUrl(p.img), p.type === "artist" ? "rnd" : "");
+    const t = document.createElement("span"); t.className = "spt"; t.textContent = p.title;
+    const s = document.createElement("span"); s.className = "sps";
+    s.textContent = p.type === "track" ? p.sub || PICK_LABEL.track : p.type === "album" ? [PICK_LABEL.album, p.sub].filter(Boolean).join(" · ") : PICK_LABEL.artist;
+    const x = document.createElement("button");
+    x.className = "spx"; x.type = "button"; x.title = "Убрать"; x.textContent = "✕";
+    x.onclick = (e) => {
+      e.stopPropagation();
+      const i = searchPicks.indexOf(p);
+      if (i >= 0) searchPicks.splice(i, 1);
+      saveSearchPicks(); renderSearchHist();
+    };
+    c.append(img, t, s, x);
+    // открыл ещё раз — карточка встаёт первой (такой, какая есть: с той же обложкой и подписью)
+    c.onclick = () => {
+      const i = searchPicks.indexOf(p);
+      if (i > 0) { searchPicks.splice(i, 1); searchPicks.unshift(p); p.at = Date.now(); saveSearchPicks(); }
+      openSearchPick(p);
+    };
+    c.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); c.onclick(); } };
+    row.append(c);
+  }
+  // колёсико листает ленту вбок (вниз-вверх оно иначе пролистало бы всю страницу)
+  row.addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || row.scrollWidth <= row.clientWidth) return;
+    e.preventDefault(); row.scrollLeft += e.deltaY;
+  }, { passive: false });
+  li.append(head, row);
+  return li;
+}
 function renderSearchHist() {
   const list = $("#list");
   list.innerHTML = "";
-  if (!searchHist.length) {
-    $("#status").textContent = "История пуста. Сюда попадают запросы, подтверждённые Enter, и те, по которым ты что-то включил или открыл.";
+  if (!searchHist.length && !searchPicks.length) {
+    $("#status").textContent = "История пуста. Сюда попадают запросы, подтверждённые Enter, и то, что ты включил или открыл из результатов.";
     return;
   }
   $("#status").textContent = "";
+  if (searchPicks.length) list.append(searchPicksRow());
+  if (searchHist.length) {
+    const h = document.createElement("li");
+    h.className = "histhead-li";
+    h.innerHTML = '<small class="histhead">Искал</small>';
+    list.append(h);
+  }
   for (const q of searchHist) {
     const li = document.createElement("li");
     li.className = "histitem";
@@ -2871,7 +2998,7 @@ function renderSearchHist() {
   const clr = document.createElement("li");
   clr.className = "histclear";
   clr.innerHTML = '<button class="nav">Очистить историю</button>';
-  clr.querySelector("button").onclick = () => { searchHist.length = 0; saveSearchHist(); renderSearchHist(); };
+  clr.querySelector("button").onclick = () => { searchHist.length = 0; searchPicks.length = 0; saveSearchHist(); saveSearchPicks(); renderSearchHist(); };
   list.append(clr);
 }
 
@@ -2898,7 +3025,13 @@ searchInput.addEventListener("keydown", (e) => {
 });
 // любое действие с результатом (включить, открыть, лайкнуть) сохраняет запрос в историю
 $("#list").addEventListener("click", (e) => {
-  if (searchOpen() && searchQ && searchTab !== "history" && e.target.closest("li") && !e.target.closest(".histitem, .histclear")) pushSearchHist(searchQ);
+  if (!(searchOpen() && searchQ && searchTab !== "history")) return;
+  const li = e.target.closest("li");
+  if (!li || e.target.closest(".histitem, .histclear")) return;
+  pushSearchHist(searchQ);
+  // включил или открыл — в «Открывал»; лайк, «⋯» и переход по имени артиста в строке трека — не в счёт
+  const p = searchPickOf.get(li);
+  if (p && !e.target.closest(".likebtn, .morebtn, .art")) pushSearchPick(p.type, p.x);
 }, true);
 
 function setHeart(b, on) {
@@ -2907,17 +3040,20 @@ function setHeart(b, on) {
   b.innerHTML = on ? ICON.heartOn : ICON.heart;
   b.title = on ? "Убрать из лайков" : "В лайки";
 }
+// своя версия из «Студии» (studio.js): номер «studio-…», лайк у неё локальный — Яндекс о ней не знает
+function isStudio(id) { return String(id).startsWith("studio-"); }
+function isLiked(id) { return isStudio(id) ? !!window.studioLiked?.(String(id)) : likedIds.has(String(id)); }
 function refreshHearts() {
   document.querySelectorAll(".list li").forEach((li) => {
     const b = li.querySelector(".likebtn");
-    if (b) setHeart(b, likedIds.has(String(li.dataset.id)));
+    if (b) setHeart(b, isLiked(String(li.dataset.id)));
   });
   const t = queue[current];
-  setHeart($("#likeBtn"), !!t && likedIds.has(String(t.id)));
-  setHeart($("#fLike"), !!t && likedIds.has(String(t.id)));
+  setHeart($("#likeBtn"), !!t && isLiked(String(t.id)));
+  setHeart($("#fLike"), !!t && isLiked(String(t.id)));
   refreshPlayerBtns();
   thumbSync();
-  if (!t || String(t.id) === window.Whisper?.player.state().track?.id) wReport({ liked: !!t && likedIds.has(String(t.id)), disliked: !!t && dislikedIds.has(String(t.id)) });
+  if (!t || String(t.id) === window.Whisper?.player.state().track?.id) wReport({ liked: !!t && isLiked(String(t.id)), disliked: !!t && dislikedIds.has(String(t.id)) });
 }
 async function loadLikedIds() {
   try {
@@ -2928,8 +3064,10 @@ async function loadLikedIds() {
 }
 async function toggleLike(t) {
   if (!t) return;
+  if (isStudio(t.id)) { await window.studioToggleLike?.(t); refreshHearts(); return; }
   const id = String(t.id), albumId = albumOf(t), was = likedIds.has(id);
   was ? likedIds.delete(id) : likedIds.add(id);
+  if (!was) likeTs.set(id, Date.now());               // новый лайк — самый свежий (версии студии встают по времени)
   if (!was && dislikedIds.delete(id)) saveDislikes();       // лайк снимает «Не нравится» (Яндекс делает так же)
   refreshHearts();
   try {
@@ -2957,7 +3095,7 @@ function saveDislikes() { try { localStorage.setItem("ym_disliked_ids", JSON.str
 // «Не нравится»: трек уходит в дизлайки Яндекса (волна его больше не предложит), из лайков он убирается,
 // а если он сейчас играет — сразу включается следующий.
 async function toggleDislike(t) {
-  if (!t) return;
+  if (!t || isStudio(t.id)) return;     // у своей версии «Не нравится» нет
   const id = String(t.id), albumId = albumOf(t), was = dislikedIds.has(id), wasLiked = likedIds.has(id);
   const isCur = queue[current] && String(queue[current].id) === id;
   was ? dislikedIds.delete(id) : dislikedIds.add(id);
@@ -3438,6 +3576,17 @@ function openTrackMenu(t, btn, ctx = null) { openMenu(btn, () => trackMenuMain(t
 function trackMenuMain(t, ctx) {
   menuReset();
   const bottom = tmenuBtn?.id === "pMore";                       // меню нижней панели
+  // своя версия из «Студии»: Яндекс о ней не знает — без плейлистов и скачивания, только пункты модулей
+  // (архив, сама студия) и звук
+  if (isStudio(t.id)) {
+    if (bottom) { menuSpeed(); menuSep(); }
+    window.Whisper?.ui.trackMenu.build(t, ctx);
+    menuSep();
+    if (window.eqOpen) menuItem(ICON.eq || "", "Эквалайзер", () => window.eqOpen());
+    if (bottom) { window.outMenu?.(t, ctx); window.soundMenu?.(t, ctx); }
+    placeMenu();
+    return;
+  }
   // сверху: «Слушать вместе» отдельным блоком (только в комнате, together.js), под ним — скорость
   const roomed = (window.Whisper?.ui.trackMenu.build(t, ctx, "top") || 0) > 0;     // core/together.js
   if (bottom) menuSpeed();
@@ -4244,7 +4393,7 @@ function showTrack(t, pos = 0) {
   refreshHearts(); updateModes();
   if (!$("#full").hidden) fillFull(t);
   // в конце: к этому моменту обложка, цвета и режимы уже новые — модули (Discord, мини-плеер, OBS) берут их отсюда
-  wReport({ track: t, position: pos, liked: likedIds.has(String(t.id)), disliked: dislikedIds.has(String(t.id)), queue: true });
+  wReport({ track: t, position: pos, liked: isLiked(String(t.id)), disliked: dislikedIds.has(String(t.id)), queue: true });
 }
 
 function saveLast(pos = 0) {
@@ -4344,10 +4493,13 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     // а без интернета — сразу.
     const LOCAL_URL = LOCAL_BASE + "track/" + encodeURIComponent(String(t.id));
     const inCache = !got.has(String(t.id)) && !!window.appCache?.has(String(t.id));
-    let local = got.has(String(t.id)) || (inCache && !navigator.onLine) ? LOCAL_URL : "";
+    // своя версия из «Студии» (studio.js, studio-…) — файл на диске, как скачанный. Чужая (гость «Слушать вместе»,
+    // _room — трек комнаты) — её у нас нет: играет то, чем поделился ведущий (источники ядра, архив)
+    const studio = isStudio(t.id) && !t._room;
+    let local = studio || got.has(String(t.id)) || (inCache && !navigator.onLine) ? LOCAL_URL : "";
     // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
     if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");
-    if (local && !inCache) backfillMeta([t]);
+    if (local && !inCache && !studio) backfillMeta([t]);
     const wa = local ? null : (await window.Whisper?.sources.resolve(t, queue[i + 1])) || null;
     if (my !== playSeq) return;
     if (!local && !wa && inCache) local = LOCAL_URL;

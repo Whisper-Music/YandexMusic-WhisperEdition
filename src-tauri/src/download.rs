@@ -623,6 +623,10 @@ pub fn open_local(app: &AppHandle, id: &str) -> Option<(std::fs::File, PathBuf, 
     if !id_ok(id) {
         return None;
     }
+    // своя версия из «Студии» (studio.rs): играет так же, как скачанный трек
+    if id.starts_with("studio-") {
+        return crate::studio::open(app, id);
+    }
     let found = {
         let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         read_index(app).get(id).map(|e| PathBuf::from(e.path()))

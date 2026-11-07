@@ -19,7 +19,14 @@
   // ---------- ссылки ----------
   const albumOf = (t) => num(t?.raw?.albums?.[0]?.id ?? t?.album?.id ?? t?.albums?.[0]?.id);
   const trackOf = (t) => num(String(t?.id ?? "").split(":")[0]);
-  const whisperUrl = (t) => { const id = trackOf(t), al = albumOf(t); return id ? `${SHARE_BASE}track/${id}${al ? ":" + al : ""}` : ""; };
+  // at — «с этого момента», секунды (?t=83): страница архива передаёт его в whisper://, приложение перематывает
+  const whisperUrl = (t, at = 0) => {
+    const id = trackOf(t), al = albumOf(t);
+    return id ? `${SHARE_BASE}track/${id}${al ? ":" + al : ""}${at > 0 ? "?t=" + at : ""}` : "";
+  };
+  const MAX_AT = 86400;
+  const okAt = (v) => (/^\d{1,6}$/.test(String(v ?? "")) && +v >= 1 && +v <= MAX_AT ? +v : 0);
+  const mmss = (s) => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
   const yandexUrl = (t) => { const id = trackOf(t), al = albumOf(t); return id ? (al ? `${YA_BASE}album/${al}/track/${id}` : `${YA_BASE}track/${id}`) : ""; };
   const nameLine = (t) => {
     const a = (t?.artists || []).map((x) => x?.name).filter(Boolean).join(", ");
@@ -27,7 +34,7 @@
     return a ? `${a} — ${ttl}` : ttl;
   };
 
-  // Ссылка → { kind, id, album }. Понимает whisper://, страницу архива /s/… и music.yandex.(ru|com|by|kz|uz).
+  // Ссылка → { kind, id, album, at }. Понимает whisper://, страницу архива /s/… и music.yandex.(ru|com|by|kz|uz).
   // Только номера: всё лишнее (?utm, #, хвосты) отбрасывается.
   function parseLink(text) {
     const s = String(text || "").trim();
@@ -61,7 +68,9 @@
     if (!p) return null;
     const kind = p[1].toLowerCase();
     if (p[3] && kind !== "track") return null;
-    return { kind, id: p[2], album: p[3] || "" };
+    // ?t=СЕКУНДЫ — только у трека (ссылка «с этого момента»)
+    const at = kind === "track" ? okAt(u.searchParams.get("t")) : 0;
+    return { kind, id: p[2], album: p[3] || "", at };
   }
 
   // ---------- буфер обмена ----------
@@ -87,14 +96,33 @@
   const LINK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/></svg>';
   const TEXT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M5 7h14M5 12h14M5 17h9"/></svg>';
 
-  function shareMenu(t, m) {
+  const BOX_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>';
+  const BOX_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="3.5" fill="currentColor" opacity=".22"/><rect x="4.5" y="4.5" width="15" height="15" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m8.3 12.3 2.6 2.6 5-5.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // «С этого момента»: галочка запоминается до перезапуска; момент — где сейчас играет этот трек, когда открыли меню
+  let fromHere = false;
+  function nowAt(t) {
+    try {
+      const st = W.player.state();
+      if (!st?.track || trackOf(st.track) !== trackOf(t)) return 0;      // делимся не тем, что играет, — момента нет
+      const s = Math.floor(+st.position || 0);
+      return s >= 1 && s <= MAX_AT ? s : 0;
+    } catch { return 0; }
+  }
+
+  function shareMenu(t, m, at = nowAt(t)) {
     m.reset();
     m.head("Поделиться");
-    const b1 = m.item(LINK_ICON, "Копировать ссылку", () => copy(whisperUrl(t), "Ссылка"));
+    const use = fromHere && at > 0;
+    if (at > 0) {
+      const b0 = m.item(use ? BOX_ON : BOX_OFF, `С ${mmss(at)} — где ты сейчас`, () => { fromHere = !fromHere; shareMenu(t, m, at); }, { keep: true });
+      b0.title = "Ссылка Whisper откроет трек с этого места. Яндекс Музыка так не умеет — её ссылка всегда с начала";
+      b0.setAttribute("role", "menuitemcheckbox"); b0.setAttribute("aria-checked", String(use));
+    }
+    const b1 = m.item(LINK_ICON, use ? `Копировать ссылку (с ${mmss(at)})` : "Копировать ссылку", () => copy(whisperUrl(t, use ? at : 0), "Ссылка"));
     b1.title = "Ссылка откроется в Whisper Music, а у кого его нет — в Яндекс Музыке";
     const b2 = m.item(LINK_ICON, "Ссылка на Яндекс Музыку", () => copy(yandexUrl(t), "Ссылка"));
-    b2.title = "Для официального клиента и браузера";
-    m.item(TEXT_ICON, "Копировать название", () => copy(nameLine(t), "Строка"));
+    b2.title = "Для официального клиента и браузера" + (use ? " — откроется с начала трека" : "");
+    m.item(TEXT_ICON, "Копировать название", () => copy(nameLine(t) + (use ? ` (с ${mmss(at)})` : ""), "Строка"));
     if (albumOf(t)) m.item(LINK_ICON, "Ссылка на альбом", () => copy(`${SHARE_BASE}album/${albumOf(t)}`, "Ссылка"));
     m.place();
   }
@@ -122,12 +150,33 @@
     if (my !== opening) return true;
     if (!t?.id) { showToast("Трек по ссылке не найден", 4000, { kind: "err" }); return true; }
     if (t.available === false) showToast(`«${t.title}» недоступен на Яндекс Музыке`, 4000, { kind: "err" });
-    else { W.queue.play([t]); showToast(`По ссылке: «${t.title}»`, 2500, { kind: "ok" }); }
+    else {
+      W.queue.play([t]);
+      showToast(`По ссылке: «${t.title}»` + (L.at ? ` с ${mmss(L.at)}` : ""), 2500, { kind: "ok" });
+      if (L.at) seekWhenReady(t, L.at, my);
+    }
     const al = num(t.album?.id) || L.album;
     if (al) navigate(() => showAlbum(al));
     return true;
   }
   window.openShareLink = (text) => openTarget(parseLink(text));     // консоль, другие модули
+
+  // ссылка «с момента»: перемотать, как только этот трек загрузился и известна длина (не дольше 15 с;
+  // момент дальше конца трека — с начала). Открыли другую ссылку или включили другой трек — не трогаем.
+  function seekWhenReady(t, at, my) {
+    const t0 = Date.now();
+    const tick = () => {
+      if (my !== opening || Date.now() - t0 > 15000) return;
+      let st = null;
+      try { st = W.player.state(); } catch {}
+      if (!st?.track || trackOf(st.track) !== trackOf(t)) return void setTimeout(tick, 250);
+      // ждём, пока трек действительно заиграл: иначе начало воспроизведения перебило бы позицию
+      const dur = +st.duration || 0, md = W.player.media?.() || {};
+      if (!(dur > 0) || md.loading || md.pending || !st.playing) return void setTimeout(tick, 250);
+      if (at < dur - 1) W.player.seek(at);
+    };
+    setTimeout(tick, 300);
+  }
 
   // ссылка из системы (whisper://…, deeplink.rs): при запуске по ссылке — забираем, когда окно готово
   async function takeLink() {

@@ -14,7 +14,8 @@
   const FROM = { radio: "radio", album: "album", playlist: "playlist", likes: "own_tracks", room: "track", other: "track" };
   const fromOf = (ctx) => `desktop_win-${FROM[ctx?.type] || "track"}-track-default`;
   const sec = (x) => String(Math.round(Math.max(0, +x || 0) * 100) / 100);
-  const ymId = (t) => String(t?.raw?.id ?? t?.id ?? "").split(":")[0];
+  // своя версия из «Студии» (studio.js) — это кусок трека Яндекса: прослушивание засчитывается исходнику
+  const ymId = (t) => String(t?.raw?.studio?.src ?? t?.raw?.id ?? t?.id ?? "").split(":")[0];
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(16) + Math.random().toString(16).slice(2));
 
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || "null") ?? d; } catch { return d; } };

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-studio-to-archive"
+description = "Enables the studio_to_archive command without any pre-configured scope."
+commands.allow = ["studio_to_archive"]
+
+[[permission]]
+identifier = "deny-studio-to-archive"
+description = "Denies the studio_to_archive command without any pre-configured scope."
+commands.deny = ["studio_to_archive"]

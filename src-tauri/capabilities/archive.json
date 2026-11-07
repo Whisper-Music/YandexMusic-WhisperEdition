@@ -9,10 +9,13 @@
   "permissions": [
     "allow-wa-albums-mine",
     "allow-wa-album",
+    "allow-wa-album-share",
     "allow-wa-me",
     "allow-wa-stream",
     "allow-wa-prefetch",
     "allow-wa-save-track",
+    "allow-studio-to-archive",
+    "allow-studio-room-cache",
     "allow-wa-room-cache-track",
     "allow-wa-room-create",
     "allow-wa-room-get",

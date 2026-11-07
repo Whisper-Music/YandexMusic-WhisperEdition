@@ -1,0 +1,17 @@
+/* Карточка «Кэш» (cache.js): полоса занятого места — популярные, плейлист и Моя волна долями от лимита. */
+#cacheCard [hidden] { display: none !important; }
+.cachebar {
+  display: flex; height: 10px; margin: 4px 0 8px; border-radius: 5px; overflow: hidden;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+:root[data-base="royal"] .cachebar, :root[data-base="steam"] .cachebar { border-radius: 1px; }
+.cachebar i { display: block; height: 100%; transition: width .3s; }
+:root[data-anim="off"] .cachebar i { transition: none; }
+.cachebar [data-k="pop"], .cachelegend [data-k="pop"] i { background: var(--accent); }
+.cachebar [data-k="pl"], .cachelegend [data-k="pl"] i { background: var(--accent2); }
+.cachebar [data-k="wave"], .cachelegend [data-k="wave"] i { background: color-mix(in srgb, var(--accent) 45%, var(--text)); }
+.cachelegend [data-k="free"] i { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.cachelegend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+.cachelegend span { display: inline-flex; align-items: center; gap: 6px; }
+.cachelegend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.cachelegend b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }

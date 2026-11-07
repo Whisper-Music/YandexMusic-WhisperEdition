@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-studio-list"
+description = "Enables the studio_list command without any pre-configured scope."
+commands.allow = ["studio_list"]
+
+[[permission]]
+identifier = "deny-studio-list"
+description = "Denies the studio_list command without any pre-configured scope."
+commands.deny = ["studio_list"]

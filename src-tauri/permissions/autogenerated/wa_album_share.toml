@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-album-share"
+description = "Enables the wa_album_share command without any pre-configured scope."
+commands.allow = ["wa_album_share"]
+
+[[permission]]
+identifier = "deny-wa-album-share"
+description = "Denies the wa_album_share command without any pre-configured scope."
+commands.deny = ["wa_album_share"]

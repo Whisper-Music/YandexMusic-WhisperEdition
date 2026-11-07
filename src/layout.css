@@ -240,6 +240,7 @@ html:root[data-ly-sb="mini"] .side .nav:hover:not(.active) { transform: none; }
 .side > #likes { --ic: var(--ly-i-heart); }
 .side > #statsBtn { --ic: var(--ly-i-stats); }
 .side > #settingsBtn { --ic: var(--ly-i-gear); }
+.side > #studioBtn { --ic: var(--ly-i-studio); }
 .side > #profile { --ic: var(--ly-i-user); }
 /* кнопка «Свернуть» внизу панели: неброская, со стрелками к краю (в полосе — от края, «развернуть») */
 .side > #sideFold { --ic: var(--ly-i-fold); }
@@ -260,7 +261,8 @@ html:root .side > .nav.sidefold::before { width: 16px; height: 16px; filter: non
 html:root[data-ly-side="left"][data-ly-sb="mini"] .side > .sidefold::before,
 html:root[data-ly-side="right"]:not([data-ly-sb="mini"]) .side > .sidefold::before { transform: scaleX(-1); }
 html:root[data-ly-side="right"]:not([data-ly-sb="mini"]) .side > .nav.sidefold { flex-direction: row-reverse; }
-html:root[data-ly-sb="mini"] .side > .nav.sidefold { justify-content: center; padding: 0; font-size: 0; height: 36px; }
+/* gap: 0 — подпись «Свернуть» спрятана (font-size: 0), но как элемент остаётся, и промежуток до неё сдвигал значок влево */
+html:root[data-ly-sb="mini"] .side > .nav.sidefold { justify-content: center; gap: 0; padding: 0; font-size: 0; height: 36px; width: 46px; align-self: center; }
 html:root[data-ly-sb="mini"] .side > .sidefold::before { width: 18px; height: 18px; }
 
 :where(html:root[data-ly-sb="mini"]) .side .nav::before {
@@ -269,8 +271,37 @@ html:root[data-ly-sb="mini"] .side > .sidefold::before { width: 18px; height: 18
 }
 html:root[data-ly-sb="mini"] .side .nav:not(.sidefold)::before { width: 24px; height: 24px; }
 
-/* поиск: в полосе — кружок со значком, по клику раскрывается поверх контента */
+/* поиск: в полосе — кружок со значком; по клику — плавающее окошко с ручкой сверху (.sfloat, layout.js):
+   его можно перетащить куда удобно, место запоминается. .sinner — обёртка поля и ручки (в обычной панели её как бы нет) */
 .sbox { position: relative; display: block; flex: none; }
+.sinner { display: contents; }
+.sgrip { display: none; }
+html:root[data-ly-sb="mini"] .sinner { display: block; position: absolute; inset: 0; }
+html:root[data-ly-sb="mini"] .sbox.sfloat .sinner {
+  position: fixed; inset: auto; left: var(--sf-x, 90px); top: var(--sf-y, 80px); z-index: 60; width: 320px; height: auto;
+  padding: 16px 8px 8px; border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 10%, rgba(14, 10, 28, .96));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+}
+html:root[data-ly-sb="mini"] .sbox.sfloat .sgrip {
+  display: block; position: absolute; left: 0; right: 0; top: 0; height: 16px; cursor: grab; touch-action: none;
+}
+html:root[data-ly-sb="mini"] .sbox.sfloat .sgrip::before {
+  content: ""; position: absolute; left: 50%; top: 6px; width: 38px; height: 4px; border-radius: 2px; transform: translateX(-50%);
+  background: color-mix(in srgb, var(--text) 35%, transparent); transition: background .15s;
+}
+html:root[data-ly-sb="mini"] .sbox.sfloat .sgrip:hover::before, html.sf-drag .sbox.sfloat .sgrip::before { background: var(--accent); }
+html.sf-drag, html.sf-drag * { cursor: grabbing !important; user-select: none !important; }
+html:root[data-ly-sb="mini"] .sbox.sfloat .sinner .search,
+html:root[data-ly-sb="mini"] .sbox.sfloat .sinner .search:focus {
+  position: static; width: 100% !important; height: 42px !important; padding: 0 14px; color: var(--text); cursor: text;
+  background-color: rgba(255, 255, 255, .07); box-shadow: none;
+}
+html:root[data-ly-sb="mini"] .sbox.sfloat::after { display: none; }
+:root[data-style="royal"] .sbox.sfloat .sinner, :root[data-style="steam"] .sbox.sfloat .sinner { border-radius: 4px; }
+:root[data-style="lolitta"] .sbox.sfloat .sinner { background: linear-gradient(175deg, var(--l-panel, #f6d9de), var(--l-panel2, #ecc3cb)); border: 2px solid var(--l-mid, var(--accent)); }
+:root[data-style="lolitta"] .sbox.sfloat .sgrip::before { background: var(--l-mid, var(--accent)); }
 html:root[data-ly-sb="mini"] .sbox { width: 46px; height: 46px; }
 html:root[data-ly-sb="mini"] .sbox .search {
   position: absolute; top: 0; left: 0; width: 46px; height: 46px; padding: 0; z-index: 2;
@@ -483,6 +514,7 @@ html:root[data-ly-time="hover"] .seekrow.tipon .time { opacity: .35; }
   --ly-i-heart: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 20.5 4.6 13.3a4.9 4.9 0 0 1 6.9-7l.5.5.5-.5a4.9 4.9 0 0 1 6.9 7z'/%3E%3C/svg%3E");
   --ly-i-stats: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 13h4v7H4zM10 4h4v16h-4zM16 9h4v11h-4z'/%3E%3C/svg%3E");
   --ly-i-gear: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M10.3 2h3.4l.5 2.6 1.8.8 2.2-1.5 2.4 2.4-1.5 2.2.8 1.8 2.6.5v3.4l-2.6.5-.8 1.8 1.5 2.2-2.4 2.4-2.2-1.5-1.8.8-.5 2.6h-3.4l-.5-2.6-1.8-.8-2.2 1.5-2.4-2.4 1.5-2.2-.8-1.8L2 13.7v-3.4l2.6-.5.8-1.8-1.5-2.2 2.4-2.4 2.2 1.5 1.8-.8zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z'/%3E%3C/svg%3E");
+  --ly-i-studio: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cpath d='M8.6 7.6 20 18M8.6 16.4 20 6'/%3E%3C/svg%3E");
   --ly-i-user: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4.2'/%3E%3Cpath d='M3.5 21a8.5 8.5 0 0 1 17 0z'/%3E%3C/svg%3E");
   --ly-i-fold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m11 6-6 6 6 6M19 6l-6 6 6 6'/%3E%3C/svg%3E");
   --ly-i-search: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='m15.5 15.5 5 5'/%3E%3C/svg%3E");
