@@ -117,11 +117,7 @@
   }
 
   function onKey(e) {
-    if (!m) return;
-    if (!recording) {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
-      return;
-    }
+    if (!m || !recording) return;            // Esc без записи закрывает окно само (details.js)
     e.preventDefault(); e.stopPropagation();
     const code = e.code;
     if (["ShiftLeft", "ShiftRight", "AltLeft", "AltRight", "ControlLeft", "ControlRight", "MetaLeft", "MetaRight", "OSLeft", "OSRight"].includes(code)) return;
@@ -141,10 +137,6 @@
   function open() {
     if (m) return;
     paused = true; apply();                     // сняли сочетания — иначе система не даст нажать их здесь
-    const wrap = el("div", "login modal");
-    const box = el("div", "panel login-box modalbox hkmodal");
-    const head = el("div", "hkhead");
-    head.append(el("h2", "", "Горячие клавиши"));
     const list = el("div", "hklist");
     const rows = {};
     for (const [a, label] of ACTIONS) {
@@ -160,26 +152,26 @@
       rows[a] = { key, clear, note };
     }
     const hint = el("p", "status hkhint");
-    const foot = el("div", "row");
     const reset = el("button", "nav", "По умолчанию"); reset.type = "button";
     reset.onclick = () => { hk.binds = DEF(); errors = {}; recording = null; save(); paintRows(); };
-    const done = el("button", "nav active", "Готово"); done.type = "button";
-    done.onclick = close;
-    foot.append(reset, done);
-    box.append(head, el("p", "hksub", "Работают везде: в свёрнутом окне, в трее и в играх. Нажми на сочетание, чтобы назначить новое."), list, hint, foot);
-    wrap.append(box); document.body.append(wrap);
-    wrap.onpointerdown = (e) => { if (e.target === wrap) close(); };
     document.addEventListener("keydown", onKey, true);
-    m = { wrap, rows, hint };
+    // общее окно «Подробнее» (details.js); Esc во время записи — отмена записи, а не закрытие
+    const d = openDetails({
+      title: "Горячие клавиши", wide: true,
+      sub: "Работают везде: в свёрнутом окне, в трее и в играх. Нажми на сочетание, чтобы назначить новое.",
+      body: (b) => b.append(list, hint), foot: [reset],
+      escape: () => !recording,
+      onClose: () => {
+        document.removeEventListener("keydown", onKey, true);
+        m = null; recording = null;
+        paused = false; apply();
+      },
+    });
+    m = { d, rows, hint };
     paintRows();
   }
 
-  function close() {
-    if (!m) return;
-    document.removeEventListener("keydown", onKey, true);
-    m.wrap.remove(); m = null; recording = null;
-    paused = false; apply();
-  }
+  function close() { m?.d.close(); }
 
   // ---------- карточка ----------
   const sw = $h("hkOn");

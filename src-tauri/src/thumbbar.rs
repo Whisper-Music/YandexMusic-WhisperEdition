@@ -7,6 +7,9 @@
 //! тем же событием, что кнопки трея и горячие клавиши (`tray-ctl`). Значки «пауза/играть» и «сердечко»
 //! страница переключает командой thumbbar_state. Всё, что касается COM и окна, — только в главном потоке.
 
+/// Подсказки кнопок по-английски (язык интерфейса; ставит lib.rs → tray_lang). Применяются со следующего обновления кнопок.
+pub(crate) static EN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(windows)]
 mod imp {
     use std::cell::RefCell;
@@ -80,11 +83,13 @@ mod imp {
 
     fn buttons(s: &St) -> [THUMBBUTTON; 4] {
         let v = s.view;
+        let en = super::EN.load(std::sync::atomic::Ordering::Relaxed);
+        let t = |ru: &'static str, eng: &'static str| if en { eng } else { ru };
         [
-            button(ID_LIKE, if v.liked { s.icons.liked } else { s.icons.like }, if v.liked { "Убрать из лайков" } else { "В лайки" }, v.has),
-            button(ID_PREV, s.icons.prev, "Предыдущий", v.has),
-            button(ID_TOGGLE, if v.playing { s.icons.pause } else { s.icons.play }, if v.playing { "Пауза" } else { "Играть" }, v.has),
-            button(ID_NEXT, s.icons.next, "Следующий", v.has),
+            button(ID_LIKE, if v.liked { s.icons.liked } else { s.icons.like }, if v.liked { t("Убрать из лайков", "Remove from likes") } else { t("В лайки", "Like") }, v.has),
+            button(ID_PREV, s.icons.prev, t("Предыдущий", "Previous"), v.has),
+            button(ID_TOGGLE, if v.playing { s.icons.pause } else { s.icons.play }, if v.playing { t("Пауза", "Pause") } else { t("Играть", "Play") }, v.has),
+            button(ID_NEXT, s.icons.next, t("Следующий", "Next"), v.has),
         ]
     }
 

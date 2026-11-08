@@ -359,6 +359,7 @@
     // «Темы комнаты» (core/together.js): текущий стиль файлом .wmt и установка присланной темы (theme.js)
     themeExport: () => window.wmtExportCurrent?.() ?? null,
     themeImport: (bytes) => window.wmtImport?.(bytes) ?? false,
+    sleeping: () => !!window.sleepActive?.(),                              // sleep.js: режим сна включён (Discord — «Засыпает»)
     notify: (o) => window.sysNotify?.(o) ?? Promise.resolve(false),       // notify.js: «Уведомления» в настройках
     // лайк в строке общих модулей (история и очередь, core/queue.js): та же кнопка .likebtn, что в списках, —
     // refreshHearts() обновляет её по li[data-id] вместе со всеми остальными сердечками

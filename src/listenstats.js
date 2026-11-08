@@ -335,6 +335,22 @@
       if (!on) save();
     };
   }
+  // кнопка «Статистика» в боковой панели (Настройки → Интерфейс → «Панели»); записывать можно и без неё
+  const BTN_KEY = "ym_stats_btn";
+  let btnOn = (() => { try { return localStorage.getItem(BTN_KEY) !== "0"; } catch { return true; } })();
+  const sbtn = document.getElementById("statsBtnOn");
+  function applyBtn() {
+    document.documentElement.classList.toggle("no-statsbtn", !btnOn);
+    if (sbtn) sbtn.checked = btnOn;
+    // открыта сама статистика — уходим в лайки, иначе страница осталась бы без своей кнопки
+    if (!btnOn && document.querySelector(".main")?.dataset.page === "statsBtn") document.getElementById("likes")?.click();
+  }
+  if (sbtn) sbtn.onchange = () => {
+    btnOn = sbtn.checked;
+    try { localStorage.setItem(BTN_KEY, btnOn ? "1" : "0"); } catch {}
+    applyBtn();
+  };
+  applyBtn();
   if (clr) clr.onclick = async () => {
     const ok = await modal({ title: "Очистить статистику?", text: "Вся записанная история прослушиваний будет удалена. Это нельзя отменить.", ok: "Очистить", danger: true });
     if (!ok) return;

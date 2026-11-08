@@ -22,6 +22,8 @@
   const fmtMin = (m) => (m < 60 ? `${m} мин` : `${String(m / 60).replace(".", ",")} ч`);
 
   let deadline = 0, tickT = 0, fadeT = 0, fadeFrom = 0, fadeEnd = 0;
+  // для Discord («Засыпает») — через kit.sleeping в yandex.js
+  window.sleepActive = () => deadline > Date.now();
 
   // ---------- кнопка в нижней панели ----------
   const btn = $("#sleepBtn"), left = $("#sleepLeft");
@@ -149,14 +151,15 @@
     for (const s of stations.groups[slTab] || []) {
       const b = document.createElement("button");
       b.className = "pill" + (s.seed === cfgS.seed ? " active" : ""); b.textContent = s.name;
-      b.onclick = () => { Object.assign(cfgS, { seed: s.seed, name: s.name, auto: false }); save(); renderCfg(); $("#slStations").hidden = true; $("#slWavePick").textContent = "Выбрать…"; };
+      b.onclick = () => { Object.assign(cfgS, { seed: s.seed, name: s.name, auto: false }); save(); renderCfg(); slDt?.close(); };
       grid.append(b);
     }
   }
+  // выбор станции — в общем окне «Подробнее» (details.js): блок #slStations переезжает туда на время выбора
+  let slDt = null;
   $("#slWavePick").onclick = async () => {
-    const box = $("#slStations");
-    if (!box.hidden) { box.hidden = true; $("#slWavePick").textContent = "Выбрать…"; return; }
-    box.hidden = false; $("#slWavePick").textContent = "Скрыть";
+    if (slDt) { slDt.close(); return; }
+    slDt = openDetails({ title: "Моя волна для сна", sub: "Под какую волну засыпать. Последние 3 минуты музыка плавно затихает.", wide: true, adopt: [$("#slStations")], onClose: () => { slDt = null; } });
     $("#slChips").innerHTML = ""; $("#slGrid").textContent = "Список загружается…";
     try { await loadStations(); renderPicker(); await resolveCalm(); renderPicker(); }
     catch (e) { $("#slGrid").textContent = "Не удалось загрузить список: " + e.message; }

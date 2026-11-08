@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Уведомление</title>
+  <!-- окно уведомлений (notify.rs): карточки в стиле Telegram, стопкой в выбранном углу экрана -->
+  <link rel="stylesheet" href="notifywin.css" />
+  <!-- язык интерфейса — как в главном окне (i18n.js следит за ym_lang) -->
+  <script src="i18n/en.js"></script>
+  <script src="i18n.js"></script>
+  <script src="notifywin.js" defer></script>
+</head>
+<body>
+  <div class="stack" id="stack" aria-live="polite"></div>
+</body>
+</html>

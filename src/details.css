@@ -1,0 +1,19 @@
+/* Общее окно «Подробнее» (details.js). Каркас — обычные .login.modal / .modalbox, поэтому стили и темы оформляют его
+   так же, как остальные окна; здесь только раскладка: шапка с крестиком, прокручиваемое тело, кнопки снизу. */
+.dtmodal { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 12px; }
+.dtmodal.wide { width: min(700px, calc(100vw - 32px)); }
+.dtmodal [hidden] { display: none !important; }
+.dthead { display: flex; align-items: center; gap: 10px; }
+.dthead h2 { margin: 0; flex: 1; min-width: 0; }
+.dtx { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 14px; color: var(--muted); }
+.dtx:hover { color: var(--text); background: rgba(255,255,255,.1); }
+.dtsub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.dtbody { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 2px; scrollbar-width: thin; }
+.dtnote { margin: 0; min-height: 0; font-size: 13px; }
+.dtnote:empty { display: none; }
+.dtfoot { flex: none; }
+:root[data-style="royal"] .dtx, :root[data-style="steam"] .dtx { border-radius: 2px; }
+/* то, что переехало в окно из карточек: без своих рамок и ограничений высоты карточки */
+.dtbody .fontbox { max-height: none; }
+.dtbody .fontlist { max-height: min(52vh, 460px); }
+.dtbody .slstations { margin: 0; }

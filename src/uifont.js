@@ -94,10 +94,11 @@
     note.textContent = !fonts?.length ? "" : items.length ? (items.length > 600 ? `Показаны первые 600 из ${items.length} — уточни поиск` : "") : "Ничего не найдено";
     paint();
   }
+  // список шрифтов — в общем окне «Подробнее» (details.js): поле поиска и список переезжают туда на время выбора
+  let dt = null;
   async function open() {
-    box.hidden = !box.hidden;
-    pick.textContent = box.hidden ? "Выбрать…" : "Скрыть список";
-    if (box.hidden) return;
+    if (dt) { dt.close(); return; }
+    dt = openDetails({ title: "Шрифт интерфейса", sub: "Каждое название показано своим шрифтом. Щёлкни — и он сразу применится.", adopt: [box, note], onClose: () => { dt = null; } });
     if (!fonts) {
       note.textContent = "Читаю список шрифтов…";
       await loadFonts();
@@ -113,7 +114,7 @@
   let t = 0;
   find.oninput = () => { clearTimeout(t); t = setTimeout(renderList, 120); };
   find.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.stopPropagation(); if (find.value) { find.value = ""; renderList(); } else open(); }
+    if (e.key === "Escape" && find.value) { e.stopPropagation(); e.preventDefault(); find.value = ""; renderList(); }   // пустое поле — Esc закрывает окно
     else if (e.key === "ArrowDown") { e.preventDefault(); list.querySelector(".fontitem")?.focus(); }
   });
   // стрелки по списку

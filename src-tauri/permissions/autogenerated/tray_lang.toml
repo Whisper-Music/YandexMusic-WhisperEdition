@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tray-lang"
+description = "Enables the tray_lang command without any pre-configured scope."
+commands.allow = ["tray_lang"]
+
+[[permission]]
+identifier = "deny-tray-lang"
+description = "Denies the tray_lang command without any pre-configured scope."
+commands.deny = ["tray_lang"]

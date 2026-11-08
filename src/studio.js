@@ -84,11 +84,11 @@
   }
   $s("studioBtn").onclick = () => goTop(show);
 
-  // ---------- включить / выключить (Настройки → Приложение → «Студия») ----------
+  // ---------- включить / выключить (Настройки → Интерфейс → «Панели») ----------
   // Выключена — нет кнопки в боковой панели и «Обрезать в студии» в меню трека. Сохранённые версии остаются:
-  // они в очереди, истории и лайках и по-прежнему играют.
+  // они в очереди, истории и лайках и по-прежнему играют. По умолчанию выключена: нужна не всем — включают сами.
   const ON_KEY = "ym_studio_on";
-  let enabled = (() => { try { return localStorage.getItem(ON_KEY) !== "0"; } catch { return true; } })();
+  let enabled = (() => { try { return localStorage.getItem(ON_KEY) === "1"; } catch { return false; } })();
   function applyOn() {
     document.documentElement.classList.toggle("no-studio", !enabled);
     const cb = $s("stuOn"); if (cb) cb.checked = enabled;
@@ -99,7 +99,7 @@
     try { localStorage.setItem(ON_KEY, enabled ? "1" : "0"); } catch {}
     applyOn();
   });
-  window.addEventListener("storage", (e) => { if (e.key === ON_KEY) { enabled = e.newValue !== "0"; applyOn(); } });
+  window.addEventListener("storage", (e) => { if (e.key === ON_KEY) { enabled = e.newValue === "1"; applyOn(); } });
   // открыть студию с треком (меню «⋯», консоль)
   window.studioOpen = (raw) => { if (!enabled) return; goTop(show); if (raw) take(raw); };
 

@@ -4,9 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Whisper Edition</title>
+  <!-- значок вкладки в браузерной версии (окну приложения не нужен) -->
+  <link rel="icon" type="image/png" href="favicon.png" />
   <!-- без defer, первым: стиль прошлого запуска и «шторка» до первой отрисовки (boot.js) -->
   <script src="boot.js"></script>
   <script src="lsguard.js"></script>
+  <!-- язык интерфейса: словарь и переводчик, тоже без defer — успеть до первой отрисовки -->
+  <script src="i18n/en.js"></script>
+  <script src="i18n.js"></script>
   <link rel="stylesheet" href="styles.css" />
   <!-- оформление «Слушать вместе» (core/together.js) — сразу после общего: перекрывает его правила плеера и меню -->
   <link rel="stylesheet" href="core/together.css" />
@@ -15,6 +20,13 @@
   <script src="imgguard.js" defer></script>
   <script src="main.js" defer></script>
   <script src="errinfo.js" defer></script>
+  <!-- «распад на пиксели» строки, убранной из лайков (main.js → toggleLike) -->
+  <script src="dust.js" defer></script>
+  <!-- настройки: общее окно «Подробнее» (openDetails) и страница — поиск, Ctrl+F, вкладки сверху/слева -->
+  <link rel="stylesheet" href="details.css" />
+  <script src="details.js" defer></script>
+  <link rel="stylesheet" href="setpage.css" />
+  <script src="setpage.js" defer></script>
   <script src="yandex.js" defer></script>
   <!-- Whisper Archive — общий модуль ядра Whisper -->
   <link rel="stylesheet" href="core/archive.css" />
@@ -36,7 +48,8 @@
   <link rel="stylesheet" href="core/obs.css" />
   <script src="core/obs.js" defer></script>
   <script src="update.js" defer></script>
-  <!-- системные уведомления (notify.rs): приглашения и подмигивания в комнате; настройки — Приложение → Уведомления -->
+  <!-- свои уведомления в углу экрана (notify.rs, окно notifywin.html): приглашения и подмигивания; настройки — Приложение → Уведомления -->
+  <link rel="stylesheet" href="notify.css" />
   <script src="notify.js" defer></script>
   <script src="core/together.js" defer></script>
   <script src="listenstats.js" defer></script>
@@ -52,6 +65,10 @@
   <script src="studio.js" defer></script>
   <link rel="stylesheet" href="backup.css" />
   <script src="backup.js" defer></script>
+  <!-- браузерная версия: перенос настроек (webstate.js) и кнопки «Открыть в браузере» / «Вернуться в приложение» -->
+  <link rel="stylesheet" href="webmode.css" />
+  <script src="webstate.js" defer></script>
+  <script src="webmode.js" defer></script>
   <script src="cli.js" defer></script>
   <script src="themeguard.js" defer></script>
   <link rel="stylesheet" href="hotkeys.css" />
@@ -118,6 +135,8 @@
       <button class="nav" id="settingsBtn">Настройки</button>
       <button class="nav" id="studioBtn">Студия</button>
       <div class="spacer"></div>
+      <!-- только во вкладке браузера (html.webmode) -->
+      <button class="nav webback" id="webBackBtn" hidden>Вернуться в приложение</button>
       <button class="nav" id="profile">Профиль</button>
     </aside>
 
@@ -257,15 +276,23 @@
         <p id="stNote" class="status"></p>
       </section>
       <section id="settingsPage" class="settings" data-tab="look" hidden>
-        <nav class="settabs" id="setTabs" role="tablist">
-          <button type="button" class="chip" data-tab="look" role="tab">Оформление</button>
-          <button type="button" class="chip" data-tab="ui" role="tab">Интерфейс</button>
-          <button type="button" class="chip" data-tab="play" role="tab">Воспроизведение</button>
-          <button type="button" class="chip" data-tab="out" role="tab">Звук</button>
-          <button type="button" class="chip" data-tab="app" role="tab">Приложение</button>
-          <button type="button" class="chip" data-tab="int" role="tab">Интеграции</button>
-        </nav>
-        <div class="card" data-tab="look">
+        <!-- шапка настроек: поиск и вкладки (setpage.js — поиск, Ctrl+F, вкладки сверху или слева) -->
+        <div class="settop" id="setTop">
+          <input id="setFind" class="search setfind" type="search" placeholder="Найти настройку" autocomplete="off" spellcheck="false" aria-label="Поиск по настройкам" />
+          <nav class="settabs" id="setTabs" role="tablist">
+            <button type="button" class="chip" data-tab="look" role="tab">Оформление</button>
+            <button type="button" class="chip" data-tab="ui" role="tab">Интерфейс</button>
+            <button type="button" class="chip" data-tab="play" role="tab">Воспроизведение</button>
+            <button type="button" class="chip" data-tab="out" role="tab">Звук</button>
+            <button type="button" class="chip" data-tab="app" role="tab">Приложение</button>
+            <button type="button" class="chip" data-tab="int" role="tab">Интеграции</button>
+            <button type="button" class="chip" data-tab="data" role="tab">Данные</button>
+          </nav>
+        </div>
+        <p class="status sfempty" id="setFindEmpty" hidden>Ничего не нашлось — попробуй другое слово</p>
+
+        <!-- ===== Оформление: Стиль (+ интро тем), Цвета, Шрифт | Фон, Эффекты и анимации ===== -->
+        <div class="card" id="styleCard" data-tab="look">
           <div class="stylehead">
             <h3>Стиль оформления</h3>
             <button type="button" class="stview" id="styleView" title="Компактный вид: стили кружочками" aria-pressed="false">
@@ -279,25 +306,30 @@
             <button class="stylecard" data-style="lolitta"><span class="sprev sp-lolitta"></span><b><span class="scauth">Whisper Music</span><span class="scname">Lolitta</span></b><small>Пудровый розовый, банты, жемчуг, камея</small></button>
           </div>
           <p id="styleCap" class="stylecap" aria-live="polite"></p>
+          <!-- интро тем: видно, только если у какого-то установленного стиля есть заставка (theme.js → paintIntro) -->
+          <div id="introCard" class="introbox" hidden>
+            <label class="switch" title="Заставка при запуске у некоторых тем (секция whisper-intro в файле .wmt). Щелчок или любая клавиша пропускают её. Выключи, чтобы приложение открывалось сразу"><input type="checkbox" id="inOn" /><i></i><span>Показывать интро при запуске</span></label>
+            <div id="inList" class="inlist"></div>
+            <p class="status" id="inNote"></p>
+          </div>
         </div>
-        <div class="card" data-tab="look">
-          <h3>Цвета</h3>
-          <div class="swrow">
-            <div class="swatches">
+        <div class="card" id="colorCard" data-tab="look">
+          <h3>Цвета и шрифт</h3>
+          <!-- два столбца: цвет и кнопка под ним; ниже — широкая кнопка шрифта -->
+          <div class="swgrid">
+            <div class="swcol">
               <label class="swatch"><input type="color" id="cAccent" /><span>Основной</span></label>
-              <label class="swatch"><input type="color" id="cAccent2" /><span>Второй</span></label>
-            </div>
-            <div class="swbtns">
               <button class="nav ccopen" id="colorReset" type="button" title="Вернуть основной и второй цвета, которые заданы в теме">Цвета темы</button>
+            </div>
+            <div class="swcol">
+              <label class="swatch"><input type="color" id="cAccent2" /><span>Второй</span></label>
               <button class="nav ccopen" id="ccBtn">Тонкая настройка…</button>
             </div>
           </div>
-        </div>
-        <div class="card" id="fontCard" data-tab="look">
-          <h3>Шрифт</h3>
+          <!-- шрифт — в той же карточке, под цветами (uifont.js ищет #fontCard; название шрифта — внутри кнопки, им же и написано) -->
+          <div id="fontCard" class="fontsec">
           <div class="fontcur">
-            <span id="fontName" class="fontname">Шрифт стиля</span>
-            <button type="button" class="nav" id="fontPick">Выбрать…</button>
+            <button type="button" class="nav fontpick" id="fontPick" title="Шрифт интерфейса — из установленных на компьютере"><span>Выбрать шрифт…</span><span id="fontName" class="fontname">Шрифт стиля</span></button>
             <button type="button" class="nav" id="fontReset" title="Вернуть шрифт, который задан в стиле" hidden>Шрифт стиля</button>
           </div>
           <div id="fontBox" class="fontbox" hidden>
@@ -306,12 +338,14 @@
           </div>
           <label class="switch" title="Выключи, чтобы заголовки остались шрифтом стиля"><input type="checkbox" id="fontHeads" /><i></i><span>И для заголовков</span></label>
           <p class="status" id="fontNote"></p>
+          </div>
         </div>
-        <div class="card colbreak" data-tab="look">
+        <div class="card colbreak" id="bgCard" data-tab="look">
           <h3>Фон</h3>
           <label class="switch" title="Фон — обложка текущего трека, цвета интерфейса берутся из неё"><input type="checkbox" id="cDyn" /><i></i><span>Динамический фон по обложке</span></label>
           <label class="slide"><span>Размытие фона</span><input type="range" id="cBlur" min="0" max="40" /></label>
           <label class="slide"><span>Затемнение</span><input type="range" id="cDim" min="0" max="85" /></label>
+          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
           <label class="drop" id="drop">
             <input type="file" id="bgFile" accept="image/*,video/mp4,video/webm,.mp4,.webm,.m4v,.mov,.json" multiple hidden />
             <svg viewBox="0 0 24 24" width="30" height="30"><path fill="currentColor" d="M12 3l5 5h-3.5v6h-3V8H7zM5 17h14v3H5z"/></svg>
@@ -326,29 +360,30 @@
           </div>
           <p id="setNote" class="status"></p>
         </div>
-        <div class="card" id="introCard" data-tab="look">
-          <h3>Интро тем <i class="hint" title="Заставка при запуске у некоторых тем (секция whisper-intro в файле .wmt). Щелчок или любая клавиша пропускают её.">i</i></h3>
-          <label class="switch" title="Выключи, чтобы приложение открывалось сразу, без заставки темы"><input type="checkbox" id="inOn" /><i></i><span>Показывать интро при запуске</span></label>
-          <div id="inList" class="inlist"></div>
-          <p class="status" id="inNote"></p>
+        <div class="card" id="fxCard" data-tab="look">
+          <h3>Эффекты и анимации</h3>
+          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
+          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
         </div>
+
+        <!-- ===== Интерфейс: Расположение, Панели | Визуализатор, Маскот ===== -->
         <div class="card" id="layoutCard" data-tab="ui">
           <h3>Расположение</h3>
           <div class="lyrow lyrow-ui"><span>Вид интерфейса</span><div class="lyseg" data-k="ui"><button class="chip" data-v="normal">Обычный</button><button class="chip" data-v="super" title="Боковая панель — колонка значков, плеер — компактная панель снизу. Переключить: Ctrl+Shift+M или двойной щелчок по пустому месту панели">Мини</button></div></div>
-          <p class="status lysuper-note">Мини: Ctrl+Shift+M или двойной щелчок по пустому месту панели — переключить вид. Боковая и нижняя панели ниже настраиваются для обычного вида.</p>
+          <p class="status lysuper-note">Мини: Ctrl+Shift+M или двойной щелчок по пустому месту панели — переключить вид.</p>
+          <!-- свернуть боковую и нижнюю панели можно перетаскиванием края — в настройках этих переключателей нет -->
           <div class="lyrow"><span>Боковая панель</span><div class="lyseg" data-k="side"><button class="chip" data-v="left">Слева</button><button class="chip" data-v="right" title="Закреплённые альбомы и артисты тоже переедут вправо">Справа</button></div></div>
-          <div class="lyrow"><span>Закреплённые</span><div class="lyseg" data-k="pins"><button class="chip" data-v="top" title="Закладками над панелями">Сверху</button><button class="chip" data-v="side" title="Колонкой с обложками у боковой панели — как папки в Telegram">Сбоку</button></div></div>
-          <div class="lyrow"><span>Вид боковой панели</span><div class="lyseg" data-k="sb"><button class="chip" data-v="full">Обычный</button><button class="chip" data-v="mini" title="Узкая полоса со значками, подписи — при наведении">Свёрнутый</button></div></div>
-          <div class="lyrow"><span>Нижняя панель</span><div class="lyseg" data-k="pl"><button class="chip" data-v="full">Обычная</button><button class="chip" data-v="mini" title="Кнопки и линия воспроизведения в одну строку">Свёрнутая</button></div></div>
           <div class="lyrow"><span>Время трека</span><div class="lyseg" data-k="time"><button class="chip" data-v="always">Всегда</button><button class="chip" data-v="hover" title="Время появляется при наведении на линию воспроизведения">При наведении</button></div></div>
+          <div class="lyrow"><span>Закреплённые</span><div class="lyseg" data-k="pins"><button class="chip" data-v="top" title="Закладками над панелями">Сверху</button><button class="chip" data-v="side" title="Колонкой с обложками у боковой панели — как папки в Telegram">Сбоку</button></div></div>
+          <div class="lyrow"><span>Вкладки настроек</span><div class="lyseg" id="setTabsPos"><button class="chip" data-v="top" title="Строкой над настройками">Сверху</button><button class="chip" data-v="left" title="Столбиком слева — удобно на широком окне">Слева</button></div></div>
         </div>
-        <div class="card" id="fxCard" data-tab="ui">
-          <h3>Эффекты и анимации</h3>
-          <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
-          <label class="slide"><span>Прозрачность панелей</span><input type="range" id="cPanel" min="20" max="100" /></label>
-          <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
+        <div class="card" id="stuCard" data-tab="ui">
+          <h3>Панели</h3>
+          <label class="switch" id="pinHideCard" title="Закладки или колонка закреплённых прячутся. Наведи на верхний край (или на край со стороны боковой панели) — они выедут"><input type="checkbox" id="pinHide" /><i></i><span>Скрывать закреплённые</span></label>
+          <label class="switch" title="Страница со временем, исполнителями и жанрами прослушиваний. Выключишь — пропадёт только кнопка, запись статистики не остановится"><input type="checkbox" id="statsBtnOn" /><i></i><span>Показывать «Статистику»</span></label>
+          <label class="switch" title="Обрезка треков и свои версии. Выключишь — пропадут кнопка в боковой панели и «Обрезать в студии» в меню трека; сохранённые версии останутся и будут играть"><input type="checkbox" id="stuOn" /><i></i><span>Показывать «Студию»</span></label>
         </div>
-        <div class="card colbreak" data-tab="ui">
+        <div class="card colbreak" id="vizCard" data-tab="ui">
           <h3>Визуализатор</h3>
           <label class="switch"><input type="checkbox" id="cViz" /><i></i><span>Аудиовизуализатор</span></label>
           <div id="vizStyles" class="vizstyles" hidden>
@@ -367,11 +402,15 @@
             <label class="switch" title="Кивает в такт, засыпает на долгой паузе и в режиме сна, радуется лайку"><input type="checkbox" id="mcReact" /><i></i><span>Реагирует на музыку</span></label>
           </div>
         </div>
-        <div class="card" id="pinHideCard" data-tab="ui">
-          <h3>Закреплённые</h3>
-          <label class="switch" title="Закладки или колонка закреплённых прячутся. Наведи на верхний край (или на край со стороны боковой панели) — они выедут"><input type="checkbox" id="pinHide" /><i></i><span>Скрывать закреплённые</span></label>
+        <!-- язык интерфейса (i18n.js). Заголовок и названия языков не переводим: найти карточку должен и тот,
+             кто не читает текущий язык -->
+        <div class="card" id="langCard" data-tab="ui">
+          <h3 data-noi18n>Язык / Language</h3>
+          <div class="lyseg" id="langSeg" data-noi18n><button class="chip" data-v="ru">Русский</button><button class="chip" data-v="en">English</button></div>
         </div>
-        <div class="card sleepcard" data-tab="play">
+
+        <!-- ===== Воспроизведение: Режим сна | Скачивание, Кэш ===== -->
+        <div class="card sleepcard" id="sleepCard" data-tab="play">
           <h3 title="Кнопка с луной в нижней панели: Моя волна под настроение, последние 3 минуты музыка плавно затихает">Режим сна</h3>
           <div class="lyrow"><span>Выключить через</span><div class="lyseg" id="slTime"></div></div>
           <div class="lyrow"><span>Когда время выйдет</span><div class="lyseg" id="slAct"><button class="chip" data-v="off">Выключить компьютер</button><button class="chip" data-v="stop">Только остановить музыку</button></div></div>
@@ -383,7 +422,7 @@
           <div class="row"><button class="nav active" id="slStart">Включить режим сна</button></div>
           <p class="status" id="slNote"></p>
         </div>
-        <div class="card colbreak" data-tab="play">
+        <div class="card colbreak" id="dlCard" data-tab="play">
           <h3>Скачивание треков</h3>
           <div class="dlpath"><small>Папка для треков</small><span id="dlPath">—</span></div>
           <div class="row">
@@ -425,6 +464,8 @@
             <button class="nav danger" id="cacheClear">Очистить кэш</button>
           </div>
         </div>
+
+        <!-- ===== Звук: Устройство, Профили | Вывод и качество, Нормализация, Формат ===== -->
         <div class="card" id="outCard" data-tab="out">
           <h3>Устройство вывода <i class="hint" title="Для названий устройств Windows просит доступ к микрофону — Whisper берёт его на мгновение и ничего не записывает.">i</i></h3>
           <div id="outList" class="outlist" role="radiogroup" aria-label="Устройство вывода"></div>
@@ -437,16 +478,13 @@
           <div id="dpList" class="outlist" aria-label="Запомненные устройства"></div>
           <p class="status" id="dpNote"></p>
         </div>
-        <div class="card" id="modeCard" data-tab="out">
-          <h3>Режим вывода</h3>
-          <div class="lyrow"><span>Режим</span><div class="lyseg" id="omSeg"><button class="chip active" data-v="shared" title="Через микшер Windows, вместе со звуками других программ.">Общий</button><button class="chip" data-v="excl" title="Напрямую на устройство, в формате трека — мимо микшера Windows.">Эксклюзивный</button></div></div>
+        <div class="card colbreak" id="modeCard" data-tab="out">
+          <h3>Вывод и качество</h3>
+          <div class="lyrow"><span>Режим вывода</span><div class="lyseg" id="omSeg"><button class="chip active" data-v="shared" title="Через микшер Windows, вместе со звуками других программ.">Общий</button><button class="chip" data-v="excl" title="Напрямую на устройство, в формате трека — мимо микшера Windows.">Эксклюзивный</button></div></div>
           <p class="status" id="omNote"></p>
+          <div class="lyrow" id="qualCard" title="Скачанные треки всегда в лучшем качестве. FLAC Яндекс сторонним программам не отдаёт."><span>Качество потока</span><div class="lyseg" id="qlSeg"><button class="chip" data-v="high" title="Самый высокий битрейт — обычно MP3 320 кбит/с.">Лучшее</button><button class="chip" data-v="low" title="Самый низкий битрейт — меньше трафика.">Экономное</button></div></div>
         </div>
-        <div class="card" id="qualCard" data-tab="out">
-          <h3>Качество потока <i class="hint" title="Скачанные треки всегда в лучшем качестве. FLAC Яндекс сторонним программам не отдаёт.">i</i></h3>
-          <div class="lyrow"><span>Яндекс Музыка</span><div class="lyseg" id="qlSeg"><button class="chip" data-v="high" title="Самый высокий битрейт — обычно MP3 320 кбит/с.">Лучшее</button><button class="chip" data-v="low" title="Самый низкий битрейт — меньше трафика.">Экономное</button></div></div>
-        </div>
-        <div class="card colbreak" id="normCard" data-tab="out">
+        <div class="card" id="normCard" data-tab="out">
           <h3>Нормализация громкости <i class="hint" title="Выравнивает громкость между треками по данным Яндекса (EBU R128).">i</i></h3>
           <div class="lyrow"><span>Режим</span><div class="lyseg" id="nmMode">
             <button class="chip" data-v="off">Выкл</button>
@@ -469,15 +507,32 @@
           <dl id="fmtList" class="fmtlist"></dl>
           <div class="row"><button type="button" class="nav" id="fmtRefresh">Обновить</button></div>
         </div>
-        <div class="card" data-tab="app">
-          <h3>Трей и горячие клавиши</h3>
+
+        <!-- ===== Приложение: Трей, Уведомления | Горячие клавиши, Обновления ===== -->
+        <div class="card" id="trayCard" data-tab="app">
+          <h3>Трей</h3>
           <div class="lyrow"><span>Щелчок по значку</span><div class="lyseg trseg"><button class="chip" data-v="menu" title="Правый щелчок — меню с кнопками">Кнопки</button><button class="chip" data-v="mini" title="Правый щелчок — мини-плеер с обложкой, кнопками, повтором и перемешиванием">Мини-плеер</button></div></div>
+          <div class="lyrow"><span>Значок</span><div class="lyseg tricseg"><button class="chip" data-v="app" title="Обычный значок приложения">Обычный</button><button class="chip" data-v="black" title="Чёрный — для светлой панели задач">Чёрный</button><button class="chip" data-v="white" title="Белый — для тёмной панели задач">Белый</button><button class="chip" data-v="style" title="В цветах текущего стиля — меняется вместе с ним">Как в стиле</button></div></div>
           <p id="trayNote" class="status"></p>
+        </div>
+        <div class="card" id="ntCard" data-tab="app">
+          <h3>Уведомления <i class="hint" title="Свои всплывающие уведомления поверх всех окон, как в Telegram: приглашения в комнату и подмигивания. В открытом окне и так появляется подсказка внизу.">i</i></h3>
+          <label class="switch" title="Приглашения в комнату и подмигивания — карточкой в углу экрана"><input type="checkbox" id="ntOn" /><i></i><span>Показывать уведомления</span></label>
+          <div class="dcline" id="ntMore"><span class="dcnote" id="ntSum"></span><button type="button" class="nav" id="ntSetup">Настроить…</button></div>
+        </div>
+        <!-- браузерная версия (webmode.js / webmode.rs): в окне — «Открыть в браузере», во вкладке — «Вернуться в приложение» -->
+        <div class="card" id="webCard" data-tab="app">
+          <h3>Браузерная версия <i class="hint" title="Интерфейс откроется во вкладке браузера по умолчанию, а окно спрячется в трей. Настройки, темы и фоны переносятся. Работает только на этом компьютере">i</i></h3>
+          <div class="dcline"><span class="dcnote" id="webNote">Тот же Whisper во вкладке браузера. Музыка играет во вкладке</span><button type="button" class="nav" id="webBtn">Открыть в браузере</button></div>
+          <p id="webStatus" class="status"></p>
+        </div>
+        <div class="card colbreak" id="hkCard" data-tab="app">
+          <h3>Горячие клавиши</h3>
           <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
           <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
           <div class="dcline"><span class="dcnote">Клавиши внутри окна: стрелки, Пробел, Ctrl+F и другие</span><button class="nav" id="kbHelpBtn">Список (F1)</button></div>
         </div>
-        <div class="card" data-tab="app">
+        <div class="card" id="updCard" data-tab="app">
           <h3>Обновления</h3>
           <div class="updline"><span>Версия <b id="updCur">—</b></span><button type="button" class="nav" id="updCheck">Проверить обновления</button></div>
           <label class="switch" title="Новые версии берутся с GitHub (Whisper-Music/YandexMusic-WhisperEdition), файлы проверяются по подписи"><input type="checkbox" id="updAuto" /><i></i><span>Проверять при запуске</span></label>
@@ -489,31 +544,21 @@
           </div>
           <p class="status" id="updNote"></p>
         </div>
-        <div class="card" id="ntCard" data-tab="app">
-          <h3>Уведомления <i class="hint" title="Системные уведомления Windows / Linux. В открытом окне и так появляется подсказка внизу.">i</i></h3>
-          <label class="switch" title="Друг позвал тебя в комнату «Слушать вместе»"><input type="checkbox" id="ntInvite" /><i></i><span>Приглашения в комнату</span></label>
-          <label class="switch" title="Участник комнаты подмигнул тебе: попросил переключить трек, сделать тише…"><input type="checkbox" id="ntWink" /><i></i><span>Подмигивания в комнате</span></label>
-          <label class="switch" title="Выключено — системное уведомление только когда окно свёрнуто или в фоне"><input type="checkbox" id="ntAlways" /><i></i><span>Даже когда окно открыто</span></label>
-          <div class="row"><button type="button" class="nav" id="ntTest">Проверить</button></div>
-          <p class="status" id="ntNote"></p>
-        </div>
-        <div class="card colbreak" data-tab="app">
+
+        <!-- ===== Данные: Статистика, Резервная копия | Сброс ===== -->
+        <div class="card" id="statCard" data-tab="data">
           <h3>Статистика</h3>
           <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
-          <div class="row"><button type="button" class="nav" id="lsClear">Очистить записанное</button></div>
+          <div class="row"><button type="button" class="nav danger" id="lsClear">Очистить записанное…</button></div>
         </div>
-        <div class="card" id="stuCard" data-tab="app">
-          <h3>Студия</h3>
-          <label class="switch" title="Обрезка треков и свои версии. Выключишь — пропадут кнопка в боковой панели и «Обрезать в студии» в меню трека; сохранённые версии останутся и будут играть"><input type="checkbox" id="stuOn" /><i></i><span>Показывать «Студию»</span></label>
-        </div>
-        <div class="card" id="bkCard" data-tab="app">
+        <div class="card" id="bkCard" data-tab="data">
           <h3>Резервная копия <i class="hint" title="Вход в Яндекс и ключ Whisper Archive в копию не попадают — на другом компьютере войди заново.">i</i></h3>
           <p class="status">Настройки, закреплённые, темы, фоны и статистика — одним файлом .wbak.</p>
           <div class="row"><button type="button" class="nav" id="bkSave">Сохранить копию…</button><button type="button" class="nav" id="bkLoad">Восстановить из файла…</button></div>
           <div class="dcline"><span class="dcnote" id="bkAuto" title="Whisper сам сохраняет настройки и список скачанных треков на случай повреждения">Автокопии: —</span><button type="button" class="nav" id="bkAutoBtn">Автокопии…</button></div>
           <p class="status" id="bkNote"></p>
         </div>
-        <div class="card" id="resetCard" data-tab="app">
+        <div class="card colbreak" id="resetCard" data-tab="data">
           <h3>Сброс</h3>
           <p class="status">Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.</p>
           <div class="row"><button class="nav danger" id="cfgReset">Сбросить оформление…</button></div>

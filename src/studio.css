@@ -1,7 +1,8 @@
 /* «Студия» (studio.js): редактор обрезки и «Мои версии». Карточки — обычные .card стиля, цвета — из переменных,
    поэтому встроенные стили и свои темы оформляют страницу сами. */
-/* «Студия» выключена (Настройки → Приложение): кнопки нет ни в обычной, ни в свёрнутой панели (там у .nav свой display) */
-html.no-studio .side > #studioBtn { display: none !important; }
+/* «Студия» / «Статистика» выключены (Настройки → Интерфейс → «Панели»): кнопки нет ни в обычной,
+   ни в свёрнутой панели (там у .nav свой display) */
+html.no-studio .side > #studioBtn, html.no-statsbtn .side > #statsBtn { display: none !important; }
 #studioPage { display: flex; flex-direction: column; gap: 16px; max-width: 980px; padding-bottom: 24px; }
 #studioPage [hidden] { display: none !important; }
 #studioPage .card { padding: 16px 18px; }

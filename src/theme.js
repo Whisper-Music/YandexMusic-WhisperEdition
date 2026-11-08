@@ -161,7 +161,8 @@
   }
   window.wmtIntro = { play: (id = cfg.style) => playIntro(id, { force: true }), stop: introStop, has: (id = cfg.style) => !!introOf(id) };
 
-  // Оформление → «Интро тем»: общий выключатель и список стилей, у которых есть интро
+  // Оформление → «Стиль оформления», внизу: общий выключатель интро и список стилей, у которых оно есть.
+  // Ни у одного установленного стиля интро нет — блока не видно вовсе (появится вместе с такой темой).
   function paintIntro() {
     const card = document.getElementById("introCard");
     if (!card) return;
@@ -171,6 +172,7 @@
     if (!list) return;
     list.textContent = "";
     const withIntro = cfg.themes.filter((t) => introOf(t.id));
+    card.hidden = !withIntro.length;
     for (const t of withIntro) {
       const it = introOf(t.id), cur = cfg.style === t.id;
       const row = document.createElement("div"); row.className = "inrow" + (cur ? " cur" : "");
@@ -194,7 +196,7 @@
     }
     if (note) {
       note.textContent = !withIntro.length ? "Пока ни у одного установленного стиля нет интро. Оно бывает у тем из библиотеки — например, ASCII или Madk1d."
-        : motionOff() ? "Анимации интерфейса выключены (Интерфейс → Эффекты и анимации) — интро не показывается."
+        : motionOff() ? "Анимации интерфейса выключены (Оформление → Эффекты и анимации) — интро не показывается."
         : "Щелчок или любая клавиша пропускают интро.";
     }
   }

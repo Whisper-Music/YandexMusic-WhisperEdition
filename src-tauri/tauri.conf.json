@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "capabilities": ["default", "yandex-read", "yandex-write", "secrets", "archive", "mini"],
+      "capabilities": ["default", "yandex-read", "yandex-write", "secrets", "archive", "mini", "notify"],
       "csp": {
         "default-src": "'none'",
         "script-src": "'self'",

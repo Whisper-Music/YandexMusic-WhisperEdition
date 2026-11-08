@@ -32,6 +32,7 @@ mod update;
 mod whisper;
 mod whisper_host;
 mod whisper_yandex;
+mod webmode;
 mod winstate;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -53,10 +54,56 @@ pub(crate) fn tray_menu(app: &tauri::AppHandle, on: bool) {
     }
 }
 
+/// Значок в трее (Настройки → Приложение → Трей): чёрный, белый или в цветах стиля. Картинку рисует страница
+/// (traymini.js, холст size×size, RGBA) — у Rust нет растеризатора SVG, а цвета стиля знает только страница.
+/// `rgba: None` — обычный значок приложения.
 #[tauri::command]
-fn tray_playing(app: tauri::AppHandle, state: tauri::State<TrayToggle>, playing: bool) {
-    let _ = state.0.set_text(if playing { "Пауза" } else { "Играть" });
+fn tray_icon(app: tauri::AppHandle, rgba: Option<Vec<u8>>, size: u32) -> Result<(), String> {
+    let Some(h) = app.try_state::<TrayHandle>() else { return Ok(()) };
+    let img = match rgba {
+        Some(px) if (16..=256).contains(&size) && px.len() == (size * size * 4) as usize => {
+            tauri::image::Image::new_owned(px, size, size)
+        }
+        Some(_) => return Err("неверный размер значка".into()),
+        None => app.default_window_icon().cloned().ok_or("нет значка приложения")?,
+    };
+    h.tray.set_icon(Some(img)).map_err(|e| format!("значок не сменился: {e}"))
+}
+
+// Язык пунктов меню в трее (Настройки → Интерфейс → Язык; i18n.js зовёт tray_lang). Меню рисует система —
+// перевод страницы до него не достаёт, поэтому подписи здесь в двух вариантах: (пункт, по-русски, по-английски).
+struct TrayItems {
+    items: Vec<(MenuItem<tauri::Wry>, &'static str, &'static str)>,
+    en: std::sync::atomic::AtomicBool,
+    playing: std::sync::atomic::AtomicBool,
+}
+fn toggle_text(en: bool, playing: bool) -> &'static str {
+    match (en, playing) {
+        (false, true) => "Пауза",
+        (false, false) => "Играть",
+        (true, true) => "Pause",
+        (true, false) => "Play",
+    }
+}
+
+#[tauri::command]
+fn tray_playing(app: tauri::AppHandle, state: tauri::State<TrayToggle>, items: tauri::State<TrayItems>, playing: bool) {
+    use std::sync::atomic::Ordering::Relaxed;
+    items.playing.store(playing, Relaxed);
+    let _ = state.0.set_text(toggle_text(items.en.load(Relaxed), playing));
     power::on_playing(&app, playing);
+}
+
+#[tauri::command]
+fn tray_lang(state: tauri::State<TrayToggle>, items: tauri::State<TrayItems>, lang: String) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let en = lang == "en";
+    items.en.store(en, Relaxed);
+    thumbbar::EN.store(en, Relaxed);
+    for (it, ru, eng) in &items.items {
+        let _ = it.set_text(if en { *eng } else { *ru });
+    }
+    let _ = state.0.set_text(toggle_text(en, items.playing.load(Relaxed)));
 }
 
 #[tauri::command]
@@ -149,6 +196,11 @@ fn no_autofill(w: &tauri::WebviewWindow) {
 fn no_autofill(_: &tauri::WebviewWindow) {}
 
 pub(crate) fn show_main(app: &tauri::AppHandle) {
+    // интерфейс сейчас во вкладке браузера: «Открыть» из трея — вернуть его в окно (окно покажет web_finish)
+    if webmode::active() {
+        webmode::leave(app);
+        return;
+    }
     power::leave(app);
     if let Some(w) = app.get_webview_window("main") {
         winstate::show_first(&w); // окно ещё не показывалось с запуска — показать как при запуске (с развёрнутостью)
@@ -160,7 +212,7 @@ pub(crate) fn show_main(app: &tauri::AppHandle) {
 
 fn nav_allowed(label: &str, url: &tauri::Url) -> bool {
     match label {
-        "main" | "mini" => {
+        "main" | "mini" | "notify" => {
             let host = url.host_str().unwrap_or("");
             (url.scheme() == "tauri" && host == "localhost")
                 || (matches!(url.scheme(), "http" | "https") && host == "tauri.localhost" && url.port().is_none())
@@ -193,8 +245,6 @@ pub fn run() {
         .plugin(hotkeys::plugin())
         // обновления из GitHub Releases — только через команды update.rs, у страницы прямого доступа к плагину нет
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // системные уведомления — только через команду notify::sys_notify, у страницы прямого доступа к плагину нет
-        .plugin(tauri_plugin_notification::init())
         // Whisper Archive: потоковое воспроизведение треков архива (wa://localhost/track/<id>,
         // на Windows — http://wa.localhost/...). Только для главного окна: окно входа Яндекса
         // и любые внешние страницы получить треки архива этим путём не могут.
@@ -237,6 +287,19 @@ pub fn run() {
             win_drag,
             win_set_fullscreen,
             tray_playing,
+            tray_lang,
+            tray_icon,
+            // браузерная версия (webmode.rs)
+            webmode::web_open,
+            webmode::web_finish,
+            webmode::web_active,
+            webmode::web_reply,
+            webmode::web_body,
+            webmode::web_state_put,
+            webmode::web_state_get,
+            webmode::web_stamps,
+            webmode::web_blob_put,
+            webmode::web_blob_get,
             audiodev::audio_devices_unlock,
             audiodev::audio_endpoints,
             // свой звуковой движок (эксклюзивный WASAPI)
@@ -323,7 +386,10 @@ pub fn run() {
             whisper::rooms::wa_room_ping,
             whisper::rooms::wa_room_missing,
             whisper::rooms::wa_room_wink,
-            notify::sys_notify,
+            notify::notify_show,
+            notify::notify_take,
+            notify::notify_layout,
+            notify::notify_ctl,
             whisper::rooms::wa_room_friends,
             whisper::rooms::wa_room_friend_forget,
             whisper::rooms::wa_room_invite,
@@ -381,10 +447,23 @@ pub fn run() {
             } else {
                 Menu::with_items(app, &[&show, &mini_item, &prev, &toggle, &next, &sep, &quit])?
             };
+            webmode::init(app.handle());
+            app.manage(TrayItems {
+                items: vec![
+                    (prev, "Предыдущий", "Previous"),
+                    (next, "Следующий", "Next"),
+                    (show, "Открыть", "Open"),
+                    (quit, "Выход", "Quit"),
+                    (mini_item, "Мини-плеер", "Mini player"),
+                ],
+                en: Default::default(),
+                playing: Default::default(),
+            });
             app.manage(TrayToggle(toggle));
             app.manage(FsSaved::default());
             app.manage(bg::Picked::default());
             app.manage(mini::Shared::default());
+            app.manage(notify::Shared::default());
             app.manage(update::Pending::default());
             // Трей одинаково создаётся в Windows и Linux, но ведёт себя по-разному:
             // * Windows — левый клик открывает окно, правый показывает меню;

@@ -168,6 +168,10 @@ input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%;
   background: #fff; box-shadow: 0 0 10px var(--glow-c);
 }
+/* Firefox (браузерная версия): свои рамка бегунка и заливка — убрать; оформление копирует main.js (mozRange) */
+input[type=range]::-moz-range-thumb { border: 0; }
+input[type=range]::-moz-range-progress { background: transparent; }
+input[type=range]::-moz-focus-outer { border: 0; }
 
 .main.wavemode { overflow: hidden; display: flex; flex-direction: column; }
 .main.wavemode .head { flex: none; }
@@ -182,7 +186,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 .wavebtn:hover { transform: scale(1.05); }
 .wavebtn svg { width: 54px; height: 54px; }
-.wavebtn.playing { animation: ring 2.4s ease-out infinite; }
+.wavebtn.playing { animation: ring 2.4s steps(40) infinite; }
 @keyframes ring {
   from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent), 0 0 calc(var(--glow) * 2) color-mix(in srgb, var(--accent) 65%, transparent); }
   to   { box-shadow: 0 0 0 46px transparent, 0 0 calc(var(--glow) * 2) color-mix(in srgb, var(--accent) 65%, transparent); }
@@ -205,8 +209,11 @@ input[type=range]::-webkit-slider-thumb {
 .settings[data-tab="play"] > .card:not([data-tab="play"]),
 .settings[data-tab="out"] > .card:not([data-tab="out"]),
 .settings[data-tab="app"] > .card:not([data-tab="app"]),
-.settings[data-tab="int"] > .card:not([data-tab="int"]) { display: none; }
-.settabs { column-span: all; display: flex; flex-wrap: wrap; gap: 8px; }
+.settings[data-tab="int"] > .card:not([data-tab="int"]),
+.settings[data-tab="data"] > .card:not([data-tab="data"]) { display: none; }
+/* шапка настроек (поиск + вкладки) и строка «ничего не нашлось» — на всю ширину, над столбцами (setpage.css) */
+.settings > .settop, .settings > .sfempty { column-span: all; }
+.settabs { display: flex; flex-wrap: wrap; gap: 8px; }
 .settabs .chip { padding: 8px 16px; font-size: 14px; }
 .card { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 .card h3 { margin: 0; font-size: 15px; font-weight: 600; }
@@ -551,7 +558,7 @@ a { color: var(--accent); }
 :root[data-style="neon"] .tab.active {
   color: color-mix(in srgb, var(--accent) 40%, #fff); background: color-mix(in srgb, var(--accent) 38%, #07040f);
   text-shadow: 0 0 10px color-mix(in srgb, var(--glow-c) 60%, transparent);
-  animation: neonBreath 3.2s ease-in-out infinite;
+  animation: neonBreath 3.2s steps(48) infinite;
 }
 @keyframes neonBreath {
   0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--glow-c) 38%, transparent), inset 0 0 8px color-mix(in srgb, var(--glow-c) 14%, transparent); }
@@ -561,7 +568,7 @@ a { color: var(--accent); }
 :root[data-style="neon"] .nav { transition: background .15s, transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .2s; }
 :root[data-style="neon"] .nav:hover:not(:disabled):not(.active) { transform: translateX(3px); box-shadow: 0 0 14px color-mix(in srgb, var(--glow-c) 35%, transparent); }
 :root[data-style="neon"] .nav:active:not(:disabled) { transform: scale(.98); }
-:root[data-style="neon"] .nav.active { background-size: 220% 100%; animation: neonSheen 7s ease-in-out infinite alternate; }
+:root[data-style="neon"] .nav.active { background-size: 220% 100%; animation: neonSheen 7s steps(105) infinite alternate; }
 @keyframes neonSheen { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
 
 :root[data-style="neon"] .list li {
@@ -589,17 +596,19 @@ a { color: var(--accent); }
 :root[data-style="neon"] .list li:hover img { transform: scale(1.06); box-shadow: 0 0 14px color-mix(in srgb, var(--glow-c) 45%, transparent); }
 @keyframes neonRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-:root[data-style="neon"] .head h2 { animation: neonTitle 5s ease-in-out infinite; }
+:root[data-style="neon"] .head h2 { animation: neonTitle 5s steps(60) infinite; }   /* крупная тень 22–34 px — дорогая */
 @keyframes neonTitle {
   0%, 100% { text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 50%, transparent); }
   50%      { text-shadow: 0 0 34px color-mix(in srgb, var(--accent) 78%, transparent); }
 }
-:root[data-style="neon"] body.is-playing .player .cover { animation: neonCover 2.6s ease-in-out infinite; }
+/* Медленное «дыхание» свечения (box-shadow / text-shadow) видеокарта не делает — каждый кадр это перерисовка
+   на основном потоке. Ступеньками ~15 раз в секунду: глазу не видно, а работы в разы меньше. */
+:root[data-style="neon"] body.is-playing .player .cover { animation: neonCover 2.6s steps(39) infinite; }
 @keyframes neonCover {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   50%      { box-shadow: 0 0 18px 2px color-mix(in srgb, var(--accent) 55%, transparent); }
 }
-:root[data-style="neon"] body.is-playing .player .playbtn { animation: neonPlay 2.2s ease-out infinite; }
+:root[data-style="neon"] body.is-playing .player .playbtn { animation: neonPlay 2.2s steps(33) infinite; }
 @keyframes neonPlay {
   0%   { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); }
   70%  { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 0 12px transparent; }
@@ -648,7 +657,10 @@ a { color: var(--accent); }
   -webkit-mask-composite: xor; mask-composite: exclude;
   filter: blur(1px); opacity: 0; transition: opacity .9s ease;
 }
-:root[data-style="neon"] body.is-playing .player::before { opacity: .9; animation: neonRun 9s linear infinite; }
+/* Огоньки — анимация зарегистрированного свойства: её считает не видеокарта, а основной поток, и каждый кадр
+   перерисовывается вся рамка плеера (маска + blur) вместе со стеклом панели. На 60 кадрах это и были «просадки,
+   пока играет трек»: наведение и прокрутка ждали отрисовку. 20 шагов в секунду на глаз почти не отличить. */
+:root[data-style="neon"] body.is-playing .player::before { opacity: .9; animation: neonRun 9s steps(180) infinite; }
 @keyframes neonRun { to { --neon-run: 360deg; } }
 
 /* ---------- Неон: орбиты вокруг кнопки «Моя волна» ----------
@@ -711,7 +723,7 @@ a { color: var(--accent); }
   100% { opacity: 0; scale: 1.85; border-width: .5px; }
 }
 /* сама кнопка: вместо общего «кольца» — дыхание свечения; с визуализатором — вспышка на каждый удар */
-:root[data-style="neon"] .stage:not(.viz) .wavebtn.playing { animation: neonCore 2.6s ease-in-out infinite; }
+:root[data-style="neon"] .stage:not(.viz) .wavebtn.playing { animation: neonCore 2.6s steps(39) infinite; }
 @keyframes neonCore {
   0%, 100% { box-shadow: 0 0 calc(var(--glow) * 2) color-mix(in srgb, var(--btn-glow) 60%, transparent); }
   50%      { box-shadow: 0 0 calc(var(--glow) * 3) color-mix(in srgb, var(--btn-glow) 85%, transparent); }
@@ -1218,7 +1230,7 @@ a { color: var(--accent); }
   mask-composite: intersect;
 }
 :root[data-style="steam"] .wavebtn::after { inset: -20px; border: 1px solid var(--a2-ls); }
-:root[data-style="steam"] .wavebtn.playing { animation: steamBreath 2.6s ease-in-out infinite; }
+:root[data-style="steam"] .wavebtn.playing { animation: steamBreath 2.6s steps(39) infinite; }
 :root[data-style="steam"] .wavebtn.playing::before {
   background: conic-gradient(from var(--ang), var(--a2-lo) 0deg, var(--a2-ls) 200deg, var(--a2) 300deg, var(--a2-hi) 352deg, #fff3dc 358deg, var(--a2-lo) 360deg);
   animation: steamSweep 4s steps(36) infinite;
@@ -2204,7 +2216,12 @@ body.vizfull-on .thbtns { visibility: hidden; }
    крупная полупрозрачная копия обложки, отражённая в углу, аура из цветов обложки, зерно и виньетка. */
 @property --accent { syntax: "<color>"; inherits: true; initial-value: #a66bff; }
 @property --accent2 { syntax: "<color>"; inherits: true; initial-value: #e060ff; }
-:root:has(body.dyn-on) { transition: --accent 1.2s ease, --accent2 1.2s ease; }
+/* --accent наследуется всеми элементами окна: плавный переход на 60 кадрах — это пересчёт стилей ВСЕГО окна
+   каждый кадр (длинный список лайков — тысячи элементов), отсюда фриз на смене трека. 12 шагов за 1,2 с —
+   цвет так же перетекает, а пересчётов в 6 раз меньше. */
+:root:has(body.dyn-on) { transition: --accent 1.2s steps(12), --accent2 1.2s steps(12); }
+/* цвет выбирают в пипетке (main.js, класс cpick) — переход не нужен, иначе цвет отстаёт от курсора */
+:root.cpick:has(body.dyn-on) { transition: none; }
 
 /* #dynBg лежит внутри #bg: место и форму (inset, border-radius) задаёт тема через #bg, поэтому фон по обложке
    не вылезает за экран «Телевизора» и не закрывает корпус. Свою картинку и размытие #bg на это время убирает. */
@@ -2470,3 +2487,11 @@ body.cli-on .cli {
 .fontitem.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 #fontCard .switch { margin-top: 10px; }
 #fontCard .status:empty { display: none; }
+/* «Цвета и шрифт»: два столбца «цвет + кнопка под ним», под ними — широкая кнопка шрифта с названием текущего */
+.swgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+.swcol { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; }
+.swcol > .nav { width: 100%; text-align: center; }
+.swcol #colorReset:disabled { opacity: .45; cursor: default; }
+.fontsec { display: flex; flex-direction: column; }
+.fontcur .fontpick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+.fontpick .fontname { flex: 0 1 auto; font-size: 14px; color: var(--muted); }

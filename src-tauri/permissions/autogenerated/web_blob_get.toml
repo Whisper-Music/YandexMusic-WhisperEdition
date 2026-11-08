@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-web-blob-get"
+description = "Enables the web_blob_get command without any pre-configured scope."
+commands.allow = ["web_blob_get"]
+
+[[permission]]
+identifier = "deny-web-blob-get"
+description = "Denies the web_blob_get command without any pre-configured scope."
+commands.deny = ["web_blob_get"]

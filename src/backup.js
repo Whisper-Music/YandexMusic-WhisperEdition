@@ -291,16 +291,12 @@
   async function autoDialog() {
     closeTrackMenu?.();
     const [sets, idx] = await Promise.all([listSnaps("settings"), listSnaps("downloaded")]);
-    const wrap = document.createElement("div"); wrap.className = "login modal";
-    const box = document.createElement("div"); box.className = "panel login-box modalbox bkbox";
-    box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Автокопии");
-    const h = document.createElement("h2"); h.textContent = "Автокопии";
-    const p = document.createElement("p");
-    p.textContent = "Whisper сам сохраняет настройки и список скачанных треков. Если что-то сломалось или пропало — выбери, на какой момент вернуть.";
-    box.append(h, p);
-    const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); };
-    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-    const st = document.createElement("p"); st.className = "status";
+    // общее окно «Подробнее» (details.js)
+    const d = openDetails({
+      title: "Автокопии",
+      sub: "Whisper сам сохраняет настройки и список скачанных треков. Если что-то сломалось или пропало — выбери, на какой момент вернуть.",
+    });
+    const box = d.body, st = d.note, close = d.close;
     const section = (title, list, empty, fn) => {
       const h3 = document.createElement("h3"); h3.textContent = title; box.append(h3);
       if (!list.length) { const e = document.createElement("p"); e.className = "status"; e.textContent = empty; box.append(e); return; }
@@ -311,10 +307,10 @@
         const sm = document.createElement("small"); sm.textContent = fmtSize(s.size);
         b.append(t, sm);
         b.onclick = async () => {
-          if (box.inert) return;
-          box.inert = true; st.textContent = "Восстанавливается…";
+          if (d.box.inert) return;
+          d.box.inert = true; st.textContent = "Восстанавливается…";
           try { await fn(s); } catch (e) { st.textContent = "Не удалось: " + (e?.message || e); }
-          finally { box.inert = false; }
+          finally { d.box.inert = false; }
         };
         ul.append(b);
       }
@@ -327,13 +323,6 @@
       if (typeof loadGot === "function") await loadGot();
       showToast(`Список скачанных восстановлен: ${n} ${n % 10 === 1 && n % 100 !== 11 ? "трек" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? "трека" : "треков"}`, 5000, { kind: "ok" });
     });
-    const row = document.createElement("div"); row.className = "row";
-    const x = document.createElement("button"); x.type = "button"; x.className = "nav"; x.textContent = "Закрыть"; x.onclick = close;
-    row.append(x); box.append(st, row);
-    wrap.append(box); document.body.append(wrap);
-    document.addEventListener("keydown", onKey, true);
-    wrap.onpointerdown = (e) => { if (e.target === wrap) close(); };
-    x.focus();
   }
 
   async function paintAuto() {
@@ -375,7 +364,7 @@
   $b("bkLoad")?.addEventListener("click", () => pick.click());
   $b("bkAutoBtn")?.addEventListener("click", () => autoDialog().catch((e) => note("Не удалось открыть автокопии: " + (e?.message || e))));
   const page = $b("settingsPage");
-  if (page) new MutationObserver(() => { if (!page.hidden && page.dataset.tab === "app") paintAuto(); }).observe(page, { attributes: true, attributeFilter: ["hidden", "data-tab"] });
+  if (page) new MutationObserver(() => { if (!page.hidden && page.dataset.tab === "data") paintAuto(); }).observe(page, { attributes: true, attributeFilter: ["hidden", "data-tab"] });
 
   window.backupNow = () => snapshot(true);       // для отладки и других модулей: автокопия настроек сейчас
 })();

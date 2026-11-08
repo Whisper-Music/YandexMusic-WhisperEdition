@@ -66,7 +66,8 @@
   const curTrack = () => (typeof current === "number" && current >= 0 ? queue?.[current] : null);
   const isPlaying = () => !!(audio && !audio.paused && curTrack());
   const sleepMode = () => { const l = $("#sleepLeft"); return !!l && !l.hidden; };
-  const calm = () => document.documentElement.dataset.anim === "off" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");      // один раз: tick идёт 20 раз в секунду
+  const calm = () => document.documentElement.dataset.anim === "off" || reduced.matches;
   const player = () => document.querySelector(".app .player");
   // Спокойная музыка — кот спит весь трек. Меток настроения у трека в API нет, поэтому смотрим на то, что есть:
   // настроение/занятие «Моей волны» (её seed) и жанр альбома трека.

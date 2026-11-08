@@ -290,7 +290,7 @@
   });
   def("sleep", "[минуты|off]", "режим сна: Моя волна и выключение через N минут", "Сервисы", (a) => {
     const s = String(a[0] || "");
-    const running = $("#slStart")?.textContent.includes("Выключить");
+    const running = !!window.sleepActive?.();
     if (/^off$/i.test(s)) { if (running) clickEl("#slStart"); return dim("Режим сна выключен."); }
     if (s) { const chip = document.querySelector(`#slTime .chip[data-v="${parseInt(s, 10)}"]`); if (!chip) return err("Можно: 15, 30, 45, 60, 90, 120, 180"); chip.click(); }
     if (!running) clickEl("#slStart");

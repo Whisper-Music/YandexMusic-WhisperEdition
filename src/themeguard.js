@@ -78,8 +78,10 @@
     const cli = document.body.classList.contains("cli-on");
     const out = [];
     let unsure = false;
+    const web = document.documentElement.classList.contains("webmode");     // во вкладке браузера окна нет (webmode.js)
     for (const [k, a] of Object.entries(ACTS)) {
       if (a.th.some((x) => thActs.has(x)) || (a.cli && cli)) continue;
+      if (web && (k === "close" || k === "minimize" || k === "drag")) continue;
       const v = reachable(a.el, a.area);
       if (v === null) unsure = true;
       else if (!v) out.push(k);

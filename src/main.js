@@ -15,6 +15,37 @@ const wReport = (p) => { try { window.Whisper?.player.report(p); } catch (e) { c
 // (document.adoptedStyleSheets) CSP не распространяется; где их нет (старый WebKitGTK) — <link> на blob:
 // этого же приложения (style-src разрешает только 'self' и blob:). Подключаются после всех файлов .css;
 // настройки пользователя (ccStyle) — всегда последними, после CSS своих тем.
+//
+// Firefox (браузерная версия, webmode.js): ползунки (#seek, громкость…) оформлены только для движков Chromium/WebKit
+// (::-webkit-slider-thumb / -runnable-track), а Firefox такие правила выбрасывает целиком — полоса воспроизведения
+// пропадала. Здесь те же правила переписываются на ::-moz-range-* — и для файлов .css, и для CSS своих тем.
+const MOZ_RANGE = (() => { try { return CSS.supports("selector(::-moz-range-thumb)"); } catch { return false; } })();
+function mozRange(css) {
+  if (!css.includes("-webkit-slider")) return "";
+  css = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const out = [];
+  const conv = (s) => s.replace(/::-webkit-slider-runnable-track/g, "::-moz-range-track").replace(/::-webkit-slider-thumb/g, "::-moz-range-thumb");
+  (function walk(src, wrap) {
+    let i = 0;
+    while (i < src.length) {
+      const open = src.indexOf("{", i);
+      if (open < 0) break;
+      let d = 1, j = open + 1;
+      for (; j < src.length && d; j++) { if (src[j] === "{") d++; else if (src[j] === "}") d--; }
+      const head = src.slice(i, open).replace(/^[\s;]+/, "").trim(), body = src.slice(open + 1, j - 1);
+      if (head.startsWith("@")) { if (/^@(media|supports|layer|container)\b/.test(head)) walk(body, [...wrap, head]); }
+      else if (head.includes("-webkit-slider")) {
+        // правило целиком: Firefox выбросил его и с остальными селекторами списка
+        const sel = head.split(",").map((s) => conv(s.trim())).filter((s) => s && !s.includes("::-webkit-")).join(", ");
+        let decl = body.replace(/-webkit-appearance\s*:[^;}]*;?/g, "");
+        if (sel.includes("-moz-range-thumb")) decl = decl.replace(/(^|;)\s*margin-top\s*:[^;}]*/g, "$1");   // бегунок Firefox ставит по центру сам
+        if (sel) { let r = `${sel} { ${decl} }`; for (const w of [...wrap].reverse()) r = `${w} { ${r} }`; out.push(r); }
+      }
+      i = j;
+    }
+  })(css, []);
+  return out.join("\n");
+}
 const DynCss = (() => {
   const sheets = new Map();
   const LAST = "ccStyle";
@@ -26,6 +57,8 @@ const DynCss = (() => {
   }
   return {
     set(key, css) {
+      css = String(css);
+      if (MOZ_RANGE) css += "\n" + mozRange(css);
       let sh = sheets.get(key);
       if (adopt) {
         if (!sh) { sh = new CSSStyleSheet(); sheets.set(key, sh); sync(); }
@@ -48,6 +81,12 @@ const DynCss = (() => {
   };
 })();
 window.DynCss = DynCss;
+// Firefox: те же правила из подключённых файлов .css. Место «mozRange» занимаем сразу — раньше CSS своих тем
+if (MOZ_RANGE) {
+  DynCss.set("mozRange", "");
+  Promise.all([...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => fetch(l.href).then((r) => (r.ok ? r.text() : "")).catch(() => "")))
+    .then((texts) => DynCss.set("mozRange", texts.map(mozRange).join("\n")));      // только переписанные правила
+}
 const ICON = {
   play: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>',
@@ -276,7 +315,8 @@ function feature(name, st = cfg.style) {
   if (typeof f === "boolean") return f;
   return name === "glow" ? baseOf(st) === "neon" : true;
 }
-const freshCfg = () => ({ style: "royal", blur: 6, viz: true, vizStyle: "circle", anim: true, bg: "", themes: [], s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k], cc: {} }])) });
+// style: "neon" — первый стиль, который видит новый пользователь (и после «Сбросить оформление»)
+const freshCfg = () => ({ style: "neon", blur: 6, viz: true, vizStyle: "circle", anim: true, bg: "", themes: [], s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k], cc: {} }])) });
 function loadCfg() {
   let saved = null, old = null;
   try { saved = JSON.parse(localStorage.getItem("ym_cfg3") || "null"); } catch {}
@@ -298,7 +338,7 @@ function loadCfg() {
     for (const k of ["blur", "viz", "bg"]) if (old[k] !== undefined) c[k] = old[k];
     for (const k of STYLE_KEYS) if (old[k] !== undefined) c.s.neon[k] = old[k];
   }
-  if (!c.s[c.style]) c.style = "royal";
+  if (!c.s[c.style]) c.style = "neon";
   if (!VIZ_STYLES.includes(c.vizStyle)) c.vizStyle = "circle";
   return c;
 }
@@ -578,11 +618,18 @@ function openColorEditor() {
     al.title = "Непрозрачность: влево — прозрачнее";
     const pct = document.createElement("output"); pct.className = "ccpct";
     const compose = () => { const a = +al.value; return a >= 100 ? inp.value : inp.value + Math.round((a / 100) * 255).toString(16).padStart(2, "0"); };
-    const put = () => { pct.textContent = al.value + "%"; fill(al); row.classList.add("set"); auto.textContent = "авто"; onSet(compose()); };
+    // onSet пересобирает весь блок «Тонкой настройки» (DynCss + замеры) — не чаще раза за кадр, иначе пипетка лагает
+    let raf = 0;
+    const put = () => {
+      pct.textContent = al.value + "%"; fill(al); row.classList.add("set"); auto.textContent = "авто";
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; onSet(compose()); });
+    };
     inp.addEventListener("input", put);
     al.addEventListener("input", put);
-    inp.addEventListener("change", () => saveCfg());
-    al.addEventListener("change", () => saveCfg());
+    // отпустили — досылаем последний цвет сразу (кадр мог ещё не наступить) и пишем на диск
+    const done = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; onSet(compose()); } saveCfg(); };
+    inp.addEventListener("change", done);
+    al.addEventListener("change", done);
     const clr = document.createElement("button"); clr.type = "button"; clr.className = "ccclr"; clr.title = "Вернуть «авто»"; clr.textContent = "✕";
     clr.onclick = (e) => { e.preventDefault(); onClear(); saveCfg(); };
     // v — сохранённый цвет или пусто («авто»); hint — подпись вместо «авто» (например «разные»)
@@ -947,7 +994,7 @@ function syncControls() {
   $("#cGlow").closest("label").style.display = glow ? "" : "none";
   $("#cPanel").closest("label").style.display = panels ? "" : "none";
   $("#cAnim").closest("label").style.display = anim ? "" : "none";
-  $("#fxCard").style.display = glow || panels || anim ? "" : "none";      // у стиля нет ни одного эффекта — карточка не нужна
+  $("#fxCard").style.display = glow || anim ? "" : "none";      // у стиля нет ни свечения, ни анимаций — карточка не нужна (прозрачность — в «Фоне»)
   document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
   // под списком стилей (в компактном виде): «Автор · Название» выбранного стиля
   const sel = document.querySelector(".stylecard.on"), cap = $("#styleCap");
@@ -991,10 +1038,40 @@ $("#colorReset")?.addEventListener("click", () => {
     applyCfg(); saveCfg(); syncControls();
   } } });
 });
+// Пока водишь по палитре или тянешь ползунок, событий input — сотни в секунду, а полный applyCfg каждый раз
+// пересобирал «Тонкую настройку» (DynCss дважды + замеры getComputedStyle), трогал фон, визуализатор и кнопки темы.
+// Отсюда и лаг выбора цвета. Теперь: не чаще раза за кадр и только переменные (applyLive); полностью — по change.
+let liveRaf = 0, cpickT = 0;
+function applyLive() {
+  const r = document.documentElement.style, base = baseOf();
+  const st = dynColorsOn() && dynPal ? { ...sty(), accent: dynPal.accent, accent2: dynPal.accent2 } : sty();
+  r.setProperty("--accent", st.accent);
+  r.setProperty("--accent2", st.accent2);
+  const oa = onAccent(btnHi(st.accent2), st.accent2);
+  r.setProperty("--on-accent", oa.color);
+  r.setProperty("--on-accent-shadow", base === "neon" ? oa.shadow : "none");
+  r.setProperty("--glow", (base === "neon" || !BUILTIN.includes(cfg.style) ? st.glow : STYLE_DEF[cfg.style].glow) + "px");
+  r.setProperty("--panel-a", st.panel / 100);
+  r.setProperty("--dim", st.dim / 100);
+  r.setProperty("--bgblur", cfg.blur + "px");
+  loInk(st);
+}
 for (const [id, key, num] of SLIDERS) {
   const el = $(id);
-  el.addEventListener("input", () => { if (key === "accent" || key === "accent2") manualColors(); setv(key, num ? +el.value : el.value); applyCfg(); });      // пока тянешь — только применяем
-  el.addEventListener("change", () => { saveCfg(); syncColorReset(); });                              // на диск — когда отпустил
+  el.addEventListener("input", () => {
+    if (key === "accent" || key === "accent2") manualColors();
+    setv(key, num ? +el.value : el.value);
+    // плавный переход цветов динамического фона (1,2 с) здесь только мешает: цвет отставал бы от курсора
+    document.documentElement.classList.add("cpick");
+    clearTimeout(cpickT);       // change может и не прийти (палитру закрыли Esc) — снимаем сами через секунду тишины
+    cpickT = setTimeout(() => document.documentElement.classList.remove("cpick"), 1000);
+    if (!liveRaf) liveRaf = requestAnimationFrame(() => { liveRaf = 0; applyLive(); });
+  });
+  el.addEventListener("change", () => {
+    cancelAnimationFrame(liveRaf); liveRaf = 0;
+    document.documentElement.classList.remove("cpick");
+    applyCfg(); saveCfg(); syncColorReset();                                                          // на диск — когда отпустил
+  });
 }
 document.querySelectorAll("input[type=range]").forEach((el) => el.addEventListener("input", () => fill(el)));
 document.querySelectorAll(".stylecard").forEach((b) => (b.onclick = () => { cfg.style = b.dataset.style; applyCfg(); saveCfg(); syncControls(); }));
@@ -1260,7 +1337,7 @@ $("#cfgReset").onclick = async () => {
   for (const st of Object.keys(cfg.s)) await clearBg(st);
   cfg = freshCfg(); cfg.themes = themes;
   for (const t of themes) cfg.s[t.id] = { ...STYLE_DEF[t.base], cc: {} };
-  cfg.style = cfg.s[keep] ? keep : "royal";
+  cfg.style = cfg.s[keep] ? keep : "neon";
   await window.wmtRestoreDefaults?.();        // свои стили: цвета и фон — снова как в их файлах .wmt
   applyCfg(); saveCfg(); syncControls();
 };
@@ -1446,7 +1523,8 @@ async function warnPlainSecrets() {
 }
 window.warnPlainSecrets = warnPlainSecrets;
 function showLogin(msg = "") { $("#login").classList.remove("hidden"); $("#loginErr").textContent = msg; }
-function afterLogin() { $("#login").classList.add("hidden"); goTop(showLikes); restorePlayer(); loadLikedIds(); loadDislikedIds(); }
+// первая страница после запуска и входа — «Моя волна» (до этого были «Лайки»)
+function afterLogin() { $("#login").classList.add("hidden"); goTop(showWave); restorePlayer(); loadLikedIds(); loadDislikedIds(); }
 
 $("#oauthBtn").onclick = async () => {
   const btn = $("#oauthBtn");
@@ -1890,7 +1968,7 @@ async function showLikes(tab = likesTab) {
 }
 
 // Новый лайк сразу появляется сверху открытой страницы «Лайки» (прокрутка не сбивается).
-// Снятый лайк строку не убирает — сердечко гаснет, и трек можно тут же лайкнуть обратно.
+// Снятый лайк строку убирает: она рассыпается на пиксели (dust.js, toggleLike), в подсказке — «Вернуть».
 const likesAdded = [];
 const likesOpen = () => document.querySelector(".main").dataset.page === "likes" && likesTab === "likes" && !$("#list").hidden;
 function redrawLikes() {
@@ -1919,13 +1997,15 @@ function likesFilter(tracks) {
   if (!words.length) return tracks;
   return tracks.filter((t) => { const h = trackHay(t); return words.every((w) => h.includes(w)); });
 }
+// на экране строка может быть уже по-английски (i18n.js) — сравниваем с обоими вариантами
+const isNothingFound = (s) => s === "Ничего не найдено" || s === window.i18n?.t("Ничего не найдено");
 function lkFindCount(final = false) {
   const c = $("#lkFindCnt");
   if (!normQ(likesQuery)) { c.textContent = ""; return; }
   const n = shown.length;
   c.textContent = `${n} из ${likesSrc.length}`;
   if (!n && (final || likes.done)) $("#status").textContent = "Ничего не найдено";
-  else if ($("#status").textContent === "Ничего не найдено") $("#status").textContent = "";
+  else if (isNothingFound($("#status").textContent)) $("#status").textContent = "";
 }
 function renderLikes() {
   renderList(likesFilter(withStudioLikes(likesSrc)), false, LK);
@@ -1972,7 +2052,7 @@ $("#lkFindIn").addEventListener("input", (e) => {
     likesQuery = v;
     if (!likesOpen()) return;
     document.querySelector(".main").scrollTop = 0;
-    if ($("#status").textContent === "Ничего не найдено") $("#status").textContent = "";
+    if (isNothingFound($("#status").textContent)) $("#status").textContent = "";
     renderLikes();
   }, 120);
 });
@@ -3074,6 +3154,12 @@ async function toggleLike(t) {
   if (!was) likeTs.set(id, Date.now());               // новый лайк — самый свежий (версии студии встают по времени)
   if (!was && dislikedIds.delete(id)) saveDislikes();       // лайк снимает «Не нравится» (Яндекс делает так же)
   refreshHearts();
+  // снят на открытой странице «Лайки» — строка рассыпается на пиксели (dust.js); вернуть — кнопкой в подсказке
+  const gone = was && likesOpen() ? [...document.querySelectorAll("#list li")].filter((li) => li.dataset.id === id) : [];
+  if (gone.length) {
+    for (const li of gone) window.rowDust ? window.rowDust(li) : li.remove();
+    showToast(`«${t.title}» — убран из лайков`, 5000, { kind: "ok", action: { label: "Вернуть", fn: () => { if (!likedIds.has(id)) toggleLike(t); } } });
+  }
   try {
     await ym(was ? "like_remove" : "like_add", { form: { "track-ids": albumId ? `${id}:${albumId}` : id } });
     if (was) likes.tracks = likes.tracks.filter((x) => String(x.id) !== id);
@@ -3081,6 +3167,7 @@ async function toggleLike(t) {
     else likesAdded.push(t);              // лайки ещё грузятся — трек добавится, когда загрузка закончится
   } catch (e) {
     was ? likedIds.add(id) : likedIds.delete(id);
+    if (gone.length) redrawLikes();       // строка уже рассыпалась — вернуть её на место
     refreshHearts();
     $("#status").textContent = "Не удалось изменить лайк: " + e.message;
   }
@@ -4775,7 +4862,7 @@ function makeAudio(useViz, nat = false) {
   };
   a.ontimeupdate = () => {
     if (a === audio && a.duration) {
-      $("#seek").value = (a.currentTime / a.duration) * 1000; fill($("#seek"));
+      if (!seekDrag) { $("#seek").value = (a.currentTime / a.duration) * 1000; fill($("#seek")); }   // не вырывать ползунок из-под руки
       const tc = fmtTime(a.currentTime), td = fmtTime(a.duration);
       if ($("#tCur").textContent !== tc) $("#tCur").textContent = tc;
       if ($("#tDur").textContent !== td) $("#tDur").textContent = td;
@@ -5237,6 +5324,40 @@ $("#volBtn").addEventListener("keydown", (e) => {
 });
 $("#volWrap").addEventListener("wheel", (e) => { e.preventDefault(); setVol(volume + (e.deltaY < 0 ? 0.05 : -0.05)); }, { passive: false });
 $("#seek").addEventListener("input", (e) => { if (audio.duration) audio.currentTime = (e.target.value / 1000) * audio.duration; });
+// Перемотка щелчком. У <input type=range> щелчок по самому кружку не двигает его — это начало перетаскивания,
+// а кружок стоит ровно там, куда только что щёлкнули: повторный щелчок рядом «не срабатывал», пока трек его не
+// отодвинет (секунды). Поэтому щелчок и перетаскивание считаем сами: значение — по точке под курсором,
+// а события input/change — те же, что у обычного ползунка (на них уже подписаны плеер, «Слушать вместе» и т. д.).
+var seekDrag = false;              // var: ontimeupdate (выше) читает его и тогда, когда до этой строки дело не дошло
+function rangeGrab(el) {
+  const at = (e) => {
+    const r = el.getBoundingClientRect(), th = 14;                // ширина кружка: середина его — на краях дорожки
+    const k = Math.min(1, Math.max(0, (e.clientX - r.left - th / 2) / Math.max(1, r.width - th)));
+    return Math.round(+el.min + k * (+el.max - +el.min));
+  };
+  const put = (e) => {
+    const v = at(e);
+    if (+el.value === v) return;
+    el.value = v; fill(el);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || el.disabled) return;
+    e.preventDefault();                                             // свой жест вместо встроенного перетаскивания
+    el.focus({ preventScroll: true });
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    seekDrag = true;
+    put(e);
+    const move = (ev) => put(ev);
+    const up = () => {
+      seekDrag = false;
+      el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    el.addEventListener("pointermove", move); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  });
+}
+rangeGrab($("#seek")); rangeGrab($("#fSeek"));
 
 ICON.winMax = '<svg viewBox="0 0 12 12" width="12" height="12"><rect x="2.2" y="2.2" width="7.6" height="7.6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
 ICON.winRestore = '<svg viewBox="0 0 12 12" width="12" height="12"><path d="M3.6 3.6V2.2h6.2v6.2H8.4M2.2 3.6h6.2v6.2H2.2z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
@@ -5348,7 +5469,7 @@ syncIcons();
   const migMsg = await migrateLegacyToken();
   const has = await tokenExists();
   if (has === null) showLogin("Не найдены команды хранилища токена: обнови Rust-часть (auth.rs и net.rs).");
-  else if (has && uid) { goTop(showLikes); restorePlayer(); loadLikedIds(); loadDislikedIds(); warnPlainSecrets(); }
+  else if (has && uid) { goTop(showWave); restorePlayer(); loadLikedIds(); loadDislikedIds(); warnPlainSecrets(); }
   else showLogin(migMsg);
 })();
 
@@ -5357,7 +5478,7 @@ syncIcons();
 // Два столбца: карточки вкладки идут в порядке разметки, первая карточка правого столбца помечена .colbreak.
 // Карточка без data-tab (её добавил другой модуль) попадает в «Интеграции».
 (() => {
-  const page = $("#settingsPage"), TABS = ["look", "ui", "play", "out", "app", "int"];
+  const page = $("#settingsPage"), TABS = ["look", "ui", "play", "out", "app", "int", "data"];
   const OLD = { player: "play", services: "int" };      // вкладки до перестановки
   let tab = "look";
   try { let v = localStorage.getItem("ym_set_tab"); v = OLD[v] || v; if (TABS.includes(v)) tab = v; } catch {}

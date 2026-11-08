@@ -34,7 +34,7 @@ pub(crate) const DEVICE_NAME: &str = "Whisper Edition (Яндекс Музыка
 pub(crate) const DISCORD_APP_ID: &str = "1561411272946352150";
 /// Кнопка в профиле Discord: подпись (Discord принимает не длиннее 32 символов) и страница, где клиент можно скачать.
 pub(crate) const DISCORD_BUTTON: &str = "Скачать Whisper";
-pub(crate) const APP_URL: &str = "https://github.com/Whisper-Music/YandexMusic-WhisperEdition";
+pub(crate) const APP_URL: &str = "https://origin.whisper-archive.ru/apps";
 
 /// Откуда виджет OBS может брать картинки (CSP img-src его страницы): обложки Яндекса.
 pub(crate) const OBS_IMG_SRC: &str = "https://*.yandex.net https://*.yandex.ru";

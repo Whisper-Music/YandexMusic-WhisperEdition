@@ -1,0 +1,51 @@
+/* Страница настроек (setpage.js): шапка с поиском, результаты поиска, вкладки слева.
+   Цвета — только переменные стиля, форма кнопок — классы .chip / .search, поэтому стили и темы оформляют всё сами. */
+
+/* шапка: вкладки строкой, поиск справа */
+.settop { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+.settop .settabs { order: 1; flex: 1 1 auto; min-width: 0; }
+/* у части стилей поле с отступом под значок лупы (Стимпанк — 38 px), поэтому шире и с запасом: подсказка не обрезается */
+.settop .setfind { order: 2; flex: 0 1 270px; min-width: 210px; margin: 0; text-overflow: ellipsis; }
+#setFindEmpty[hidden] { display: none !important; }
+/* «Вывод и качество»: две строки выбора — плотнее обычной карточки; пустая подсказка режима места не занимает */
+#modeCard { gap: 8px; }
+#modeCard > .status:empty { display: none; }
+.sfempty { margin: 6px 2px 14px; }
+
+/* поиск: видны найденные карточки всех вкладок одним списком */
+#settingsPage.searching > .card { display: none; }
+#settingsPage.searching > .card.sfcard { display: flex; }
+#settingsPage.searching > .card.colbreak { break-before: auto; }
+#settingsPage.searching .settabs { opacity: .55; }
+.sfhit { outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent); outline-offset: 4px; border-radius: 8px; }
+.sftag {
+  margin-left: 8px; padding: 2px 9px; border-radius: 999px; vertical-align: 2px; cursor: pointer;
+  font-size: 11px; font-weight: 500; color: var(--muted); background: rgba(255,255,255,.08);
+}
+.sftag:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 28%, transparent); }
+/* переход к настройке (openSetting): короткая подсветка */
+.sfflash { animation: sfFlash 1.6s ease-out; border-radius: 8px; }
+@keyframes sfFlash {
+  0%, 35% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 70%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+:root[data-anim="off"] .sfflash { animation: none; outline: 2px solid var(--accent); }
+:root[data-style="royal"] .sfhit, :root[data-style="steam"] .sfhit,
+:root[data-style="royal"] .sftag, :root[data-style="steam"] .sftag { border-radius: 2px; }
+
+/* вкладки слева: столбик в поле слева, карточки — справа (на узком окне — как сверху) */
+@media (min-width: 960px) {
+  #settingsPage[data-tabs="left"] { position: relative; padding-left: 196px; max-width: 1200px; }
+  #settingsPage[data-tabs="left"] > .settop {
+    position: absolute; left: 0; top: 0; z-index: 1; width: 180px;
+    flex-direction: column; align-items: stretch; gap: 10px;
+  }
+  #settingsPage[data-tabs="left"] .settop .setfind { order: 0; flex: none; width: 100%; min-width: 0; }
+  #settingsPage[data-tabs="left"] .settabs { flex-direction: column; flex-wrap: nowrap; gap: 4px; }
+  #settingsPage[data-tabs="left"] .settabs .chip { width: 100%; text-align: left; justify-content: flex-start; }
+}
+/* слева столбик забирает ширину — два столбца карточек только на по-настоящему широком окне */
+@media (min-width: 1100px) and (max-width: 1339px) {
+  #settingsPage[data-tabs="left"] { columns: 1; }
+  #settingsPage[data-tabs="left"] > .card.colbreak { break-before: auto; }
+}

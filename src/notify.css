@@ -1,0 +1,36 @@
+/* Уведомления: карточка в настройках и содержимое окна «Настроить…» (notify.js → details.js). Сами уведомления — notifywin.css */
+#ntCard [hidden] { display: none !important; }
+.ntsec { display: flex; flex-direction: column; gap: 8px; }
+.ntsec h4 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ntseg { align-self: flex-start; }
+.ntnote { margin: 0; min-height: 18px; font-size: 13px; }
+.ntnote:empty { display: block !important; }
+
+/* «экран» с четырьмя углами */
+.ntscreen {
+  position: relative; width: 240px; height: 140px; align-self: center; border-radius: 10px;
+  border: 2px solid color-mix(in srgb, var(--muted) 60%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.ntscreen::after { /* подставка монитора */
+  content: ""; position: absolute; left: 50%; bottom: -12px; width: 56px; height: 8px; transform: translateX(-50%);
+  border-radius: 0 0 6px 6px; background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+.ntbar { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; border-radius: 0 0 8px 8px;
+  background: color-mix(in srgb, var(--muted) 25%, transparent); }
+.ntcorner {
+  position: absolute; width: 84px; height: 40px; padding: 6px; border-radius: 8px; display: flex; cursor: pointer;
+  background: none; border: 1px dashed transparent; color: var(--muted); transition: background .12s, border-color .12s;
+}
+.ntcorner[data-c^="t"] { top: 4px; align-items: flex-start; }
+.ntcorner[data-c^="b"] { bottom: 16px; align-items: flex-end; }
+.ntcorner[data-c$="l"] { left: 4px; justify-content: flex-start; }
+.ntcorner[data-c$="r"] { right: 4px; justify-content: flex-end; }
+.ntcorner i { display: block; width: 56px; height: 18px; border-radius: 5px; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .12s; }
+.ntcorner:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.ntcorner:hover i { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ntcorner.on { border-color: var(--accent); border-style: solid; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ntcorner.on i { background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent); }
+:root[data-style="royal"] .ntscreen, :root[data-style="steam"] .ntscreen,
+:root[data-style="royal"] .ntcorner, :root[data-style="steam"] .ntcorner,
+:root[data-style="royal"] .ntcorner i, :root[data-style="steam"] .ntcorner i { border-radius: 0; }

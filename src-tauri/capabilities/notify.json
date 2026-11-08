@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "notify",
+  "description": "Окно уведомлений (notifywin.html): забрать уведомления, сообщить свою высоту, по щелчку открыть главное окно.",
+  "windows": ["notify"],
+  "local": true,
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-notify-take",
+    "allow-notify-layout",
+    "allow-notify-ctl"
+  ]
+}
