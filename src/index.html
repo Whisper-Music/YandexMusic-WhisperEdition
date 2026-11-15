@@ -41,6 +41,8 @@
   <script src="core/theme-css.js" defer></script>
   <script src="theme.js" defer></script>
   <script src="themelib.js" defer></script>
+  <!-- «живые» темы: события и курсор для CSS, слой украшений, частицы (настройки — theme.js → setHooks) -->
+  <script src="themefx.js" defer></script>
   <!-- общие модули ядра: Discord и виджет OBS — свои карточки в «Интеграциях» ставят сами (kit.settingsCard в yandex.js) -->
   <link rel="stylesheet" href="core/discord.css" />
   <script src="core/discord.js" defer></script>
@@ -57,12 +59,24 @@
   <!-- кэш приложения: популярные нескачанные треки и проигранное из текущего плейлиста (cache.rs) -->
   <link rel="stylesheet" href="cache.css" />
   <script src="cache.js" defer></script>
+  <!-- кэш страниц: снимок «Лайков» на диске — карточка в настройках «Воспроизведение» (main.js → window.pageCache) -->
+  <script src="pagecache.js" defer></script>
   <!-- «Поделиться» в меню трека и ссылки whisper:// / music.yandex.* — открываются здесь, а не в браузере -->
   <script src="share.js" defer></script>
   <!-- «Студия»: обрезка треков, свои версии (studio.rs) -->
   <link rel="stylesheet" href="studio.css" />
   <script src="studioinfo.js" defer></script>
   <script src="studio.js" defer></script>
+  <!-- перетаскивание в окно на любой странице: трек — окно «Что сделать с треком» (в «Лайки» / в архив) -->
+  <link rel="stylesheet" href="dropin.css" />
+  <script src="dropin.js" defer></script>
+  <!-- Настройки → «Панели»: порядок и видимость кнопок боковой панели -->
+  <link rel="stylesheet" href="panels.css" />
+  <script src="panels.js" defer></script>
+  <!-- меню трека: правый щелчок, скрытые действия (Интерфейс → «Меню трека») -->
+  <!-- экспорт лайков и плейлистов в TXT / CSV / JSON (правый щелчок → «Экспорт», файл пишет export.rs) -->
+  <script src="listexport.js" defer></script>
+  <script src="tmenu.js" defer></script>
   <link rel="stylesheet" href="backup.css" />
   <script src="backup.js" defer></script>
   <!-- браузерная версия: перенос настроек (webstate.js) и кнопки «Открыть в браузере» / «Вернуться в приложение» -->
@@ -78,6 +92,8 @@
   <script src="uifont.js" defer></script>
   <link rel="stylesheet" href="sleep.css" />
   <script src="sleep.js" defer></script>
+  <!-- «Пропускать тишину» и «Плавные переходы» (Воспроизведение) -->
+  <script src="transitions.js" defer></script>
   <link rel="stylesheet" href="eq.css" />
   <script src="eq.js" defer></script>
   <link rel="stylesheet" href="output.css" />
@@ -163,6 +179,7 @@
             <div id="npArtist" class="npartist"></div>
           </div>
         </div>
+        <button id="artistLikeBtn" class="nav pin" hidden>♡ Нравится</button>
         <button id="artistWaveBtn" class="nav pin" hidden>Моя волна по артисту</button>
         <button id="dlAllBtn" class="nav pin dlall" hidden></button>
         <button id="pinBtn" class="nav pin" hidden>Закрепить</button>
@@ -306,12 +323,6 @@
             <button class="stylecard" data-style="lolitta"><span class="sprev sp-lolitta"></span><b><span class="scauth">Whisper Music</span><span class="scname">Lolitta</span></b><small>Пудровый розовый, банты, жемчуг, камея</small></button>
           </div>
           <p id="styleCap" class="stylecap" aria-live="polite"></p>
-          <!-- интро тем: видно, только если у какого-то установленного стиля есть заставка (theme.js → paintIntro) -->
-          <div id="introCard" class="introbox" hidden>
-            <label class="switch" title="Заставка при запуске у некоторых тем (секция whisper-intro в файле .wmt). Щелчок или любая клавиша пропускают её. Выключи, чтобы приложение открывалось сразу"><input type="checkbox" id="inOn" /><i></i><span>Показывать интро при запуске</span></label>
-            <div id="inList" class="inlist"></div>
-            <p class="status" id="inNote"></p>
-          </div>
         </div>
         <div class="card" id="colorCard" data-tab="look">
           <h3>Цвета и шрифт</h3>
@@ -364,6 +375,8 @@
           <h3>Эффекты и анимации</h3>
           <label class="slide"><span>Свечение</span><input type="range" id="cGlow" min="0" max="48" /></label>
           <label class="switch"><input type="checkbox" id="cAnim" /><i></i><span>Анимации интерфейса</span></label>
+          <!-- эффекты и интро тем — в общем окне (theme.js → openThemeSetup) -->
+          <div class="dcline"><span class="dcnote" id="thSetNote"></span><button type="button" class="nav" id="thSetBtn" title="Эффекты темы (снег, гирлянда…) и интро при запуске — у текущей или любой установленной темы">Настроить тему…</button></div>
         </div>
 
         <!-- ===== Интерфейс: Расположение, Панели | Визуализатор, Маскот ===== -->
@@ -378,10 +391,13 @@
           <div class="lyrow"><span>Вкладки настроек</span><div class="lyseg" id="setTabsPos"><button class="chip" data-v="top" title="Строкой над настройками">Сверху</button><button class="chip" data-v="left" title="Столбиком слева — удобно на широком окне">Слева</button></div></div>
         </div>
         <div class="card" id="stuCard" data-tab="ui">
-          <h3>Панели</h3>
+          <h3>Панели <i class="hint" title="Перетаскивай кнопки, чтобы поменять порядок. Глазик — показать или скрыть кнопку. Галочка — стартовая страница: она откроется при запуске приложения; выбрать можно только одну">i</i></h3>
           <label class="switch" id="pinHideCard" title="Закладки или колонка закреплённых прячутся. Наведи на верхний край (или на край со стороны боковой панели) — они выедут"><input type="checkbox" id="pinHide" /><i></i><span>Скрывать закреплённые</span></label>
-          <label class="switch" title="Страница со временем, исполнителями и жанрами прослушиваний. Выключишь — пропадёт только кнопка, запись статистики не остановится"><input type="checkbox" id="statsBtnOn" /><i></i><span>Показывать «Статистику»</span></label>
-          <label class="switch" title="Обрезка треков и свои версии. Выключишь — пропадут кнопка в боковой панели и «Обрезать в студии» в меню трека; сохранённые версии останутся и будут играть"><input type="checkbox" id="stuOn" /><i></i><span>Показывать «Студию»</span></label>
+          <div class="sbl" id="sideList" role="list" aria-label="Кнопки боковой панели"></div>
+          <p class="status sblnote">✓ — стартовая страница: открывается при запуске, выбрать можно одну</p>
+          <!-- флажки модулей (listenstats.js, studio.js): переключает глазик в списке выше -->
+          <input type="checkbox" id="statsBtnOn" hidden />
+          <input type="checkbox" id="stuOn" hidden />
         </div>
         <div class="card colbreak" id="vizCard" data-tab="ui">
           <h3>Визуализатор</h3>
@@ -408,6 +424,12 @@
           <h3 data-noi18n>Язык / Language</h3>
           <div class="lyseg" id="langSeg" data-noi18n><button class="chip" data-v="ru">Русский</button><button class="chip" data-v="en">English</button></div>
         </div>
+        <!-- меню трека: правый щелчок и какие действия показывать (tmenu.js) — в правом столбце -->
+        <div class="card" id="tmCard" data-tab="ui">
+          <h3>Меню трека</h3>
+          <label class="switch" title="Правый щелчок по треку в списке, очереди или истории и по нижней панели открывает то же меню, что кнопка «⋯». На пустом месте «Моей волны» — обои и аудиовизуализатор"><input type="checkbox" id="tmRight" /><i></i><span>Открывать правым щелчком</span></label>
+          <div class="dcline"><span class="dcnote" id="tmNote"></span><button type="button" class="nav" id="tmSetup">Настроить…</button></div>
+        </div>
 
         <!-- ===== Воспроизведение: Режим сна | Скачивание, Кэш ===== -->
         <div class="card sleepcard" id="sleepCard" data-tab="play">
@@ -419,8 +441,15 @@
             <div id="slChips" class="chips"></div>
             <div id="slGrid" class="stgrid"></div>
           </div>
+          <label class="switch" title="Громкость, выставленная в режиме сна, запоминается отдельно: при следующем включении вернётся она, а после сна — обычная"><input type="checkbox" id="slVol" /><i></i><span>Своя громкость для сна</span><span class="swatch" id="slVolVal"></span></label>
           <div class="row"><button class="nav active" id="slStart">Включить режим сна</button></div>
           <p class="status" id="slNote"></p>
+        </div>
+        <!-- переходы между треками (transitions.js, Rust — edges.rs) -->
+        <div class="card" id="xfCard" data-tab="play">
+          <h3>Переходы между треками <i class="hint" title="Чтобы знать, где тишина и как громко звучат края, трек целиком проверяется заранее. Для нескачанных треков это ещё одна загрузка в экономном качестве">i</i></h3>
+          <label class="switch" title="Тишина в начале трека перематывается, а на тишине в конце сразу включается следующий"><input type="checkbox" id="xfSilence" /><i></i><span>Пропускать тишину</span></label>
+          <label class="switch" title="Следующий трек начинается тихо — конец этого плавно затихает до его уровня. Начинается громко после тихого конца — входит мягко и за пару секунд набирает громкость"><input type="checkbox" id="xfSmooth" /><i></i><span>Плавные переходы</span></label>
         </div>
         <div class="card colbreak" id="dlCard" data-tab="play">
           <h3>Скачивание треков</h3>
@@ -462,6 +491,20 @@
           <div class="row">
             <button class="nav" id="cacheOpen">Открыть папку</button>
             <button class="nav danger" id="cacheClear">Очистить кэш</button>
+          </div>
+        </div>
+        <div class="card" id="pageCacheCard" data-tab="play">
+          <h3>Кэш страниц <i class="hint" title="Список «Лайков» хранится на диске: после запуска страница появляется сразу, а у Яндекса спрашиваются только новые треки. Описания треков (обложки, доступность) обновляются раз в сутки. Плейлисты и авторы хранятся в памяти до перезапуска.">i</i></h3>
+          <div class="pcrows">
+            <span>Снимок «Лайков»</span><b id="pcSnap">—</b>
+            <span>Описания треков</span><b id="pcAt">—</b>
+            <span>Чтение с диска</span><b id="pcRead">—</b>
+            <span>Последнее открытие</span><b id="pcLast">—</b>
+            <span>В памяти</span><b id="pcMem">—</b>
+          </div>
+          <div class="row">
+            <button class="nav" id="pcRefresh">Обновить</button>
+            <button class="nav danger" id="pcClear" title="Стереть снимок «Лайков» с диска. Следующий запуск загрузит лайки с Яндекса заново и сохранит новый снимок">Сбросить снимок</button>
           </div>
         </div>
 

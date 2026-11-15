@@ -1,6 +1,6 @@
 [package]
 name = "yandex-desktop"
-version = "1.0.0"
+version = "1.1.0"
 description = "Yandex Music — Whisper Edition"
 authors = ["you"]
 edition = "2021"
@@ -47,7 +47,8 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["r
 # режим экономии в трее: доступ к движку окна WebView2 (версии те же, что уже тянет Tauri — ничего нового не скачивается)
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem", "Win32_Security"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem", "Win32_Security", "Win32_System_Diagnostics_ToolHelp"] }
+# Win32_System_Diagnostics_ToolHelp — mixer.rs: найти процессы WebView2 приложения, чтобы в микшере громкости было его имя
 # свой звуковой движок (engine.rs, эксклюзивный WASAPI): декодер MP3 / AAC (M4A) / FLAC / WAV, чистый Rust
 symphonia = { version = "0.5.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "pcm", "wav"] }
 keyring = { version = "3", features = ["windows-native"] }

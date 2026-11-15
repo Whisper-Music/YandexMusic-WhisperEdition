@@ -148,6 +148,10 @@ let tabsActive = false, pinItem = null;
 const DEFAULT_SEED = "user:onyourwave";
 const wave = { on: false, session: null, batch: null, loading: false, queue: [], pos: -1, seed: DEFAULT_SEED, name: "", album: null };
 let artistWaveItem = null;
+// лайки авторов: номера — в памяти и в localStorage ym_liked_artists (кнопка на странице автора знает ответ сразу),
+// сам список — у Яндекса (likes_artists), «Лайки» → «Авторы»
+let artistLikeItem = null, likedArtistsList = null;
+const likedArtists = new Set(lsJSON("ym_liked_artists", [], Array.isArray).map(String));
 let playAlbum = null;
 const heard = new Set(lsJSON("ym_heard", [], Array.isArray).filter((x) => typeof x === "string" || typeof x === "number").slice(-600));
 { const sv = lsJSON("ym_wave_seed", null, (v) => typeof v === "object"); if (typeof sv?.seed === "string" && /^[\w-]+:[\w.-]+$/.test(sv.seed)) { wave.seed = sv.seed; wave.name = typeof sv.name === "string" ? sv.name.slice(0, 100) : ""; } }
@@ -277,7 +281,7 @@ document.getElementById("offlineNotice")?.addEventListener("click", probeOnline)
 // Яндекс Музыка. Интерфейс называет только операцию и её параметры; адрес, метод, заголовки и токен
 // знает Rust (src-tauri/src/net.rs, список OPS). Чтение и изменение данных аккаунта — разные команды
 // (ym_read / ym_write) с разными разрешениями (capabilities/yandex-read.json и yandex-write.json).
-const YM_WRITE = new Set(["like_add", "like_remove", "dislike_add", "dislike_remove", "rotor_feedback",
+const YM_WRITE = new Set(["like_add", "like_remove", "dislike_add", "dislike_remove", "artist_like_add", "artist_like_remove", "rotor_feedback",
   "playlist_create", "playlist_rename", "playlist_change", "playlist_change_rel", "playlist_delete", "play_audio"]);
 const strMap = (o) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])) : null);
 async function ym(op, { id = null, query = null, form = null, json = null } = {}) {
@@ -593,8 +597,10 @@ function ccAuto(it) {
   return it.fb === "accent" ? st.accent : st.accent2;
 }
 
-function openColorEditor() {
-  if (document.querySelector(".ccmodal")) return;
+// focus — ключ из CC_GROUPS: окно откроется сразу на этой строке (правый щелчок → «Цвета этого места…», tmenu.js)
+let ccFocus = null;
+function openColorEditor(focus) {
+  if (document.querySelector(".ccmodal")) { if (typeof focus === "string") ccFocus?.(focus); return; }
   const wrap = document.createElement("div"); wrap.className = "login modal ccmodal";
   const box = document.createElement("div"); box.className = "panel login-box modalbox ccbox";
   const h = document.createElement("h2"); h.textContent = "Тонкая настройка цветов";
@@ -713,13 +719,22 @@ function openColorEditor() {
   };
   row.append(reset, ok);
   box.append(h, p, scroll, row);
-  const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); };
+  const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); ccFocus = null; };
   const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
   document.addEventListener("keydown", onKey, true);
   ok.onclick = close;
   wrap.onpointerdown = (e) => { if (e.target === wrap) close(); };
   wrap.append(box); document.body.append(wrap);
-  scroll.querySelector("details")?.setAttribute("open", "");
+  // открыть раздел с нужной строкой, остальные свернуть, строку — в середину и подсветить
+  ccFocus = (k) => {
+    const r = rows[k]?.row;
+    if (!r) return false;
+    scroll.querySelectorAll("details.ccgrp").forEach((d) => { d.open = d.contains(r); });
+    r.scrollIntoView({ block: "center" });
+    r.classList.remove("ccflash"); void r.offsetWidth; r.classList.add("ccflash");
+    return true;
+  };
+  if (!(typeof focus === "string" && ccFocus(focus))) scroll.querySelector("details")?.setAttribute("open", "");
 }
 $("#ccBtn").onclick = openColorEditor;
 
@@ -950,7 +965,23 @@ function applyHooks() {
   if (phc) phc.style.display = pinOk ? "" : "none";
   if (mcc) mcc.style.display = catOk ? "" : "none";
   renderThemeButtons(hook("buttons") || []);
+  applyThemeEffects(hook("effects") || []);
+  window.themeFxApply?.();                            // события, курсор, слой украшений и частицы темы (themefx.js)
   window.cliMount?.(hook("console") || null);          // стиль-консоль (cli.js)
+}
+// Эффекты темы (settings whisper-music → "effects" или пометка data-fx-… в CSS, разбирает theme.js): на <html> —
+// data-fx-<имя>="on|off", по нему CSS темы включает снег, гирлянду и т. п. Выбор пользователя — cfg.s[стиль].fx
+// (окно «Настроить тему…», theme.js). Эффект — «показывать или нет», а не «двигается ли»: эффектом может быть и
+// неподвижное украшение (снеговик, гирлянда), у которого при выключенных анимациях тема показывает застывшую копию.
+// Движение тема по-прежнему включает под :root[data-anim="on"].
+const themeFx = (k, def, st = cfg.style) => { const s = cfg.s[st]; const v = s?.fx?.[k] ?? s?.opts?.[k]; return typeof v === "boolean" ? v : def; };
+const themeFxSet = (st, k, on) => { const s = cfg.s[st]; if (!s) return; (s.fx ||= {})[k] = !!on; applyCfg(); saveCfg(); };
+function applyThemeEffects(list) {
+  const de = document.documentElement;
+  // applyCfg зовут часто (пипетка цвета): атрибуты трогаем, только когда они реально меняются
+  const want = new Map(list.map((o) => ["data-fx-" + o.k, themeFx(o.k, o.def) ? "on" : "off"]));
+  for (const a of [...de.attributes]) if (/^data-(fx|opt)-/.test(a.name) && !want.has(a.name)) de.removeAttribute(a.name);
+  for (const [n, v] of want) if (de.getAttribute(n) !== v) de.setAttribute(n, v);
 }
 // Снимок для следующего запуска (boot.js): какой стиль на <html> и какой цвет фона показать под «шторкой»,
 // пока стиль собирается. Пишется, только когда стиль уже собран целиком (свой стиль — после подключения его CSS).
@@ -994,7 +1025,7 @@ function syncControls() {
   $("#cGlow").closest("label").style.display = glow ? "" : "none";
   $("#cPanel").closest("label").style.display = panels ? "" : "none";
   $("#cAnim").closest("label").style.display = anim ? "" : "none";
-  $("#fxCard").style.display = glow || anim ? "" : "none";      // у стиля нет ни свечения, ни анимаций — карточка не нужна (прозрачность — в «Фоне»)
+  // карточка видна всегда: в ней кнопка «Настроить тему…» (эффекты и интро любой установленной темы, theme.js)
   document.querySelectorAll(".stylecard").forEach((b) => b.classList.toggle("on", b.dataset.style === cfg.style));
   // под списком стилей (в компактном виде): «Автор · Название» выбранного стиля
   const sel = document.querySelector(".stylecard.on"), cap = $("#styleCap");
@@ -1133,6 +1164,32 @@ function syncBgVideo() {
   else if (!v.paused) v.pause();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) bgUnloaded = false; syncBgVideo(); });
+// Проверка при добавлении смотрит только первый кадр. Если дальше декодер сдался (длинное или тяжёлое видео, битый
+// хвост файла, не хватило памяти), фон раньше просто оставался пустым без единого слова — теперь говорим почему.
+{
+  const v = $("#bgVideo");
+  let said = "";
+  const say = (why) => {
+    const src = v.getAttribute("src") || "";
+    if (!src || said === src) return;            // об одном и том же файле — один раз
+    said = src;
+    const msg = `Видеообои не показываются: ${why}. Подойдёт MP4 (H.264) или WebM (VP9), лучше не больше 1080p.`;
+    bgNote(msg);
+    if ($("#settingsPage").hidden) showToast(msg, 9000, { kind: "err" });
+  };
+  v.addEventListener("error", () => {
+    const er = v.error; if (!er) return;
+    console.warn("Видеообои:", er.code, er.message);
+    say({ 2: "файл не дочитался", 3: "видео не декодируется — оно повреждено или слишком тяжёлое", 4: "этот формат или кодек окно не умеет" }[er.code] || "ошибка воспроизведения");
+  });
+  // ошибки нет, но и кадров нет: через 12 с после начала загрузки видео всё ещё пустое
+  let wd = 0;
+  v.addEventListener("loadstart", () => {
+    clearTimeout(wd);
+    wd = setTimeout(() => { if (!v.hidden && v.getAttribute("src") && v.readyState < 2 && !v.error) say("видео так и не открылось"); }, 12000);
+  });
+  v.addEventListener("loadeddata", () => clearTimeout(wd));
+}
 // первый кадр видео на холсте 320 px — для превью в настройках и подбора цветов
 function videoFrame(url, side = 320) {
   return new Promise((res, rej) => {
@@ -1323,12 +1380,24 @@ $("#bgDirBtn").onclick = async (e) => {
 // настроек — подсвечиваем зону; бросить можно в любое место настроек.
 const drop = $("#drop");
 const onSettings = () => !$("#settingsPage").hidden;
-window.__TAURI__.event?.listen("bg-drag", (e) => drop.classList.toggle("over", !!e.payload?.over && onSettings()));
-window.__TAURI__.event?.listen("bg-drop", (e) => {
+// На любой другой странице окна (Моя волна, Лайки…) картинка или видео тоже становятся фоном, а трек —
+// открывает окно «что сделать с треком» (dropin.js): в архив, к себе в «Лайки», в альбом архива.
+window.__TAURI__.event?.listen("bg-drag", (e) => {
+  const over = !!e.payload?.over;
+  drop.classList.toggle("over", over && onSettings());
+  window.dropHint?.(over && !onSettings());               // dropin.js: подсказка поверх окна
+});
+window.__TAURI__.event?.listen("bg-drop", async (e) => {
   drop.classList.remove("over");
-  if (window.wmtDrop?.(e.payload?.files)) return;          // файл темы .wmt (theme.js) — принимается на любой странице
-  if (!onSettings()) { showToast("Чтобы поставить фон, открой «Настройки» и перетащи файл туда"); return; }
-  loadNativeBg(e.payload?.files);
+  window.dropHint?.(false);
+  const files = e.payload?.files;
+  if (window.wmtDrop?.(files)) return;          // файл темы .wmt (theme.js) — принимается на любой странице
+  if (window.dropAudio?.(files)) return;        // трек (dropin.js) — на любой странице, и в настройках тоже
+  if (onSettings()) { loadNativeBg(files); return; }
+  const ok = await loadNativeBg(files);
+  const note = $("#setNote").textContent;
+  if (ok) showToast(note ? `Фон поставлен. ${note}` : "Фон поставлен — поменять или убрать его можно в «Настройках» → «Оформление»", 4500, { kind: "ok" });
+  else showToast(note || "Не получилось поставить фон", 6000, { kind: "err" });
 });
 $("#bgReset").onclick = async () => { await clearBg(); applyCfg(); saveCfg(); };
 $("#cfgReset").onclick = async () => {
@@ -1523,8 +1592,25 @@ async function warnPlainSecrets() {
 }
 window.warnPlainSecrets = warnPlainSecrets;
 function showLogin(msg = "") { $("#login").classList.remove("hidden"); $("#loginErr").textContent = msg; }
-// первая страница после запуска и входа — «Моя волна» (до этого были «Лайки»)
-function afterLogin() { $("#login").classList.add("hidden"); goTop(showWave); restorePlayer(); loadLikedIds(); loadDislikedIds(); }
+// первая страница после запуска и входа — выбранная в «Интерфейс → Панели → Стартовая страница» (panels.js,
+// localStorage ym_start: wave | likes | stats | studio | last), по умолчанию «Моя волна».
+// Кнопки «Статистика» и «Студия» получают обработчики в своих модулях (после main.js) — до DOMContentLoaded ждём.
+let domReady = false;
+document.addEventListener("DOMContentLoaded", () => { domReady = true; });
+function startPage() {
+  let p = "wave";
+  try { p = localStorage.getItem("ym_start") || "wave"; if (p === "last") p = localStorage.getItem("ym_start_last") || "wave"; } catch {}
+  const id = { likes: "likes", stats: "statsBtn", studio: "studioBtn" }[p];
+  if (!id) return goTop(showWave);
+  const go = () => {
+    const b = $("#" + id);
+    // кнопку спрятали (глазик в «Панелях», модуль выключен) — значит, и страницы этой нет: тогда «Моя волна»
+    if (b && !b.hidden && !b.classList.contains("sidehide") && getComputedStyle(b).display !== "none") b.click();
+    else goTop(showWave);
+  };
+  if (domReady) go(); else document.addEventListener("DOMContentLoaded", go, { once: true });
+}
+function afterLogin() { $("#login").classList.add("hidden"); startPage(); restorePlayer(); loadLikedIds(); loadDislikedIds(); }
 
 $("#oauthBtn").onclick = async () => {
   const btn = $("#oauthBtn");
@@ -1568,13 +1654,13 @@ $("#profile").onclick = async () => {
 };
 // Всё, что относится к аккаунту: очередь и место в треке, лайки, закладки, станция волны, «уже слышал», история
 // прослушивания и поиска, свои обложки плейлистов. Настройки приложения, стили и скачанные треки остаются.
-const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_search_hist", "ym_search_picks", "ym_history"];
+const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_wave_pins", "ym_liked_artists", "ym_search_hist", "ym_search_picks", "ym_history"];
 async function forgetAccountData() {
   for (const k of [...ACCOUNT_KEYS, LEGACY_TOKEN_KEY]) { try { localStorage.removeItem(k); } catch {} }
   try {
     await IDB.tx("readwrite", (s) => {
       const r = s.openCursor();
-      r.onsuccess = () => { const c = r.result; if (!c) return; if (String(c.key).startsWith("plcover:")) c.delete(); c.continue(); };
+      r.onsuccess = () => { const c = r.result; if (!c) return; if (/^(plcover|likes):/.test(String(c.key))) c.delete(); c.continue(); };
       return null;
     });
   } catch {}
@@ -1604,20 +1690,73 @@ function fillArtists(el, t) {
 }
 const albumOf = (t) => t?.albums?.[0]?.id;
 
-function renderList(tracks, append = false, opts = {}) {
+// Длинные списки (лайки — тысячи строк) рисуются частями: первые ~70 строк сразу (это и есть первый экран),
+// остальные — порциями между кадрами. Раньше все строки создавались за один раз — переход на «Лайки» и обратно
+// подвисал на секунду. Номера и очередь (arr / shown) заполняются сразу целиком — клик, поиск по лайкам и счётчики
+// работают как раньше; дорисовка прерывается, если список перерисовали заново.
+// Дорисовка — в свободное время между кадрами (requestIdleCallback), порциями не дольше ~6 мс: раньше по 160 строк
+// раз в 16 мс, и при тысячах лайков полсекунды подряд каждый кадр был занят — прокрутка дёргалась. Долистал до края
+// раньше, чем дорисовалось, — следующая порция рисуется сразу (onListScroll). Длинный список (.biglist) не считает
+// раскладку строк вне экрана (content-visibility, styles.css). Строка — копия заготовки (rowProto): одна разборка
+// разметки на весь список, а не три на строку.
+const LIST_FIRST = 70, LIST_SLICE_MS = 6, LIST_BIG = 300;
+const idle = window.requestIdleCallback ? (f) => requestIdleCallback(f, { timeout: 120 }) : (f) => setTimeout(f, 16);
+// first — сколько строк нарисовать сразу (redrawLikes: столько, чтобы вернуть прокрутку на место)
+function renderList(tracks, append = false, opts = {}, first = LIST_FIRST) {
   const list = opts.target || $("#list");
-  if (!append) { if (opts.target) opts.arr.length = 0; else shown = []; list.innerHTML = ""; }
+  if (!append) { if (opts.target) opts.arr.length = 0; else shown = []; list.innerHTML = ""; list._rq = []; }
   const arr = opts.target ? opts.arr : shown;
-  for (const t of tracks) {
-    const i = arr.push(t) - 1;
-    const li = document.createElement("li");
+  const q = list._rq || (list._rq = []);
+  for (const t of tracks) q.push([t, arr.push(t) - 1, opts, arr]);
+  list.classList.toggle("biglist", arr.length > LIST_BIG);
+  pumpList(list, list.childElementCount < first ? first - list.childElementCount : 0);
+}
+function pumpList(list, budget, ms = 0) {
+  const q = list._rq;
+  if (!q?.length) return;
+  const frag = document.createDocumentFragment();
+  const t0 = performance.now();
+  let n = 0;
+  while (q.length && (n < budget || (ms && (n % 8 || performance.now() - t0 < ms)))) {
+    const [t, i, opts, arr] = q.shift();
+    // список уже другой (resetView, новый поиск, страницу сменили) — хвост старого не дорисовываем
+    if (arr[i] !== t || (!opts.target && arr !== shown)) { q.length = 0; break; }
+    frag.append(listRow(t, i, opts, arr)); n++;
+  }
+  if (n) list.appendChild(frag);
+  if (q.length && !list._rp) {
+    list._rp = true;
+    // очередь берётся заново: если список перерисовали, у него уже своя (list._rq), хвост старой выброшен
+    idle(() => { list._rp = false; pumpList(list, 0, LIST_SLICE_MS); });
+  }
+}
+// прокрутка подошла к недорисованному краю — порция сразу, не дожидаясь свободной минуты
+function onListScroll() {
+  const main = document.querySelector(".main");
+  if (main.scrollHeight - main.scrollTop - main.clientHeight > 1600) return;
+  for (const l of document.querySelectorAll(".list")) if (l._rq?.length) pumpList(l, 0, 10);
+}
+document.querySelector(".main")?.addEventListener("scroll", onListScroll, { passive: true });
+const rowProto = {};
+function rowTpl(liked) {
+  const k = liked ? "on" : "off";
+  if (rowProto[k]) return rowProto[k];
+  const li = document.createElement("li");
+  li.innerHTML = '<img alt="" loading="lazy" decoding="async"><div><span class="t"></span><span class="a"></span></div>'
+    + '<button class="likebtn"></button><button class="morebtn"></button>';
+  setHeart(li.querySelector(".likebtn"), liked);
+  const mb = li.querySelector(".morebtn");
+  mb.title = "Ещё"; mb.innerHTML = ICON.more;
+  return (rowProto[k] = li);
+}
+function listRow(t, i, opts, arr) {
+    const liked = isLiked(String(t.id));
+    const li = rowTpl(liked).cloneNode(true);
     li.dataset.id = t.id;
     if (String(t.id) === String(playingId)) li.classList.add("playing");
-    if (opts.grip) li.append(opts.grip(li, i));
-    const body = document.createElement("div");
-    body.innerHTML = '<span class="t"></span><span class="a"></span>';
-    li.append(mkImg(cover(t)), body);
-    const tt = li.querySelector(".t");
+    if (opts.grip) li.prepend(opts.grip(li, i));
+    const img = li.querySelector("img"), tt = li.querySelector(".t");
+    img.src = cover(t) || COVER_W;
     tt.textContent = t.title;
     const albumId = albumOf(t);
     if (albumId && !opts.noAlbumLink) {
@@ -1626,18 +1765,12 @@ function renderList(tracks, append = false, opts = {}) {
     }
     fillArtists(li.querySelector(".a"), t);
     li.onclick = () => { wave.on = false; queue = arr; playCtx = opts.ctx || "other"; playAlbum = opts.album || null; play(i); };
-    const hb = document.createElement("button");
-    hb.className = "likebtn";
-    setHeart(hb, isLiked(String(t.id)));
+    const hb = li.querySelector(".likebtn"), mb = li.querySelector(".morebtn");
     hb.onclick = (e) => { e.stopPropagation(); toggleLike(t); };
-    const mb = document.createElement("button");
-    mb.className = "morebtn"; mb.title = "Ещё"; mb.innerHTML = ICON.more;
     mb.onclick = (e) => { e.stopPropagation(); openTrackMenu(t, mb, opts.menuCtx ? opts.menuCtx(i) : null); };
-    if (opts.extra) li.append(opts.extra(t, li));
-    li.append(hb, mb);
-    syncGotRow(li);
-    list.appendChild(li);
-  }
+    if (opts.extra) li.insertBefore(opts.extra(t, li), hb);
+    if (got.has(String(t.id))) syncGotRow(li);
+    return li;
 }
 
 function entityItem({ img, round, title, subFn, onClick }) {
@@ -1696,8 +1829,49 @@ $("#pinBtn").onclick = () => {
   savePins(); renderTabs(tabsActive); updatePinBtn();
 };
 
-function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null, artistWave = null }) {
+const saveLikedArtists = () => { try { localStorage.setItem("ym_liked_artists", JSON.stringify([...likedArtists])); } catch {} };
+async function loadLikedArtists(force = false) {
+  if (likedArtistsList && !force) return likedArtistsList;
+  const r = await ym("likes_artists", { query: { "with-timestamps": "true" } });
+  // с отметками времени Яндекс отдаёт { artist, timestamp }, без них — самих артистов; понимаем оба вида
+  const list = (Array.isArray(r) ? r : []).map((x) => ({ ...(x?.artist || x), _ts: Date.parse(x?.timestamp) || 0 })).filter((a) => a.id != null && a.name);
+  list.sort((a, b) => b._ts - a._ts);
+  likedArtistsList = list;
+  likedArtists.clear(); for (const a of list) likedArtists.add(String(a.id));
+  saveLikedArtists();
+  updateArtistLikeBtn();
+  return list;
+}
+function updateArtistLikeBtn() {
+  const b = $("#artistLikeBtn");
+  b.hidden = !artistLikeItem;
+  if (!artistLikeItem) return;
+  const on = likedArtists.has(String(artistLikeItem.id));
+  b.textContent = on ? "♥ Нравится" : "♡ Нравится";
+  b.title = on ? "Убрать автора из лайков" : "Добавить автора в лайки: «Лайки» → «Авторы»";
+  b.classList.toggle("active", on);
+}
+async function toggleArtistLike(a) {
+  const id = String(a.id), on = !likedArtists.has(id);
+  const flip = (v) => { v ? likedArtists.add(id) : likedArtists.delete(id); updateArtistLikeBtn(); };
+  flip(on);
+  try {
+    await ym(on ? "artist_like_add" : "artist_like_remove", { form: { "artist-ids": id } });
+    saveLikedArtists();
+    if (likedArtistsList) {
+      likedArtistsList = likedArtistsList.filter((x) => String(x.id) !== id);
+      if (on) likedArtistsList.unshift({ id: a.id, name: a.name, cover: a.cover, _ts: Date.now() });
+    }
+  } catch (e) {
+    flip(!on);
+    showToast((on ? "Не удалось добавить автора в лайки: " : "Не удалось убрать автора из лайков: ") + e.message, 5000, { kind: "err" });
+  }
+}
+$("#artistLikeBtn").onclick = () => { if (artistLikeItem) toggleArtistLike(artistLikeItem); };
+
+function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null, artistWave = null, artistLike = null }) {
   artistWaveItem = artistWave; $("#artistWaveBtn").hidden = !artistWave;
+  artistLikeItem = artistLike; updateArtistLikeBtn();
   // обложка для колонки закреплённых: только постоянные ссылки (blob: своих обложек плейлистов живёт до перезапуска)
   const keepImg = /^https:\/\//.test(img) ? img : "";
   pinItem = pin ? { ...pin, img: keepImg } : null; updatePinBtn();
@@ -1933,37 +2107,67 @@ $("#back").onclick = () => { const p = hist.pop(); if (p) { view = p; p(); } els
 
 async function showLikes(tab = likesTab) {
   const my = ++nav;
-  likesTab = tab === "playlists" ? "playlists" : "likes";
+  likesTab = tab === "playlists" || tab === "artists" ? tab : "likes";
   setHead({ title: "Лайки" }); setActive("likes"); renderTabs("likes"); resetView();
   $("#search").value = "";
-  setChips([["likes", "♥ Лайки"], ["playlists", "≡ Мои плейлисты"]], likesTab, (t) => { if (t !== likesTab) { view = () => showLikes(t); view(); } });
+  setChips([["likes", "♥ Лайки"], ["artists", "★ Авторы"], ["playlists", "≡ Мои плейлисты"]], likesTab, (t) => { if (t !== likesTab) { view = () => showLikes(t); view(); } });
   if (likesTab === "playlists") return showMyPlaylists(my);
+  if (likesTab === "artists") return showLikedArtists(my);
   lkFindShow();
   if (offline) return showOfflineLikes(my);           // офлайн — только скачанные
   dlSetup({ key: "likes", label: "⤓ Скачать лайки", tracks: () => (likes.done ? likes.tracks : null), all: () => loadAllLikes(() => {}, () => false) });
-  if (likes.done) { likesSrc = likes.tracks; return renderLikes(); }
+  const t0 = performance.now();
+  if (likes.done) { likesSrc = likes.tracks; renderLikes(); likesPerf = { src: "mem", ms: performance.now() - t0, at: Date.now() }; return; }
   likesSrc = [];
-  $("#status").textContent = "Загрузка…";
+  // снимок с прошлого запуска (IndexedDB) — показываем сразу, свежий список подменит его, когда придёт
+  const snap = await likesSnap();
+  if (my !== nav) return;
+  const drawn = snap?.tracks.length ? snap.tracks : null;
+  if (drawn) {
+    if (!likeTs.size) for (const t of drawn) if (t._lt) likeTs.set(String(t.id), t._lt);
+    likesSrc = drawn; renderLikes(); $("#status").textContent = "";
+    likesPerf = { src: "snap", ms: performance.now() - t0, at: Date.now() };
+  } else { $("#status").textContent = "Загрузка…"; likesPerf = { src: "net", why: snap ? "empty" : "none", at: Date.now() }; }
+  const perf = likesPerf;
   try {
-    const lib = await ym("likes");
-    setOffline(false);
-    const ids = rememberLikes(lib).map((t) => `${t.id}:${t.albumId}`);
-    const acc = [];
-    for (let i = 0; i < ids.length; i += 100) {
-      const tracks = await ym("tracks", { form: { "track-ids": ids.slice(i, i + 100).join(",") } });
-      if (my !== nav) return;
-      acc.push(...tracks); likesSrc = acc;
-      renderList(likesFilter(tracks), i > 0, LK);
+    // Ушёл со страницы, пока грузится, — загрузка всё равно доводится до конца (рисовать перестаёт): иначе при
+    // быстром уходе лайки не догружались никогда и снимок для следующего запуска не сохранялся.
+    const acc = await fetchLikes((part, n, total) => {
+      if (drawn || my !== nav) return;         // на экране снимок — догружаемое не дорисовываем по кускам
+      likesSrc = likesSrc.concat(part);
+      renderList(likesFilter(part), n > part.length, LK);
       lkFindCount();
-      $("#status").textContent = i + 100 < ids.length ? `Загружено ${acc.length} из ${ids.length}…` : "";
-    }
-    likes.tracks = mergeLikesAdded(acc); likes.done = true; likesSrc = likes.tracks;
-    if (likes.tracks !== acc || window.studioLikedList?.().length) redrawLikes(); else lkFindCount(true);
-    backfillMeta(acc);
+      $("#status").textContent = n < total ? `Загружено ${n} из ${total}…` : "";
+    }, () => false, snap);
+    if (!acc) return;
+    Object.assign(perf, likesNet, { full: performance.now() - t0 });
+    if (perf.src === "net") perf.ms = perf.full;
+    if (!likes.done) { likes.tracks = mergeLikesAdded(acc); likes.done = true; snapSave(); backfillMeta(acc); }
+    if (my !== nav) return;
+    likesSrc = likes.tracks;
+    if (drawn) { if (!sameIds(drawn, likes.tracks)) redrawLikes(); else lkFindCount(true); }
+    else if (likes.tracks !== acc || window.studioLikedList?.().length) redrawLikes(); else lkFindCount(true);
   } catch (e) {
     if (my !== nav) return;
+    if (drawn && isNetErr(e)) { $("#status").textContent = "Нет связи — показаны лайки с прошлого запуска"; return; }
     if (isNetErr(e)) return showOfflineLikes(my);
     $("#status").textContent = "Ошибка: " + e.message;
+  }
+}
+
+// «Лайки» → «Авторы»: лайкнутые авторы, свежие сверху. Прошлый список показываем сразу, свежий подменяет его.
+async function showLikedArtists(my) {
+  if (offline) { $("#status").textContent = "Офлайн-режим — список авторов появится, когда вернётся связь"; return; }
+  const had = likedArtistsList;
+  if (had) renderArtists(had); else $("#status").textContent = "Загрузка…";
+  try {
+    const list = await loadLikedArtists(true);
+    if (my !== nav) return;
+    if (!had || had.length !== list.length || had.some((a, i) => String(a.id) !== String(list[i].id))) { $("#list").innerHTML = ""; renderArtists(list); }
+    $("#status").textContent = list.length ? "" : "Лайкнутых авторов пока нет — открой страницу автора и нажми «♡ Нравится»";
+  } catch (e) {
+    if (my !== nav) return;
+    $("#status").textContent = had ? "" : isNetErr(e) ? "Нет связи — список авторов не загрузился" : "Ошибка: " + e.message;
   }
 }
 
@@ -1971,11 +2175,14 @@ async function showLikes(tab = likesTab) {
 // Снятый лайк строку убирает: она рассыпается на пиксели (dust.js, toggleLike), в подсказке — «Вернуть».
 const likesAdded = [];
 const likesOpen = () => document.querySelector(".main").dataset.page === "likes" && likesTab === "likes" && !$("#list").hidden;
+// Перерисовка с сохранением прокрутки: сразу рисуется столько строк, сколько было до низа экрана — иначе при
+// прокрутке вглубь списка (первые 70 строк короче) окно отскакивало наверх после каждого лайка.
+const keepScrollRows = (main) => Math.ceil((main.scrollTop + main.clientHeight) / 56) + 20;
 function redrawLikes() {
   if (!likesOpen()) return;
   const main = document.querySelector(".main"), top = main.scrollTop;
   likesSrc = likes.tracks;
-  renderLikes();
+  renderLikes(keepScrollRows(main));
   main.scrollTop = top;
 }
 
@@ -2007,8 +2214,8 @@ function lkFindCount(final = false) {
   if (!n && (final || likes.done)) $("#status").textContent = "Ничего не найдено";
   else if (isNothingFound($("#status").textContent)) $("#status").textContent = "";
 }
-function renderLikes() {
-  renderList(likesFilter(withStudioLikes(likesSrc)), false, LK);
+function renderLikes(first) {
+  renderList(likesFilter(withStudioLikes(likesSrc)), false, LK, first);
   lkFindCount(true);
 }
 // Лайкнутые версии из «Студии» (studio.js) — среди лайков Яндекса, по времени лайка: у лайков Яндекса оно
@@ -2020,7 +2227,7 @@ const likeTs = new Map();
 function likesStudioChanged() {
   if (!likesOpen()) return;
   const main = document.querySelector(".main"), top = main.scrollTop;
-  renderLikes();
+  renderLikes(keepScrollRows(main));
   main.scrollTop = top;
 }
 function withStudioLikes(list) {
@@ -2086,6 +2293,95 @@ function rememberLikes(lib) {
   return list;
 }
 
+// ---------- снимок лайков (IndexedDB «likes:v1») ----------
+// Первое открытие «Лайков» после запуска раньше ждало все треки с Яндекса (по 100 за запрос) — при тысячах лайков
+// это секунды. Теперь: снимок прошлого запуска рисуется сразу, а с Яндекса берутся только список лайков и треки,
+// которых в снимке нет. Описания в снимке старше суток — перезапрашиваются целиком (обложки, доступность).
+// Снимок привязан к аккаунту (uid) и стирается при выходе (forgetAccountData).
+const SNAP_KEY = "likes:v1", SNAP_FRESH = 24 * 3600e3;
+let snapP = null, snapT = 0, likesAt = 0;
+const likesSnap = () => (snapP ||= IDB.get(SNAP_KEY)
+  .then((v) => (v && uid && String(v.uid) === String(uid) && Array.isArray(v.tracks) ? v : null))
+  .catch(() => null));
+// в снимке — трек без тяжёлых подробностей альбома и артиста; _lt — время лайка (порядок рядом с версиями студии)
+const snapMin = (x) => ({
+  ...x,
+  albums: (x.albums || []).slice(0, 1).map((a) => ({ id: a.id, title: a.title, genre: a.genre, year: a.year, coverUri: a.coverUri, type: a.type })),
+  artists: (x.artists || []).map((a) => ({ id: a.id, name: a.name, cover: a.cover, various: a.various })),
+  _lt: likeTs.get(String(x.id)) || 0,
+});
+// Запись — через несколько секунд после последнего изменения и в свободную минуту: копирование тысяч треков
+// в IndexedDB занимает главный поток на десятки миллисекунд и не должно совпасть с анимацией (dust.js, прокрутка).
+function snapSave() {
+  clearTimeout(snapT);
+  snapT = setTimeout(() => {
+    const run = () => {
+      if (!likes.done || !uid) return;
+      const v = { uid: String(uid), at: likesAt || Date.now(), tracks: likes.tracks.filter((t) => /^\d+$/.test(String(t?.id))).map(snapMin) };
+      snapP = Promise.resolve(v);
+      IDB.set(SNAP_KEY, v).catch(() => {});
+    };
+    window.requestIdleCallback ? requestIdleCallback(run, { timeout: 5000 }) : run();
+  }, 4000);
+}
+const sameIds = (a, b) => a.length === b.length && a.every((t, i) => String(t.id) === String(b[i].id));
+
+// ---------- кэш страниц: что показать в настройках (pagecache.js) ----------
+// likesPerf — как открылись «Лайки» в последний раз: src mem (уже в памяти) | snap (снимок с диска) | net (с Яндекса,
+// снимка нет или он пустой); ms — до первых строк на экране; need / total — сколько треков пришлось спросить у Яндекса.
+let likesPerf = null, likesNet = {};
+window.pageCache = {
+  async info() {
+    let snap = null, readMs = 0, bytes = 0;
+    try { const t0 = performance.now(); snap = await IDB.get(SNAP_KEY); readMs = performance.now() - t0; } catch {}
+    if (snap) { try { bytes = JSON.stringify(snap).length; } catch {} }
+    return {
+      snap: snap ? { count: snap.tracks?.length || 0, at: snap.at || 0, mine: !!uid && String(snap.uid) === String(uid), bytes, readMs } : null,
+      fresh: SNAP_FRESH,
+      last: likesPerf,
+      mem: { likes: likes.done ? likes.tracks.length : 0, playlists: PL.full.size, artists: artistCache.size },
+    };
+  },
+  // снимок стирается; список в памяти остаётся — до перезапуска «Лайки» откроются как раньше
+  async clear() { clearTimeout(snapT); snapP = null; likesAt = 0; await IDB.del(SNAP_KEY); },
+};
+// треки по id пачками по 100, до трёх запросов одновременно; each(пачка, сколько всего готово) — по порядку
+async function tracksByIds(ids, each, stale) {
+  const parts = [];
+  for (let i = 0; i < ids.length; i += 100) parts.push(ids.slice(i, i + 100));
+  const run = (k) => { const p = ym("tracks", { form: { "track-ids": parts[k].join(",") } }); p.catch(() => {}); return p; };
+  const inflight = parts.slice(0, 3).map((_, k) => run(k));
+  let n = 0;
+  const out = [];
+  for (let k = 0; k < parts.length; k++) {
+    const r = await inflight[k];
+    if (k + 3 < parts.length) inflight.push(run(k + 3));
+    if (stale?.()) return null;
+    out.push(...r); n += r.length;
+    each?.(r, n, ids.length);
+  }
+  return out;
+}
+// список лайков с Яндекса + описания треков (из снимка, что есть и не устарело; остальное — запросом)
+async function fetchLikes(onPart, stale, snap) {
+  const lib = await ym("likes");
+  setOffline(false);
+  const list = rememberLikes(lib);
+  const have = new Map();
+  const fresh = snap && Date.now() - (snap.at || 0) < SNAP_FRESH;
+  if (fresh) for (const t of snap.tracks) have.set(String(t.id), t);
+  const need = list.filter((x) => !have.has(String(x.id))).map((x) => `${x.id}:${x.albumId}`);
+  const got = new Map();
+  const res = await tracksByIds(need, (part, n, total) => {
+    for (const t of part) got.set(String(t.id), t);
+    onPart?.(part, n, total);
+  }, stale);
+  if (!res) return null;
+  likesNet = { need: need.length, total: list.length, stale: !!snap && !fresh };
+  if (!fresh) likesAt = Date.now(); else if (!likesAt) likesAt = snap.at;
+  return list.map((x) => got.get(String(x.id)) || have.get(String(x.id))).filter(Boolean);
+}
+
 // ---------- офлайн: «Лайки» из скачанных треков ----------
 // Описание трека берётся из индекса скачанного (сохраняется при скачивании); у старых загрузок
 // его может не быть — тогда название и исполнители восстанавливаются из имени файла «Исполнитель — Название».
@@ -2137,16 +2433,11 @@ async function offlinePick(test) {
 
 async function loadAllLikes(onProgress, stale) {
   if (likes.done) return likes.tracks;
-  const lib = await ym("likes");
-  const ids = rememberLikes(lib).map((t) => `${t.id}:${t.albumId}`);
-  const acc = [];
-  for (let i = 0; i < ids.length; i += 100) {
-    const tracks = await ym("tracks", { form: { "track-ids": ids.slice(i, i + 100).join(",") } });
-    if (stale()) return null;
-    acc.push(...tracks);
-    onProgress(acc.length, ids.length);
-  }
+  const acc = await fetchLikes((part, n, total) => onProgress(n, total), stale, await likesSnap());
+  if (!acc) return null;
+  if (likes.done) return likes.tracks;          // пока грузили, лайки загрузила страница «Лайки»
   likes.tracks = mergeLikesAdded(acc); likes.done = true;
+  snapSave();
   return likes.tracks;
 }
 const artistImg = (a) => (a?.cover?.uri ? cover({ coverUri: a.cover.uri }, "200x200") : "");
@@ -2557,12 +2848,38 @@ function renderStations() {
     r.className = "pill reset"; r.textContent = "Обычная Моя волна"; r.onclick = () => pickStation(DEFAULT_SEED, "");
     grid.append(r);
   }
-  for (const s of stations.groups[stations.tab] || []) {
+  // Закреплённые жанры и настроения — первой строкой на любой вкладке. Звёздочка появляется у пункта при
+  // наведении (у закреплённого видна всегда): щелчок по ней закрепляет или открепляет, волну не переключает.
+  const pill = (s, pinned) => {
     const b = document.createElement("button");
-    b.className = "pill" + (s.seed === wave.seed ? " active" : "");
+    b.className = "pill" + (s.seed === wave.seed ? " active" : "") + (pinned ? " pinned" : "");
     b.textContent = s.name; b.onclick = () => pickStation(s.seed, s.name);
-    grid.append(b);
+    const on = stPinned(s.seed);
+    const st = document.createElement("i");
+    st.className = "ststar" + (on ? " on" : ""); st.textContent = on ? "★" : "☆";
+    st.title = on ? "Открепить" : "Закрепить вверху списка";
+    st.setAttribute("role", "button");
+    st.onclick = (e) => { e.stopPropagation(); stPinToggle(s); renderStations(); fitStations(); };
+    b.append(st);
+    return b;
+  };
+  if (stPins.length) {
+    for (const s of stPins) grid.append(pill(s, true));
+    const br = document.createElement("i"); br.className = "stbreak"; grid.append(br);
   }
+  for (const s of stations.groups[stations.tab] || []) grid.append(pill(s, false));
+}
+// закреплённые станции волны: [{ seed, name }], localStorage ym_wave_pins (свои у каждого аккаунта)
+const stPins = lsJSON("ym_wave_pins", [], Array.isArray)
+  .filter((x) => x && typeof x.seed === "string" && /^[\w-]+:[\w.-]+$/.test(x.seed) && typeof x.name === "string" && x.name)
+  .map((x) => ({ seed: x.seed, name: x.name.slice(0, 100) })).slice(0, 24);
+const stPinned = (seed) => stPins.some((x) => x.seed === seed);
+function stPinToggle(s) {
+  const i = stPins.findIndex((x) => x.seed === s.seed);
+  if (i >= 0) stPins.splice(i, 1);
+  else if (stPins.length >= 24) return showToast("Закрепить можно не больше 24 — открепи что-нибудь", 4000);
+  else stPins.push({ seed: s.seed, name: s.name });
+  try { localStorage.setItem("ym_wave_pins", JSON.stringify(stPins)); } catch {}
 }
 function updateStBtn() {
   const r = window.roomInfo?.();
@@ -2700,6 +3017,7 @@ async function showArtist(id, tab = "tracks") {
       title: name, img: c ? cover({ coverUri: c }, "200x200") : "", back: true,
       pin: info?.artist?.name ? { type: "artist", id, title: name } : null,
       artistWave: info?.artist?.name ? { id, name } : null,
+      artistLike: info?.artist?.name ? { id, name, cover: info.artist.cover } : null,
       sub: Number.isFinite(listeners) && listeners > 0 ? (el) => { el.textContent = `${fmtInt(listeners)} ${plRu(listeners, "слушатель", "слушателя", "слушателей")} за месяц`; } : null,
     });
     if (tab === "albums") {
@@ -3165,6 +3483,7 @@ async function toggleLike(t) {
     if (was) likes.tracks = likes.tracks.filter((x) => String(x.id) !== id);
     else if (likes.done) { likes.tracks = [t, ...likes.tracks.filter((x) => String(x.id) !== id)]; redrawLikes(); }
     else likesAdded.push(t);              // лайки ещё грузятся — трек добавится, когда загрузка закончится
+    snapSave();
   } catch (e) {
     was ? likedIds.add(id) : likedIds.delete(id);
     if (gone.length) redrawLikes();       // строка уже рассыпалась — вернуть её на место
@@ -3195,7 +3514,7 @@ async function toggleDislike(t) {
   if (!was && isCur) $("#next").click();
   try {
     await ym(was ? "dislike_remove" : "dislike_add", { form: { "track-ids": albumId ? `${id}:${albumId}` : id } });
-    if (!was && wasLiked) { likes.tracks = likes.tracks.filter((x) => String(x.id) !== id); redrawLikes(); }
+    if (!was && wasLiked) { likes.tracks = likes.tracks.filter((x) => String(x.id) !== id); redrawLikes(); snapSave(); }
     if (!was) showToast(`«${t.title}» — не нравится`, 5000, { kind: "ok", action: { label: "Отменить", fn: () => { if (dislikedIds.has(id)) toggleDislike(t); } } });
   } catch (e) {
     was ? dislikedIds.add(id) : dislikedIds.delete(id);
@@ -3347,6 +3666,7 @@ document.querySelectorAll("#fSrc [data-src]").forEach((b) => {
 function setFullMode(m) {
   $("#full").dataset.mode = m;
   requestAnimationFrame(fitFull);
+  paintFCover();
 }
 function fitFull() {
   const f = $("#full"), cv = $("#fCover");
@@ -3385,6 +3705,7 @@ function renderLyrics(res) {
 // Иначе — сначала предпочитаемый источник, при пустом ответе — другой.
 async function loadFullLyrics(t, only = null) {
   const my = ++fullSeq;
+  fPeek = false;                 // новый трек — снова текст, если он есть
   const box = $("#fLyrics");
   // пока ищем — обложка на весь экран; текст появится, только если он нашёлся
   box.className = "flyrics"; box.innerHTML = "";
@@ -3457,6 +3778,22 @@ function fullFrame() {
 
 $("#cover").onclick = openFull;
 $("#cover").title = "Развернуть на весь экран";
+// Обложка в развёрнутом плеере. Есть текст песни — обложка маленькая сбоку: щелчок показывает её крупно, как у трека
+// без текста (режим «cover»), повторный щелчок — снова текст. Текста нет — щелчок открывает обложку на весь экран
+// в просмотрщике (imgview.js, 1000×1000).
+let fPeek = false;
+$("#fCover").addEventListener("click", () => {
+  const f = $("#full");
+  if (f.dataset.mode === "lyrics") { fPeek = true; setFullMode("cover"); paintFCover(); return; }
+  if (fPeek) { fPeek = false; setFullMode("lyrics"); paintFCover(); return; }
+  const src = $("#fCover").currentSrc || $("#fCover").src;
+  if (src && $("#fCover").getAttribute("src") !== COVER_W) window.imgView?.show?.(src, { square: true });
+});
+function paintFCover() {
+  const cv = $("#fCover"), f = $("#full");
+  cv.classList.add("zoomable");
+  cv.title = f.dataset.mode === "lyrics" ? "Показать обложку крупно" : fPeek ? "Вернуться к тексту песни" : "Открыть обложку на весь экран";
+}
 $("#fClose").onclick = closeFull;
 $("#fPlay").onclick = togglePlay;
 $("#fNext").onclick = () => $("#next").click();
@@ -3475,22 +3812,31 @@ const tmenu = document.createElement("div");
 tmenu.className = "tmenu"; tmenu.hidden = true;
 document.body.append(tmenu);
 let tmenuBtn = null, menuSeq = 0;
+// меню по правому щелчку (tmenu.js) открывается у курсора, а не у «⋯» справа: точку кладут в window.menuPoint
+// прямо перед щелчком по «⋯», openMenu её забирает, placeMenu ставит меню от неё (и при перестройке — подменю)
+let menuAt = null;
 function closeTrackMenu() {
   if (tmenu.hidden) return;
   menuSeq++;
   tmenu.hidden = true; tmenu.textContent = "";
-  tmenuBtn?.classList.remove("open"); tmenuBtn = null;
+  tmenuBtn?.classList.remove("open"); tmenuBtn = null; menuAt = null;
 }
 function openMenu(btn, build) {
+  const pt = window.menuPoint; window.menuPoint = null;
   if (tmenuBtn === btn) return closeTrackMenu();
   closeTrackMenu();
+  menuAt = pt || null;
   tmenuBtn = btn; btn.classList.add("open"); tmenu.hidden = false;
   build(menuSeq);
 }
 function menuReset() { tmenu.textContent = ""; return ++menuSeq; }
 const menuAlive = (seq) => !tmenu.hidden && seq === menuSeq;
+// пункты меню трека, которые пользователь скрыл (Интерфейс → «Меню трека», tmenu.js): пока строится главное меню,
+// такой пункт не попадает в меню — вызывающему отдаётся кнопка вне документа (на неё можно ставить disabled и т.п.)
+let menuFilter = false;
 function menuItem(icon, text, fn, { keep = false, arrow = false, danger = false, to = tmenu } = {}) {
   const b = document.createElement("button");
+  if (menuFilter && window.tmenuHidden?.(text)) return b;
   b.className = "mi" + (danger ? " danger" : "");
   b.innerHTML = icon || ""; const s = document.createElement("span"); s.className = "mt"; s.textContent = text; b.append(s);
   if (arrow) b.insertAdjacentHTML("beforeend", '<i class="miarrow">›</i>');
@@ -3514,7 +3860,15 @@ function menuSep() {
 }
 function placeMenu() {
   if (tmenu.hidden || !tmenuBtn) return;
-  const r = tmenuBtn.getBoundingClientRect(), m = tmenu.getBoundingClientRect();
+  const m = tmenu.getBoundingClientRect();
+  if (menuAt) {
+    // у курсора: вправо-вниз от него, у края окна — влево / вверх
+    const left = menuAt.x + m.width + 8 <= innerWidth ? menuAt.x : Math.max(8, menuAt.x - m.width);
+    const top = menuAt.y + m.height + 8 <= innerHeight ? menuAt.y : Math.max(8, menuAt.y - m.height);
+    tmenu.style.left = left + "px"; tmenu.style.top = top + "px";
+    return;
+  }
+  const r = tmenuBtn.getBoundingClientRect();
   const left = Math.max(8, Math.min(r.right - m.width, innerWidth - m.width - 8));
   const below = r.bottom + 6 + m.height <= innerHeight - 8;
   const top = below ? r.bottom + 6 : Math.max(8, r.top - m.height - 6);
@@ -3665,6 +4019,14 @@ function menuSpeed() {
 
 function openTrackMenu(t, btn, ctx = null) { openMenu(btn, () => trackMenuMain(t, ctx)); }
 function trackMenuMain(t, ctx) {
+  menuFilter = true;
+  try { trackMenuBuild(t, ctx); } finally { menuFilter = false; }
+  // скрытые пункты могли оставить разделитель последним
+  let cut = false;
+  while (tmenu.lastElementChild?.classList.contains("msep")) { tmenu.lastElementChild.remove(); cut = true; }
+  if (cut) placeMenu();
+}
+function trackMenuBuild(t, ctx) {
   menuReset();
   const bottom = tmenuBtn?.id === "pMore";                       // меню нижней панели
   // своя версия из «Студии»: Яндекс о ней не знает — без плейлистов и скачивания, только пункты модулей
@@ -3687,7 +4049,6 @@ function trackMenuMain(t, ctx) {
   window.Whisper?.ui.trackMenu.build(t, ctx);   // пункты общих модулей («Сохранить в архив», core/archive.js) — в одной группе с плейлистами
   if (ctx) {
     const p = PL.full.get(ctx.kind), n = p ? p.items.length : 0;
-    menuSep();
     if (ctx.index > 0) menuItem(ICON.toTop, "Переместить в начало", () => plMoveTrack(ctx.kind, ctx.index, 0, t));
     if (ctx.index < n - 1) menuItem(ICON.toEnd, "Переместить в конец", () => plMoveTrack(ctx.kind, ctx.index, n - 1, t));
     if (cover(t)) menuItem(ICON.image, "Сделать обложкой плейлиста", () => plCoverFromTrack(ctx.kind, t));
@@ -3700,8 +4061,9 @@ function trackMenuMain(t, ctx) {
     window.outMenu?.(t, ctx);                                      // устройство вывода (output.js)
     window.soundMenu?.(t, ctx);                                    // нормализация, качество, формат (sound.js)
   }
-  // в самом низу — скачать
+  // в самом низу — поделиться (share.js, slot "bottom") и скачать
   menuSep();
+  window.Whisper?.ui.trackMenu.build(t, ctx, "bottom");
   menuItem(got.has(String(t.id)) ? ICON.got : ICON.download, got.has(String(t.id)) ? "Уже скачан" : "Скачать трек", () => downloadTrack(t));
   if (got.has(String(t.id))) menuItem(ICON.remove, "Удалить с диска", () => deleteDownload(t), { danger: true });
   placeMenu();
@@ -4040,7 +4402,7 @@ function renderPlGrid() {
   $("#status").textContent = list.length ? "" : "Плейлистов пока нет. Создай первый — кнопка «Создать плейлист» справа вверху.";
   for (const p of list) {
     const c = document.createElement("div");
-    c.className = "simcard plcard"; c.tabIndex = 0;
+    c.className = "simcard plcard"; c.tabIndex = 0; c.dataset.kind = String(p.kind);
     c.append(plCoverEl(p, "big"));
     const b = document.createElement("b"); b.textContent = p.title;
     const s = document.createElement("span"); s.textContent = plCount(p.trackCount) + (p.visibility === "private" ? " · личный" : "");
@@ -4517,6 +4879,10 @@ async function restorePlayer() {
       }
       resumePos = saved.pos || 0; needLoad = true;
       showTrack(queue[0], resumePos);
+      // страница волны уже нарисована (startPage идёт раньше) — с прежней подписью: волна по жанру, альбому или
+      // «для сна» (она в ym_wave_seed не пишется) после перезапуска играла, а кнопка говорила «Жанры и настроения»
+      updateStBtn();
+      if (!$("#wavePage").hidden) { waveHead(); fitHead(); }
       return;
     }
   } catch {}
@@ -4582,11 +4948,15 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     // Кэш приложения (cache.js / cache.rs): тот же ymlocal://, Rust сам ищет трек сначала среди скачанных, потом в кэше.
     // Скачанный главнее архива; кэш — после архива (версия из архива, если она есть, выбрана пользователем),
     // а без интернета — сразу.
-    const LOCAL_URL = LOCAL_BASE + "track/" + encodeURIComponent(String(t.id));
-    const inCache = !got.has(String(t.id)) && !!window.appCache?.has(String(t.id));
+    // своя замена трека (перетащили свой файл и связали с этим треком — dropin.js / studio.js): на этом компьютере
+    // вместо трека Яндекса играет она, главнее скачанного, архива и кэша. У гостя «Слушать вместе» — нет (_room)
+    const rep = !t._room && !isStudio(t.id) ? window.studioReplacement?.(String(t.id)) || "" : "";
+    const localId = rep || String(t.id);
+    const LOCAL_URL = LOCAL_BASE + "track/" + encodeURIComponent(localId);
+    const inCache = !rep && !got.has(String(t.id)) && !!window.appCache?.has(String(t.id));
     // своя версия из «Студии» (studio.js, studio-…) — файл на диске, как скачанный. Чужая (гость «Слушать вместе»:
     // её нет в своём списке студии, studioHas) — у нас её нет: играет то, чем поделился ведущий (источники ядра, архив)
-    const studio = isStudio(t.id) && !t._room && window.studioHas?.(String(t.id)) !== false;
+    const studio = !!rep || (isStudio(t.id) && !t._room && window.studioHas?.(String(t.id)) !== false);
     let local = studio || got.has(String(t.id)) || (inCache && !navigator.onLine) ? LOCAL_URL : "";
     // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
     if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");
@@ -4601,7 +4971,7 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     if (audio._native) {
       // свой движок сам берёт файл по номеру: скачанный, из архива или у Яндекса (в выбранном качестве)
       audio.setTrack(
-        local ? { kind: "local", id: String(t.id) }
+        local ? { kind: "local", id: localId }
           : wa ? { kind: "wa", id: String(wa.id) }
           : { kind: "ym", id: String(t.id), quality: window.ymQuality?.() || "high" },
         resumeAt, (t.durationMs || 0) / 1000);
@@ -4811,7 +5181,8 @@ setInterval(() => {
 // нормализация работает узлом усиления, и плеер играет с громкостью пользователя.
 // Свой движок (эксклюзивный режим) — цифровая громкость: нормализация может и поднимать (до ×4), без графа.
 function outVol(a = audio) {
-  const v = volume * (window.normElK ? window.normElK(a) : 1);
+  // × «плавный переход» на стыке треков (transitions.js): конец затихает или начало входит тише
+  const v = volume * (window.normElK ? window.normElK(a) : 1) * (window.xfK ? window.xfK(a) : 1);
   return Math.max(0, Math.min(a?._native ? 4 : 1, v));
 }
 function makeAudio(useViz, nat = false) {
@@ -5049,7 +5420,7 @@ function vizFrame(ts) {
   if (live) {
     const e = (freq[1] + freq[2] + freq[3] + freq[4]) / (4 * 255);
     viz.eAvg += (e - viz.eAvg) * (1 - Math.pow(0.95, k60));
-    if (e > viz.eAvg * 1.18 + 0.03 && e - viz.ePrev > 0.015 && ts - viz.lastBeat > 200) { viz.kick = 1; viz.lastBeat = ts; viz.beatNow = true; }
+    if (e > viz.eAvg * 1.18 + 0.03 && e - viz.ePrev > 0.015 && ts - viz.lastBeat > 200) { viz.kick = 1; viz.lastBeat = ts; viz.beatNow = true; window.themeFxBeat?.(); }
     viz.ePrev = e;
   }
   viz.kick *= Math.exp(-dt * 6.5);
@@ -5469,7 +5840,7 @@ syncIcons();
   const migMsg = await migrateLegacyToken();
   const has = await tokenExists();
   if (has === null) showLogin("Не найдены команды хранилища токена: обнови Rust-часть (auth.rs и net.rs).");
-  else if (has && uid) { goTop(showWave); restorePlayer(); loadLikedIds(); loadDislikedIds(); warnPlainSecrets(); }
+  else if (has && uid) { startPage(); restorePlayer(); loadLikedIds(); loadDislikedIds(); warnPlainSecrets(); }
   else showLogin(migMsg);
 })();
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-drop-audio-local"
+description = "Enables the drop_audio_local command without any pre-configured scope."
+commands.allow = ["drop_audio_local"]
+
+[[permission]]
+identifier = "deny-drop-audio-local"
+description = "Denies the drop_audio_local command without any pre-configured scope."
+commands.deny = ["drop_audio_local"]

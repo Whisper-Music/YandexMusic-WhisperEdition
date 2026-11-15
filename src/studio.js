@@ -51,7 +51,8 @@
   window.studioLiked = (id) => !!byId(id)?.liked;
   // лайкнутые версии для страницы «Лайки» (main.js → withStudioLikes): трек и время лайка, мс
   // (у версий, лайкнутых до того, как время стало записываться, — время сохранения)
-  window.studioLikedList = () => items.filter((x) => x.liked).map((x) => ({ raw: toRaw(x), at: (x.likedAt || x.created || 0) * 1000 }));
+  // замена трека (origin «replace») — не отдельный трек: в «Лайках» не появляется, лайк ставится самому треку Яндекса
+  window.studioLikedList = () => items.filter((x) => x.liked && x.origin !== "replace").map((x) => ({ raw: toRaw(x), at: (x.likedAt || x.created || 0) * 1000 }));
   const likesRedraw = () => { if (typeof likesStudioChanged === "function") likesStudioChanged(); };
   window.studioToggleLike = async (t) => {
     const it = byId(String(t?.id));
@@ -404,6 +405,20 @@
   // ---------- «Мои версии» ----------
   const list = $s("stuList");
   const shown = () => (filter === "liked" ? items.filter((x) => x.liked) : items);
+  // dropin.js: перетащенный трек лёг в студию (сразу с лайком) — в список, в «Лайки», и можно включить
+  // своя замена трека Яндекса (перетащенный файл, связанный с треком): номер её файла или "" (main.js → play)
+  window.studioReplacement = (trackId) => {
+    const src = String(trackId ?? "").split(":")[0];
+    return (src && items.find((x) => x.origin === "replace" && x.srcId === src)?.id) || "";
+  };
+  window.studioAdd = (it) => {
+    if (!it?.id || byId(it.id)) return;
+    // у трека одна замена — прошлую Rust уже удалил (drop_audio_local)
+    if (it.origin === "replace") items = items.filter((x) => !(x.origin === "replace" && x.srcId === it.srcId));
+    items.unshift(it);
+    paintList(); refreshHearts(); likesRedraw();
+  };
+  window.studioPlay = (id) => playItem(String(id));
   function playItem(id) {
     const arr = shown().some((x) => x.id === id) ? shown() : items;
     const i = arr.findIndex((x) => x.id === id);
@@ -427,7 +442,9 @@
       const t = document.createElement("div"); t.className = "t"; t.textContent = it.title;
       const a = document.createElement("div"); a.className = "a";
       const who = raw.artists.map((x) => x.name).join(", ");
-      a.textContent = [who, `${fmt(it.startMs / 1000, false)}–${fmt(it.endMs / 1000, false)}`].filter(Boolean).join(" · ");
+      // свой файл (перетащили в окно, dropin.js) — без отрезка, с форматом
+      const what = it.origin === "replace" ? `замена · ${String(it.ext || "mp3").toUpperCase()}` : it.origin === "import" ? `свой файл · ${String(it.ext || "mp3").toUpperCase()}` : `${fmt(it.startMs / 1000, false)}–${fmt(it.endMs / 1000, false)}`;
+      a.textContent = [who, what].filter(Boolean).join(" · ");
       tx.append(t, a);
       const dur = document.createElement("span"); dur.className = "dur"; dur.textContent = fmt(it.durationMs / 1000, false);
       const lk = document.createElement("button"); lk.className = "likebtn";
@@ -461,7 +478,8 @@
   async function remove(it) {
     const r = await modal({ title: "Удалить версию?", text: `«${it.title}» удалится с диска. Копия в архиве (если есть) останется.`, ok: "Удалить", danger: true });
     if (!r) return;
-    if (String(queue[current]?.id) === it.id) { toast("Эта версия сейчас играет — включи другой трек и удали её"); return; }
+    const cur = String(queue[current]?.id ?? "").split(":")[0];
+    if (cur === it.id || (it.origin === "replace" && cur === it.srcId)) { toast("Эта версия сейчас играет — включи другой трек и удали её"); return; }
     try {
       await invoke("studio_delete", { id: it.id });
       items = items.filter((x) => x.id !== it.id);
@@ -573,7 +591,7 @@
       }));
       stopPreview();
       W.queue.play(raws, 0);
-      toast(`«${raws[0].title}»${author ? ` от ${author}` : ""} — играет из Whisper Archive`, 4000, { kind: "ok" });
+      toast(author ? `«${raws[0].title}» от ${author} — играет из Whisper Archive` : `«${raws[0].title}» — играет из Whisper Archive`, 4000, { kind: "ok" });
     } catch (e) { if (my === openingShared) toast("Не удалось открыть версию: " + err(e), 7000); }
   };
 
@@ -603,11 +621,14 @@
         m.item(ICO.share, sharing.has(id) ? "Готовлю ссылку…" : "Поделиться через архив", () => share(it));
         m.item(ICO.edit, "Переименовать…", () => rename(it));
         m.item(ICO.file, "Сохранить файл…", () => exportFile(it));
-        if (enabled) m.item(ICO.cut, "Открыть исходник в студии", () => window.studioOpen({ ...raw, id: it.srcId, title: it.meta?.srcTitle || raw.title, durationMs: 0, studio: undefined }));
+        if (enabled && (it.origin || "cut") === "cut") m.item(ICO.cut, "Открыть исходник в студии", () => window.studioOpen({ ...raw, id: it.srcId, title: it.meta?.srcTitle || raw.title, durationMs: 0, studio: undefined }));
         m.item(ICO.del, "Удалить версию", () => remove(it), { danger: true });
         return true;
       }
-      if (!enabled || !canPick(raw)) return false;
+      // у трека Яндекса есть своя замена (перетащенный файл) — её можно убрать, трек снова зазвучит как на Яндексе
+      const rep = window.studioReplacement(id), repIt = rep && byId(rep);
+      if (repIt) m.item(ICO.del, "Убрать свою замену", () => remove(repIt));
+      if (!enabled || !canPick(raw)) return !!repIt;
       m.item(ICO.cut, "Обрезать в студии", () => window.studioOpen(raw));
       return true;
     },

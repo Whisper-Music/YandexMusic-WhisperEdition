@@ -140,6 +140,7 @@ struct Op {
 }
 
 const TRACK_IDS: &[&str] = &["track-ids"];
+const ARTIST_IDS: &[&str] = &["artist-ids"];
 /// Отчёт о прослушивании (plays.js). uid в форме подставляет Rust (send_api) — JS его не знает и подменить не может.
 const PLAY_AUDIO: &[&str] = &[
     "track-id", "album-id", "playlist-id", "from", "from-cache", "play-id", "uid", "timestamp", "client-now",
@@ -155,6 +156,7 @@ const OPS: &[Op] = &[
     op("account_status", false, Verb::Get, "/account/status", Id::No, &[], Body::None),
     op("likes", false, Verb::Get, "/users/{uid}/likes/tracks", Id::No, &[], Body::None),
     op("dislikes", false, Verb::Get, "/users/{uid}/dislikes/tracks", Id::No, &[], Body::None),
+    op("likes_artists", false, Verb::Get, "/users/{uid}/likes/artists", Id::No, &["with-timestamps"], Body::None),
     op("tracks", false, Verb::Post, "/tracks", Id::No, &[], Body::Form(TRACK_IDS)),
     op("track_download_info", false, Verb::Get, "/tracks/{id}/download-info", Id::Item, &[], Body::None),
     op("track_lyrics", false, Verb::Get, "/tracks/{id}/lyrics", Id::Item, &["format", "timeStamp", "sign"], Body::None),
@@ -175,6 +177,8 @@ const OPS: &[Op] = &[
     op("like_remove", true, Verb::Post, "/users/{uid}/likes/tracks/remove", Id::No, &[], Body::Form(TRACK_IDS)),
     op("dislike_add", true, Verb::Post, "/users/{uid}/dislikes/tracks/add-multiple", Id::No, &[], Body::Form(TRACK_IDS)),
     op("dislike_remove", true, Verb::Post, "/users/{uid}/dislikes/tracks/remove", Id::No, &[], Body::Form(TRACK_IDS)),
+    op("artist_like_add", true, Verb::Post, "/users/{uid}/likes/artists/add-multiple", Id::No, &[], Body::Form(ARTIST_IDS)),
+    op("artist_like_remove", true, Verb::Post, "/users/{uid}/likes/artists/remove", Id::No, &[], Body::Form(ARTIST_IDS)),
     op("rotor_feedback", true, Verb::Post, "/rotor/session/{id}/feedback", Id::Session, &[], Body::Json),
     op("playlist_create", true, Verb::Post, "/users/{uid}/playlists/create", Id::No, &[], Body::Form(&["title", "visibility"])),
     op("playlist_rename", true, Verb::Post, "/users/{uid}/playlists/{id}/name", Id::Kind, &[], Body::Form(&["value"])),

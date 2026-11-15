@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-drop-audio-info"
+description = "Enables the drop_audio_info command without any pre-configured scope."
+commands.allow = ["drop_audio_info"]
+
+[[permission]]
+identifier = "deny-drop-audio-info"
+description = "Denies the drop_audio_info command without any pre-configured scope."
+commands.deny = ["drop_audio_info"]

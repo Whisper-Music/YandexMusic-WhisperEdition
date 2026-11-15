@@ -23,6 +23,7 @@ fn limit_for(kind: &str) -> Option<u64> {
         "image" => 50 * MB,  // картинка фона (imgguard.js)
         "theme" => 64 * MB,  // файл темы .wmt (wmt.js MAX_FILE)
         "video" => 500 * MB, // видеообои (main.js VIDEO_MAX_BYTES)
+        "audio" => 100 * MB, // трек, перетащенный в окно (dropin.js: послушать в окне выбора; как MAX_TRACK_UPLOAD архива)
         _ => return None,
     })
 }
@@ -153,6 +154,25 @@ pub async fn bg_dir_pick(app: AppHandle) -> Result<Option<Vec<Entry>>, String> {
     Ok(Some(remember(&app, &[p])))
 }
 
+/// «Добавить трек…» (правый щелчок по пустому месту «Лайков», tmenu.js): выбор аудиофайлов с диска. Дальше — как
+/// перетаскивание: тот же список (remember) и то же окно «Что сделать с треком» (dropin.js → dropAudio).
+#[tauri::command]
+pub async fn audio_pick(app: AppHandle) -> Result<Option<Vec<Entry>>, String> {
+    let a = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        a.dialog()
+            .file()
+            .set_title("Добавить трек")
+            .add_filter("Аудио", &["mp3", "flac", "wav", "m4a", "aac", "ogg", "oga", "opus"])
+            .blocking_pick_files()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(list) = picked else { return Ok(None) };
+    let paths: Vec<PathBuf> = list.into_iter().filter_map(|f| f.into_path().ok()).collect();
+    Ok(Some(remember(&app, &paths)))
+}
+
 /// Открыть выбранный файл и убедиться, что открыт тот самый обычный файл, что был при выборе
 /// (аудит F-05): между выбором и чтением другой процесс мог заменить его ссылкой на чужой файл.
 ///  * Unix — O_NOFOLLOW: ссылка вместо файла не откроется вовсе; плюс сверка (устройство, inode).
@@ -197,6 +217,21 @@ pub fn bg_read(state: tauri::State<Picked>, id: usize, kind: String) -> Result<t
         .cloned()
         .ok_or("Файл больше недоступен — выбери папку ещё раз")?;
     read_limited(&path, &ident, limit).map(tauri::ipc::Response::new)
+}
+
+/// Тот же файл из последнего перетаскивания — для Rust-команд (studio.rs: трек, брошенный в окно, читается здесь,
+/// а не гоняется через интерфейс). Возвращает содержимое и имя файла.
+pub fn read_picked(app: &AppHandle, id: usize, limit: u64) -> Result<(Vec<u8>, String), String> {
+    let st = app.try_state::<Picked>().ok_or("Файл больше недоступен — перетащи его ещё раз")?;
+    let (path, ident) = st
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(id)
+        .cloned()
+        .ok_or("Файл больше недоступен — перетащи его ещё раз")?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    Ok((read_limited(&path, &ident, limit)?, name))
 }
 
 fn read_limited(path: &Path, ident: &Ident, limit: u64) -> Result<Vec<u8>, String> {

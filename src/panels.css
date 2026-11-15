@@ -1,0 +1,105 @@
+/* Настройки → «Панели»: список кнопок боковой панели (panels.js) */
+.app > .side > .sidehide { display: none !important; }
+.sbl { display: grid; gap: 6px; margin: 10px 0 4px; position: relative; }
+.sbl [hidden] { display: none !important; }
+#stuCard > h3[title] { cursor: help; }
+.sblrow {
+  display: grid; grid-template-columns: 30px 1fr 28px 34px; align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 10px; min-height: 38px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  transition: background .15s, opacity .15s; cursor: grab; user-select: none; touch-action: none;
+}
+.sblrow:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.sblrow .sbllabel { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sblrow.off .sbllabel { color: var(--muted); }
+.sblrow button {
+  all: unset; box-sizing: border-box; display: grid; place-items: center; height: 30px; border-radius: 8px; cursor: pointer;
+}
+.sblrow button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sblgrip { width: 30px; font-size: 18px; line-height: 1; color: var(--muted); cursor: grab !important; touch-action: none; }
+.sblgrip:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.sbleye { width: 34px; color: var(--text); }
+.sbleye:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.sblrow.off .sbleye { color: var(--muted); opacity: .7; }
+.sblrow.lock .sbleye { cursor: default !important; opacity: .45; }
+.sblrow.lock .sbleye:hover { background: none; }
+.sbl.dragging, .sbl.dragging * { cursor: grabbing !important; user-select: none; }
+.sblrow.drag {
+  position: relative; z-index: 2; background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+}
+:root[data-style="royal"] .sblrow, :root[data-style="steam"] .sblrow,
+:root[data-style="royal"] .sblrow button, :root[data-style="steam"] .sblrow button { border-radius: 2px; }
+:root[data-anim="off"] .sblrow { transition: none; }
+/* галочка стартовой страницы (одна на список) */
+.sblstart { display: grid; place-items: center; }
+/* своя галочка вместо системной: кружок в цветах стиля, отмеченный — залит основным цветом с галкой */
+.sblstartcb {
+  appearance: none; -webkit-appearance: none; box-sizing: border-box; display: grid; place-items: center;
+  width: 20px; height: 20px; margin: 0; cursor: pointer; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--text) 40%, transparent); background: transparent;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.sblstartcb:hover { border-color: var(--accent); }
+.sblstartcb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sblstartcb::after {
+  content: ""; width: 9px; height: 5px; margin-top: -2px; transform: rotate(-45deg) scale(0);
+  border-left: 2px solid var(--on-accent, #fff); border-bottom: 2px solid var(--on-accent, #fff); transition: transform .15s;
+}
+.sblstartcb:checked { background: var(--accent); border-color: var(--accent); }
+.sblstartcb:checked::after { transform: rotate(-45deg) scale(1); }
+.sblrow.off .sblstartcb { opacity: .5; }
+/* под стили: неон светится, у «Королевского» и «Стимпанка» углы почти прямые, как у их кнопок */
+:root[data-base="neon"] .sblstartcb:checked { box-shadow: 0 0 calc(var(--glow, 8px) * .9) color-mix(in srgb, var(--accent) 70%, transparent); }
+:root[data-base="royal"] .sblstartcb, :root[data-base="steam"] .sblstartcb { border-radius: 3px; }
+:root[data-base="steam"] .sblstartcb:checked { box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 35%, transparent); }
+:root[data-anim="off"] .sblstartcb, :root[data-anim="off"] .sblstartcb::after { transition: none; }
+
+/* режим перестановки в самой боковой панели (panels.js → sideEdit) */
+/* двигаются только кнопки верхней группы (.sideedit-it); «Профиль» и «Свернуть» — как обычно, только неактивные */
+html.side-edit .app > .side > .sideedit-it {
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 2px; cursor: grab;
+}
+html.side-edit .app > .side > .sideedit-it * { pointer-events: none; }
+html.side-edit .app > .side > :not(.sideedit-it):not(.sideeditdone):not(.spacer) { opacity: .45; pointer-events: none; }
+html.side-edit .app > .side > .sidedrag {
+  position: relative; z-index: 3; cursor: grabbing; transition: none !important; animation: none !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .4); will-change: transform;
+}
+/* пока тянут, соседи только съезжают на место кнопки (transform на своём слое, без пересчёта раскладки);
+   остальные переходы стиля (подсветка, наведение) выключены — меньше перерисовки */
+html.side-edit .app > .side > .sideedit-it:not(.sidedrag) { transition: transform .16s ease-out !important; }
+html.side-edit .app > .side.sidedragging > .sideedit-it:not(.sidedrag) { will-change: transform; }
+/* отпустили: порядок в разметке меняется один раз, а сдвиги снимаются без анимации — иначе кнопки «прыгнут» */
+html.side-edit .app > .side.sidecommit > .sideedit-it,
+:root[data-anim="off"] .app > .side > .sideedit-it { transition: none !important; }
+html.side-edit .app > .side { user-select: none; }
+/* «Готово» — обычная выбранная кнопка стиля; значок (в узкой панели и у стилей со значками) — галка, а не пустой квадрат */
+.app > .side > .sideeditdone {
+  /* отдельно от кнопок, которые переставляют: это кнопка режима, а не одна из них */
+  flex: none; margin-top: 18px;
+  --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+}
+
+/* последние стили — кружочки внизу меню боковой панели (tmenu.js) */
+.tmenu .mthemes { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 10px 8px; }
+.tmenu .mtheme {
+  all: unset; box-sizing: border-box; position: relative; overflow: hidden; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+  border: 2px solid color-mix(in srgb, var(--text) 25%, transparent); transition: transform .12s, border-color .12s;
+}
+.tmenu .mtheme.nocover { background: linear-gradient(135deg, var(--a) 0 50%, var(--b) 50% 100%); }
+/* обложка стиля (копия .sprev его карточки) — кружком на всю кнопку */
+.tmenu .mtheme .mthemeprev {
+  position: absolute; inset: 0; width: auto; height: auto; margin: 0; border-radius: 50%;
+  background-size: cover !important; background-position: center !important; pointer-events: none;
+}
+.tmenu .mtheme:hover { transform: scale(1.12); border-color: var(--text); }
+.tmenu .mtheme.on { border-color: var(--text); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); }
+.tmenu .mtheme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sblnote { margin: 6px 2px 0; font-size: 12px; }
+/* точка под курсором — к ней прикрепляется меню пустого места «Моей волны» (tmenu.js) */
+.ctxanchor { position: fixed; width: 1px; height: 1px; pointer-events: none; visibility: hidden; }
+/* «Меню трека» (tmenu.js): те же строки, но без перетаскивания — подпись и глазик, щёлкается вся строка */
+.sblrow.tmrow { grid-template-columns: 1fr 34px; padding-left: 12px; cursor: pointer; }

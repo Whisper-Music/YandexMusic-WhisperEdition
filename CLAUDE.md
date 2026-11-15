@@ -63,6 +63,13 @@ src/                      фронтенд (без сборки, файлы от
   styles.css              общее оформление + встроенные стили (:root[data-style="neon|royal|steam|lolitta"])
   theme.js / theme.css    свои темы в этом приложении: загрузка, хранение, фон, сохранение в файл, карточки стилей
   themelib.js/.css        «Библиотека тем» (репозиторий Whisper-Music/whisper-themes)
+  listexport.js           экспорт лайков и плейлистов: правый щелчок → «Экспорт» (tmenu.js → exportItem) → TXT («Исполнитель -
+                          Название» — импорт Яндекса, TuneMyMusic, Soundiiz), CSV (колонки TuneMyMusic), JSON (все данные);
+                          файл пишет Rust export_save (export.rs, общий с PDF статистики; заголовки x-file-name / x-file-ext)
+  themefx.js              «живые» темы: события для CSS (.w-tap, body.ev-*, --tap-x/y), курсор (--mx/--my/--mpx/--mpy),
+                          слой украшений #fxLayer, частицы на холсте #fxCanvas. Настройки разбирает theme.js → setHooks
+                          (themeHooks[id].events/pointer/layer/particles), применяет main.js → applyHooks → themeFxApply;
+                          бит — main.js (детектор визуализатора) → window.themeFxBeat
   core/discord.js/.css    ОБЩИЙ модуль Discord Rich Presence (Rust — core/rust/discord.rs); карточку в «Интеграциях» ставит сам
   core/obs.js/.css        ОБЩИЙ виджет «Сейчас играет» для OBS (Rust — core/rust/obs.rs, страница — core/rust/obs/widget.*);
                           цвета и секции whisper-obs стиля берёт из kit.accentColors / kit.obsTheme (yandex.js)
@@ -78,6 +85,11 @@ src/                      фронтенд (без сборки, файлы от
   ползунки #seek/#fSeek   щелчок и перетаскивание считает main.js (rangeGrab): значение по точке под курсором, события
                           input/change как у обычного ползунка; пока тянут — seekDrag, ontimeupdate ползунок не трогает
   uifont.js               шрифт интерфейса из установленных в системе (Оформление → Шрифт)
+  transitions.js          «Пропускать тишину» и «Плавные переходы» (localStorage ym_xfade). Rust edges.rs (audio_edges) декодирует
+                          трек (symphonia; Яндекс — в экономном качестве) → { dur, start, end, head_db, tail_db }; следующий
+                          меряется заранее. Тишина: перемотка к start, на end — audio.onended(). Переход — множитель громкости
+                          window.xfK(a) в outVol() (main.js): конец затихает до уровня начала следующего или следующий входит
+                          с уровня конца и за 2,5 с поднимается. Один плеер, без наложения. У гостя «Слушать вместе» — выключено
   sleep, eq, output, engine, sound — режим сна, эквалайзер, устройство вывода, свой WASAPI-движок, качество/нормализация
                           (sleep.js → window.sleepActive() → kit.sleeping: «Засыпает · …» в Discord; в комнате — «Слушает вместе · …»)
   layout.js/.css          режимы «Расположения» (без defer), колонка и скрытие закреплённых (см. «Расположение и закреплённые»)
@@ -89,6 +101,9 @@ src/                      фронтенд (без сборки, файлы от
   cache.js                кэш приложения (Rust — cache.rs, папка app_cache_dir/tracks): популярные (дослушаны 3 раза)
                           и проигранные треки текущего плейлиста; играет тем же ymlocal:// (download::open_local
                           смотрит в кэш, если трек не скачан), window.appCache.has(id); карточка «Кэш» во «Воспроизведении»
+  pagecache.js            карточка «Кэш страниц» там же: снимок «Лайков» (IndexedDB likes:v1 — main.js snapSave/likesSnap,
+                          window.pageCache.info/clear): размер, возраст описаний, чтение с диска, как открылись «Лайки»
+                          в последний раз (likesPerf: память / снимок / Яндекс), что в памяти (PL.full, artistCache)
   share.js                «Поделиться» в меню трека; ссылки whisper://track|album|artist и music.yandex.* открываются
                           в приложении (deeplink.rs → событие open-link, вставка в поиск, Ctrl+V в окне)
   mini.html/js/css        отдельное окно мини-плеера
@@ -127,13 +142,24 @@ src/                      фронтенд (без сборки, файлы от
   studioinfo.js           сводка о треке в студии по звуку: window.studioAnalyze(AudioBuffer) → темп (BPM, автокорреляция
                           огибающей атак), тональность (хрома + профили Крумхансла), громкость (RMS, пик); формат файла —
                           studio_info (studio.rs: кодек, битрейт, VBR, частота, каналы, размер, с диска или с Яндекса)
+  dropin.js/.css          перетаскивание в окно на ЛЮБОЙ странице (bg.rs → main.js bg-drop: .wmt → theme.js, трек → dropin.js,
+                          картинка/видео → фон, вне настроек — с тостом). Трек: окно «Что сделать с треком» — поиск похожего
+                          трека Яндекса (теги ID3/FLAC + имя файла, score); «В «Лайки»» / «Просто сохранить» (studio.rs
+                          drop_audio_local): с выбранным треком — его ЗАМЕНА (origin "replace", src_id = трек; одна на трек;
+                          main.js play → window.studioReplacement: играет файл, главнее скачанного/архива/кэша; лайк — самому
+                          треку Яндекса, в «Лайках» второй копии нет; «Убрать свою замену» в меню трека), без трека — свой трек
+                          (origin "import", liked по выбору, своё расширение ext); или «В Whisper Archive» (drop_audio_archive:
+                          в свой/новый альбом; с выбранным треком файл зовётся «Исполнитель - Название» и подменяет версию
+                          Яндекса через core/archive.js — W.modules.archive.remember/albums/playing). Файл читает Rust по номеру
+                          из списка перетаскивания (bg::read_picked), в JS — только чтобы послушать (bg_read kind "audio")
   cache.js/.css           кэш (Rust — cache.rs): популярные, текущий плейлист и последние N треков «Моей волны»
                           (wave_max, по умолчанию 20; context.type "radio"); полоса занятого места по видам
 src-tauri/
   src/lib.rs              регистрация модулей и команд (generate_handler!), трей, окно
   src/*.rs                net (запросы к Яндексу), auth/secret (токен в keyring), download, engine (WASAPI),
                           theme/themelib, hotkeys,
-                          fonts (список шрифтов), desktop (обои), power (экономия в трее), update, …
+                          fonts (список шрифтов), desktop (обои), power (экономия в трее), update,
+                          mixer (Windows: имя и значок приложения у звуковых сеансов WebView2 в микшере громкости), …
                           backup (файл .wbak через диалог; автокопии в <папка настроек>/backups: settings, downloaded,
                           downloads — последние 8; download.rs сам восстанавливает из них повреждённый индекс и папки)
   src/whisper_host.rs     что приложение даёт общему Rust ядра (src/core/rust: whisper/, discord.rs, obs.rs): хранилище
@@ -144,11 +170,13 @@ src-tauri/
   capabilities/*.json     права окон на команды (default.json — главное окно)
   tauri.conf.json         окно, CSP, сборка
 scripts/
-  check-themes.mjs        проверка репозитория библиотеки тем перед публикацией (Node, разбор — src/core/wmt.js)
+  check-themes.mjs        проверка репозитория библиотеки тем перед публикацией (Node, разбор — src/core/wmt.js);
+                          заодно — предупреждения о производительности (бесконечные анимации не transform/opacity, плавный SMIL в SVG)
 docs/
   CORE.md, WMT-FORMAT.md  ссылки: сами документы — в ядре, src/core/docs/
   THEMES.md               гайд по темам для пользователей
-  examples/*.wmt          примеры: terminal, retro-tv (архив, своя раскладка), chalk, night-sky (старый вид с base64)
+  examples/*.wmt          примеры: terminal, retro-tv (архив, своя раскладка), chalk, night-sky (старый вид с base64),
+                          new-year (архив: эффекты, частицы из картинки темы, снег через transform — образец «лёгкой» темы)
 ```
 
 ## Правила, о которые легко споткнуться
@@ -225,12 +253,22 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
   Первые дети `.settings` — шапка `#setTop` (поиск `#setFind` + вкладки `#setTabs`) и `#setFindEmpty`; это не карточки.
 - Два столбца (CSS columns, ≥1100px): карточки идут **в порядке разметки**, правый столбец начинается с карточки `.colbreak`
   (одна на вкладку). Баланс высоты столбцов подбирается переносом `.colbreak`.
-- Сейчас: Оформление — Стиль (внизу — интро тем #introCard: виден, только если у установленного стиля есть интро,
-  theme.js → paintIntro), Цвета и шрифт (#colorCard; шрифт — блок #fontCard внутри, под цветами) | Фон (размытие, затемнение, прозрачность панелей), Эффекты и анимации (свечение, анимации).
+- Сейчас: Оформление — Стиль, Цвета и шрифт (#colorCard; шрифт — блок #fontCard внутри, под цветами) | Фон (размытие, затемнение, прозрачность панелей), Эффекты и анимации (свечение, анимации, «Настроить тему…» — эффекты и интро тем).
   Интерфейс — Расположение (вид, сторона, время, закреплённые, «Вкладки настроек» #setTabsPos; свёрнутые боковая/нижняя
   панели в настройках не выбираются — только перетаскиванием края), Панели (#stuCard: «Скрывать закреплённые» #pinHideCard,
-  кнопки «Статистика» и «Студия») | Визуализатор, Маскот, Язык.
-  Воспроизведение — Режим сна | Скачивание треков, Кэш. Звук — Устройство вывода, Профили | Вывод и качество (#modeCard: режим + качество потока),
+  список кнопок боковой панели — panels.js, ym_side; галочка в строке — стартовая страница, одна на список: localStorage
+  ym_start wave|likes|stats|studio, main.js → startPage()) | Визуализатор, Маскот, Язык, Меню трека (#tmCard, tmenu.js, ym_tmenu.
+  Системное меню WebView не показывается нигде, кроме полей ввода и выделенного текста; всё прочее в окне — общее pageMenu
+  («Назад», «Настройки», последние стили); модуль со своим меню зовёт preventDefault. Правый щелчок по строке
+  с .morebtn и по .player (#pMore) — меню у курсора (window.menuPoint перед щелчком по «⋯» → openMenu → menuAt в placeMenu),
+  на пустом месте «Моей волны» — своё меню (обои, визуализатор; якорь .ctxanchor), «Лайков» (likesOpen()) — «Скачать лайки»
+  (жмёт #dlAllBtn), «Добавить трек…» (bg.rs → audio_pick → dropin.js dropAudio) и последние стили, настроек (#settingsPage,
+  вся страница с шапкой) — импорт настроек (жмёт #bkLoad / #bkAutoBtn), язык (чипы #langSeg) и последние стили, на боковой
+  панели — «Переставить кнопки» (panels.js → window.sideEdit: html.side-edit, тянуть мышью, «Готово»/Esc; пока тянут, соседи
+  сдвигаются только transform-ом, порядок в разметке меняется один раз при отпускании), стартовая страница
+  (window.sidePanel) и последние стили кружками (recentRow; ym_recent_styles, переключает щелчок по .stylecard), скрытые пункты — main.js → menuItem спрашивает window.tmenuHidden(подпись), пока строится главное меню;
+  новый пункт меню, который можно прятать, — добавь в ITEMS tmenu.js).
+  Воспроизведение — Режим сна, Переходы между треками (#xfCard) | Скачивание треков, Кэш. Звук — Устройство вывода, Профили | Вывод и качество (#modeCard: режим + качество потока),
   Нормализация, Сведения о формате. Приложение — Трей, Уведомления | Горячие клавиши, Обновления. Данные — Статистика (запись и очистка),
   Резервная копия | Сброс.
 - **Мелочь — не отдельной карточкой.** Одиночный выключатель кладём строкой в близкую по смыслу карточку.
@@ -311,13 +349,43 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
   Q — очередь (core/queue.js), F — визуализатор на весь экран (main.js), Ctrl+Shift+Backspace — аварийный сброс стиля (theme.js).
 - Обработчики клавиш не срабатывают в полях ввода (`input, textarea, [contenteditable]`) и при открытом `.modal`.
 
+### Мелкие возможности — где что живёт
+- **Лайки авторов**: кнопка `#artistLikeBtn` на странице автора (`setHead({ artistLike })`), вкладка «Лайки» → «★ Авторы»
+  (`showLikedArtists`). Операции net.rs — `likes_artists`, `artist_like_add`, `artist_like_remove`; номера — `likedArtists`
+  (localStorage `ym_liked_artists`).
+- **Закреплённые жанры волны**: звёздочка `.ststar` на пункте списка (`renderStations`), `stPins` — localStorage `ym_wave_pins`.
+- **Режим сна — своя громкость** (sleep.js, `#slVol`): пока режим включён, громкость запоминается в `ym_sleep.vol`,
+  обычная ждёт в `ym_sleep.prev` и возвращается после сна (или при следующем запуске).
+- **Статистика прослушиваний** (listenstats.js): исполнители — плотный список (треков, прослушиваний, время, доля), кольца `donut()` (жанры, время суток), плитки по дням
+  `.lstile` с цифрами, «кто ты по жанрам» (`WHO`, открывается с 40 часов за всё время), «Скачать PDF» — открытка на
+  холсте → JPEG → одностраничный PDF (`pdfFromJpeg`), файл пишет Rust `export_save` (export.rs, общий для PDF / TXT / CSV / JSON).
+- **«Цвета этого места…»** в меню по правому щелчку (tmenu.js: таблица `CC_AT` селектор → ключ `CC_GROUPS`) открывает
+  «Тонкую настройку цветов» на нужной строке: `openColorEditor(ключ)`. Новый ключ в `CC_GROUPS` — добавь строку в `CC_AT`.
+- **Меню по правому щелчку**: линия (`menuSep`) — только между крупными группами; перед подзаголовком (`menuNote`) линию прячет CSS.
+  На странице прослушиваний первый пункт общего меню — «Скачать статистику (PDF)» (`window.lstatsPdf`).
+- **Меню трека**: пункты модулей со `slot: "bottom"` (share.js — «Поделиться») встают внизу, перед «Скачать трек».
+- **Мини-вид**: таблетка плеера сама является линией трека — `#seek` растянут на всю `.pcenter` под кнопками (layout.css).
+- **Видеообои**: ошибки `#bgVideo` после добавления (не декодируется, не открылось за 12 с) показываются в `#setNote`/тосте.
+
 ### Прочее
+- Параметры WebView2 — одни на все окна, через переменную `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` (lib.rs → `webview_args()`,
+  до Builder): там повторён список Tauri (`msWebOOUI,msPdfOOUI,msSmartScreenProtection`) + `AudioServiceOutOfProcess` — звук
+  играет браузерный процесс WebView2 (потомок приложения), иначе «Захват звука приложения» в OBS слышит тишину.
 - `[hidden]` перебивается `display:` в CSS классов — в своих блоках добавляй `#блок [hidden] { display: none !important; }`.
 - Учитывай все 4 встроенных стиля: у `royal`/`steam` квадратные углы и рамки, у `lolitta` декор и свои переменные (`--l-*`),
   `:root[data-anim="off"]` — анимации выключены.
 - Цвета в CSS — через переменные (`var(--accent)`, `var(--accent2)`, `var(--text)`, `var(--muted)`), а не числами.
 - `--accent`/`--accent2` зарегистрированы (`@property … <color>`, styles.css): `getComputedStyle` отдаёт их как `rgb(…)`,
   а не `#rrggbb` — нужен hex (Rust, `#rrggbb`-проверки) — переводи сам.
+- Частицы (themefx.js) рисуются готовыми спрайтами (форма + цвет + размер + свечение — один раз), одним setTransform,
+  стирается только область прошлого кадра, плотность ≤ 1,5; при тяжёлых кадрах `quality` снижает число частиц.
+  Не возвращай shadowBlur и drawImage(SVG) в покадровый цикл — это и было «съедает FPS».
+- Формат .wmt: строгое описание — src/core/docs/WMT-FORMAT.md (подмодуль whisper-core, раздел 5: effects, layer, particles,
+  события и курсор), гайд для авторов — docs/THEMES.md. Новое в settings / CSS темы — правь оба (и коммить подмодуль отдельно).
+- Длинные списки (main.js renderList): первые 70 строк сразу, остальное — в свободное время (requestIdleCallback, ≤6 мс)
+  и при прокрутке к краю (onListScroll); строка — клон заготовки rowTpl; > 300 строк — `.list.biglist` с
+  content-visibility: auto (не для .playing / :hover / .flash / .dragging). Перерисовка с сохранением прокрутки —
+  renderList(…, first = keepScrollRows(main)), иначе окно отскакивает наверх.
 - Производительность: бесконечные анимации `box-shadow` / `text-shadow` / `background-position` / зарегистрированных
   свойств (`@property`) считает основной поток и каждый кадр перерисовывает элемент (и стекло `.panel` с backdrop-filter
   под ним) — в встроенных стилях им задан `steps(…)` ~15–20 шагов/с. Плавно на 60 кадрах — только `transform`/`opacity`.
@@ -395,6 +463,17 @@ id в файле ≠ в списке, битые темы, файлы вне с�
   "buttons": { "power": "wave" },     // ≤16; имя [a-z][a-z0-9-]{0,23} → #thBtns > button.thbtn[data-th="power"], .on — включено
   "console": { "prompt": "user@whisper:~$", "banner": "Привет!\nhelp — команды" } }  // или "console": true
 ```
+- **Эффекты темы** (снег, гирлянда…) — пометка в CSS `:root[data-fx-snow="on"] …` и/или `"effects": { "snow": { "label", "hint",
+  "default" } }` (≤12; `"options"` — старое имя, читается так же). theme.js → `setHooks` собирает список (`themeHooks[id].effects`,
+  подписи без label — `FX_NAMES`), main.js → `applyThemeEffects` ставит на `<html>` `data-fx-<имя>="on|off"` (только выбор пользователя;
+  движение темы включают под `data-anim="on"`), выбор — `cfg.s[стиль].fx` (`themeFx` / `themeFxSet`). Выключатели и интро — окно «Настроить тему…» (`#thSetBtn` в
+  #fxCard, theme.js → `openThemeSetup(id)`: выбор темы, эффекты, интро; сводка под кнопкой — `paintIntro`). Пример — docs/examples/new-year.wmt.
+- **Живые темы** (themefx.js, docs/THEMES.md «Живые темы»): события и курсор включаются сами, если CSS темы упоминает
+  `.ev-` / `.w-tap` / `--tap-` или `--mx` / `--my` / `--mpx` / `--mpy`; `"layer": { "count": ≤64, "place": "front|back" }` — `#fxLayer i`
+  с `--i --r1 --r2 --r3`; `"particles": { имя: { on, from, shape, count, rate, colors, size, speed, direction, spread, gravity, drag,
+  life, spin, sway, fade, glow, blend } }` (≤8 стаек, ≤500 частиц на экране, границы — `particleSpec` в theme.js); каждая стайка — ещё и эффект (выключатель).
+  Картинки частиц — `window.wmtAssetUrl(id, имя)` (theme.js). Новое событие для тем — добавь `ev("имя")` и `burst("имя")` в themefx.js
+  и в списки `P_ON` (theme.js) и таблицу в THEMES.md.
 - Действия `buttons`: `wave play next prev like dislike shuffle repeat mute vol-up vol-down full sleep more
   page:wave page:likes page:stats page:settings page:profile close minimize maximize drag`. Кнопка темы просто нажимает
   кнопку приложения (и так же `:disabled`); `drag` тянет окно (main.js → `winDragFrom`).
@@ -457,7 +536,7 @@ CSS без привязки к стилю, после встроенного. Р
 ### Интро (`whisper-intro`)
 Заставка при запуске (ASCII, Madk1d, lazzy2wice). theme.js → `playIntro()`: CSS секции привязывается к стилю
 (`TC.introCss`) и ставится в `DynCss("wmt-intro")` на `duration` (+0,3 с), потом снимается; щелчок или клавиша —
-сразу. Не показывается: выключено (Оформление → Стиль оформления, внизу; localStorage `ym_intro` `{ on, off: [id] }`), анимации
+сразу. Не показывается: выключено (Оформление → «Эффекты и анимации» → «Настроить тему…»; localStorage `ym_intro` `{ on, off: [id] }`), анимации
 выключены, `prefers-reduced-motion`. Пока идёт — `html.intro-on`. Интро в `css whisper-music` выключить нельзя —
 в новых темах только отдельной секцией. Подробно — WMT-FORMAT.md, раздел 5б.
 

@@ -9,11 +9,14 @@ mod desktop;
 #[path = "../../src/core/rust/discord.rs"]
 mod discord;
 mod download;
+mod edges;
 mod engine;
+mod export;
 mod fonts;
 mod hotkeys;
 mod lyrics;
 mod mini;
+mod mixer;
 mod net;
 mod notify;
 #[path = "../../src/core/rust/obs.rs"]
@@ -225,8 +228,27 @@ fn nav_allowed(label: &str, url: &tauri::Url) -> bool {
     }
 }
 
+/// Параметры движка окна (WebView2) — до создания первого окна, одни на все окна (иначе WebView2 откажется создать
+/// второе окно с другими параметрами). Переменная окружения действует на все окна сразу.
+///
+/// AudioServiceOutOfProcess выключен: обычно звук играет отдельный процесс WebView2 в песочнице (внук приложения),
+/// и «Захват звука приложения» в OBS (захват по дереву процессов, Windows 10 2004+) к нему подключается, но тишина.
+/// Без него звук идёт из браузерного процесса WebView2 — прямого потомка приложения, и захват его слышит.
+/// msWebOOUI, msPdfOOUI, msSmartScreenProtection — то, что Tauri выключает сам: значение переменной заменяет его
+/// список, поэтому повторяем его целиком. Своё значение переменной (для отладки) не трогаем.
+fn webview_args() {
+    #[cfg(windows)]
+    if std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,AudioServiceOutOfProcess",
+        );
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    webview_args();
     tauri::Builder::default()
         // Должен быть первым плагином. Повторный запуск (ярлык, меню приложений) не плодит копии,
         // а достаёт уже запущенное окно — в том числе из трея. В Linux это ещё и страховка:
@@ -302,6 +324,8 @@ pub fn run() {
             webmode::web_blob_get,
             audiodev::audio_devices_unlock,
             audiodev::audio_endpoints,
+            // края трека: тишина и громкость начала/конца (edges.rs, transitions.js)
+            edges::audio_edges,
             // свой звуковой движок (эксклюзивный WASAPI)
             engine::engine_available,
             engine::engine_load,
@@ -348,8 +372,10 @@ pub fn run() {
             backup::snap_settings_read,
             backup::recovery_status,
             bg::bg_dir_pick,
+            bg::audio_pick,
             bg::bg_read,
             theme::theme_save,
+            export::export_save,
             // Whisper Archive: у каждой операции своя команда, путь собирает Rust (src/core/rust/whisper/)
             whisper::wa_token_exists,
             whisper::wa_token_set,
@@ -366,6 +392,9 @@ pub fn run() {
             // «Студия» (studio.rs): обрезка треков, свои версии с локальным лайком, отправка в архив
             studio::studio_source,
             studio::studio_info,
+            studio::drop_audio_info,
+            studio::drop_audio_local,
+            studio::drop_audio_archive,
             studio::studio_save,
             studio::studio_list,
             studio::studio_update,
@@ -448,6 +477,7 @@ pub fn run() {
                 Menu::with_items(app, &[&show, &mini_item, &prev, &toggle, &next, &sep, &quit])?
             };
             webmode::init(app.handle());
+            mixer::init(app.handle()); // в микшере громкости — имя и значок приложения, а не «Microsoft Edge WebView2»
             app.manage(TrayItems {
                 items: vec![
                     (prev, "Предыдущий", "Previous"),

@@ -185,6 +185,7 @@
   document.addEventListener("dblclick", (e) => {
     const t = e.target;
     if (!t.closest?.(".side, .player") || t.closest(EMPTY_SKIP)) return;
+    if (document.documentElement.classList.contains("side-edit")) return;     // переставляют кнопки (panels.js)
     window.getSelection?.()?.removeAllRanges();
     toggleSuper();
   });

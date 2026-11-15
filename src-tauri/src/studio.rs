@@ -44,6 +44,28 @@ pub struct Item {
     pub liked_at: u64,
     pub created: u64,
     pub size: u64,
+    /// расширение файла (mp3 у обрезок; свой трек, перетащенный в окно, — как был: flac, m4a, ogg, wav…)
+    #[serde(default = "mp3_ext")]
+    pub ext: String,
+    /// откуда версия: «cut» — обрезка трека Яндекса, «import» — свой файл (перетащили в окно, dropin.js),
+    /// «replace» — свой файл вместо трека Яндекса src_id: на этом компьютере играет он (main.js → studioReplacement)
+    #[serde(default = "cut_origin")]
+    pub origin: String,
+}
+
+fn mp3_ext() -> String {
+    "mp3".into()
+}
+
+fn cut_origin() -> String {
+    "cut".into()
+}
+
+/// Расширения, с которыми студия хранит файлы (имя файла собирается только из них и номера версии).
+const EXTS: [&str; 7] = ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"];
+
+fn ext_ok(e: &str) -> &'static str {
+    EXTS.iter().find(|x| x.eq_ignore_ascii_case(e)).copied().unwrap_or("mp3")
 }
 
 static LOCK: Mutex<()> = Mutex::new(());
@@ -66,6 +88,11 @@ fn new_id() -> Result<String, String> {
 
 fn file_of(d: &Path, id: &str) -> PathBuf {
     d.join(format!("{id}.mp3"))
+}
+
+/// Файл версии с её расширением.
+fn path_of(d: &Path, it: &Item) -> PathBuf {
+    d.join(format!("{}.{}", it.id, ext_ok(&it.ext)))
 }
 
 fn now_secs() -> u64 {
@@ -407,7 +434,10 @@ pub async fn studio_save(
         let tmp = d.join(format!("{id}.part"));
         std::fs::write(&tmp, &cut).map_err(|e| format!("не удалось записать файл: {e}"))?;
         std::fs::rename(&tmp, file_of(&d, &id)).map_err(|e| format!("не удалось записать файл: {e}"))?;
-        let item = Item { id, src_id, title, meta, start_ms: s, end_ms: e, duration_ms: e - s, liked: false, liked_at: 0, created: now_secs(), size: cut.len() as u64 };
+        let item = Item {
+            id, src_id, title, meta, start_ms: s, end_ms: e, duration_ms: e - s, liked: false, liked_at: 0,
+            created: now_secs(), size: cut.len() as u64, ext: mp3_ext(), origin: cut_origin(),
+        };
         items.insert(0, item.clone());
         if let Err(err) = save_index(&d, &items) {
             let _ = std::fs::remove_file(file_of(&d, &item.id));
@@ -425,7 +455,7 @@ pub fn studio_list(app: AppHandle) -> Result<Vec<Item>, String> {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let d = dir(&app)?;
     let all = load_index(&d);
-    let live: Vec<Item> = all.iter().filter(|i| file_of(&d, &i.id).is_file()).cloned().collect();
+    let live: Vec<Item> = all.iter().filter(|i| path_of(&d, i).is_file()).cloned().collect();
     if live.len() != all.len() {
         let _ = save_index(&d, &live);
     }
@@ -469,9 +499,11 @@ pub fn studio_delete(app: AppHandle, id: String) -> Result<(), String> {
     }
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let d = dir(&app)?;
-    let items: Vec<Item> = load_index(&d).into_iter().filter(|i| i.id != id).collect();
+    let (gone, items): (Vec<Item>, Vec<Item>) = load_index(&d).into_iter().partition(|i| i.id == id);
     save_index(&d, &items)?;
-    let _ = std::fs::remove_file(file_of(&d, &id));
+    for it in &gone {
+        let _ = std::fs::remove_file(path_of(&d, it));
+    }
     Ok(())
 }
 
@@ -481,10 +513,8 @@ pub fn open(app: &AppHandle, id: &str) -> Option<(std::fs::File, PathBuf, u64)> 
         return None;
     }
     let d = dir(app).ok()?;
-    if !load_index(&d).iter().any(|i| i.id == id) {
-        return None;
-    }
-    let p = file_of(&d, id);
+    let it = load_index(&d).into_iter().find(|i| i.id == id)?;
+    let p = path_of(&d, &it);
     if !std::fs::symlink_metadata(&p).ok()?.file_type().is_file() {
         return None;
     }
@@ -499,7 +529,7 @@ fn read_item_file(app: &AppHandle, id: &str) -> Result<(Item, Vec<u8>), String> 
     }
     let d = dir(app)?;
     let item = load_index(&d).into_iter().find(|i| i.id == id).ok_or("Такой версии нет")?;
-    let bytes = std::fs::read(file_of(&d, id)).map_err(|e| format!("файл версии не читается: {e}"))?;
+    let bytes = std::fs::read(path_of(&d, &item)).map_err(|e| format!("файл версии не читается: {e}"))?;
     Ok((item, bytes))
 }
 
@@ -507,17 +537,18 @@ fn read_item_file(app: &AppHandle, id: &str) -> Result<(Item, Vec<u8>), String> 
 #[tauri::command]
 pub async fn studio_export(app: AppHandle, id: String) -> Result<Option<String>, String> {
     let (item, bytes) = read_item_file(&app, &id)?;
-    let name = format!("{}.mp3", upload::clean_stem(&item.title));
+    let ext = ext_ok(&item.ext);
+    let name = format!("{}.{ext}", upload::clean_stem(&item.title));
     let a = app.clone();
     let picked = tauri::async_runtime::spawn_blocking(move || {
-        a.dialog().file().set_title("Сохранить версию").set_file_name(name).add_filter("MP3", &["mp3"]).blocking_save_file()
+        a.dialog().file().set_title("Сохранить версию").set_file_name(name).add_filter(ext.to_uppercase(), &[ext]).blocking_save_file()
     })
     .await
     .map_err(|e| e.to_string())?;
     let Some(fp) = picked else { return Ok(None) };
     let mut p = fp.into_path().map_err(|e| e.to_string())?;
-    if p.extension().map(|e| !e.eq_ignore_ascii_case("mp3")).unwrap_or(true) {
-        p.set_extension("mp3");
+    if p.extension().map(|e| !e.eq_ignore_ascii_case(ext)).unwrap_or(true) {
+        p.set_extension(ext);
     }
     std::fs::write(&p, &bytes).map_err(|e| format!("Не удалось записать файл: {e}"))?;
     Ok(Some(p.to_string_lossy().into_owned()))
@@ -536,7 +567,20 @@ pub async fn studio_to_archive(
 ) -> Result<WaResponse, String> {
     let up = upload::begin(album_id.as_deref(), cover_bytes.as_ref().map(|b| b.len()))?;
     let (_, audio) = read_item_file(&app, &id)?;
-    let track = upload::TrackFile::new(&file_name, &audio).ok_or_else(|| "Файл версии в неизвестном формате".to_string())?;
+    send_to_archive(up, &audio, &file_name, album_id, album_title, cover_url, cover_bytes).await
+}
+
+/// Файл → в альбом архива (album_id) или в новый приватный альбом (album_title + обложка: адрес Яндекса или картинка).
+async fn send_to_archive(
+    up: upload::Upload,
+    audio: &[u8],
+    file_name: &str,
+    album_id: Option<String>,
+    album_title: Option<String>,
+    cover_url: Option<String>,
+    cover_bytes: Option<Vec<u8>>,
+) -> Result<WaResponse, String> {
+    let track = upload::TrackFile::new(file_name, audio).ok_or_else(|| "Файл в неизвестном формате — подойдут mp3, flac, m4a, ogg, wav".to_string())?;
     if let Some(aid) = album_id {
         return up.to_album(&aid, track).await;
     }
@@ -547,6 +591,247 @@ pub async fn studio_to_archive(
         (None, None) => return Err("Для нового альбома нужна обложка".into()),
     };
     up.new_album(&title, &cover, track).await
+}
+
+// ---------------------------------------------------------------------------
+// трек, перетащенный в окно (dropin.js): файл выбрал пользователь, Rust читает его по номеру из списка (bg.rs)
+// ---------------------------------------------------------------------------
+
+const MAX_DROP: u64 = upload::MAX_TRACK_UPLOAD as u64;
+
+/// Вид аудиофайла по первым байтам (не по расширению): mp3, flac, m4a, ogg/opus, wav. None — не звук.
+fn audio_ext(b: &[u8]) -> Option<&'static str> {
+    if b.starts_with(b"fLaC") {
+        return Some("flac");
+    }
+    if b.len() > 12 && &b[0..4] == b"RIFF" && &b[8..12] == b"WAVE" {
+        return Some("wav");
+    }
+    if b.starts_with(b"OggS") {
+        return Some(if b.windows(8).take(200).any(|w| w == b"OpusHead") { "opus" } else { "ogg" });
+    }
+    if b.len() > 12 && &b[4..8] == b"ftyp" {
+        return Some("m4a");
+    }
+    if b.len() > 2 && b[0] == 0xFF && (b[1] & 0xF6) == 0xF0 {
+        return Some("aac");
+    }
+    if b.starts_with(b"ID3") || !frames(b).is_empty() {
+        return Some("mp3");
+    }
+    None
+}
+
+/// Текст тега ID3v2 (кодировка — первый байт кадра).
+fn id3_text(v: &[u8]) -> String {
+    let (enc, d) = match v.split_first() {
+        Some((e, d)) => (*e, d),
+        None => return String::new(),
+    };
+    let s = match enc {
+        1 | 2 => {
+            let be = enc == 2 || d.starts_with(&[0xFE, 0xFF]);
+            let d = if d.starts_with(&[0xFF, 0xFE]) || d.starts_with(&[0xFE, 0xFF]) { &d[2..] } else { d };
+            let u: Vec<u16> = d.chunks_exact(2).map(|c| if be { u16::from_be_bytes([c[0], c[1]]) } else { u16::from_le_bytes([c[0], c[1]]) }).collect();
+            String::from_utf16_lossy(&u)
+        }
+        3 => String::from_utf8_lossy(d).into_owned(),
+        _ => d.iter().map(|&c| c as char).collect(), // ISO-8859-1
+    };
+    clean_text(s.split('\0').next().unwrap_or(""), 200)
+}
+
+/// Название, исполнитель, альбом из тегов: ID3v2.3/2.4 (mp3) или Vorbis comment (flac).
+fn audio_tags(b: &[u8]) -> (String, String, String) {
+    let (mut t, mut a, mut al) = (String::new(), String::new(), String::new());
+    if b.len() > 10 && &b[0..3] == b"ID3" && (b[3] == 3 || b[3] == 4) {
+        let end = id3_len(b).min(b.len());
+        let v4 = b[3] == 4;
+        let mut i = 10;
+        while i + 10 <= end {
+            let id = &b[i..i + 4];
+            if id[0] == 0 {
+                break;
+            }
+            let sz = &b[i + 4..i + 8];
+            let n = if v4 {
+                ((sz[0] as usize & 0x7F) << 21) | ((sz[1] as usize & 0x7F) << 14) | ((sz[2] as usize & 0x7F) << 7) | (sz[3] as usize & 0x7F)
+            } else {
+                u32::from_be_bytes([sz[0], sz[1], sz[2], sz[3]]) as usize
+            };
+            let (s0, s1) = (i + 10, (i + 10).saturating_add(n));
+            if s1 > end || n == 0 {
+                break;
+            }
+            match id {
+                b"TIT2" => t = id3_text(&b[s0..s1]),
+                b"TPE1" => a = id3_text(&b[s0..s1]),
+                b"TALB" => al = id3_text(&b[s0..s1]),
+                _ => {}
+            }
+            i = s1;
+        }
+    } else if b.starts_with(b"fLaC") {
+        let mut i = 4;
+        while i + 4 <= b.len() {
+            let last = b[i] & 0x80 != 0;
+            let kind = b[i] & 0x7F;
+            let n = ((b[i + 1] as usize) << 16) | ((b[i + 2] as usize) << 8) | b[i + 3] as usize;
+            let (s0, s1) = (i + 4, i + 4 + n);
+            if s1 > b.len() {
+                break;
+            }
+            if kind == 4 {
+                let blk = &b[s0..s1];
+                let rd = |o: usize| blk.get(o..o + 4).map(|x| u32::from_le_bytes([x[0], x[1], x[2], x[3]]) as usize);
+                if let Some(vl) = rd(0) {
+                    let mut o = 4 + vl;
+                    let cnt = rd(o).unwrap_or(0).min(1000);
+                    o += 4;
+                    for _ in 0..cnt {
+                        let Some(l) = rd(o) else { break };
+                        let Some(kv) = blk.get(o + 4..o + 4 + l) else { break };
+                        o += 4 + l;
+                        let kv = String::from_utf8_lossy(kv);
+                        if let Some((k, v)) = kv.split_once('=') {
+                            match k.to_ascii_uppercase().as_str() {
+                                "TITLE" if t.is_empty() => t = clean_text(v, 200),
+                                "ARTIST" if a.is_empty() => a = clean_text(v, 200),
+                                "ALBUM" if al.is_empty() => al = clean_text(v, 200),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+            if last {
+                break;
+            }
+            i = s1;
+        }
+    }
+    (t, a, al)
+}
+
+fn read_drop(app: &AppHandle, pick: usize) -> Result<(Vec<u8>, String, &'static str), String> {
+    let (bytes, name) = crate::bg::read_picked(app, pick, MAX_DROP)?;
+    let ext = audio_ext(&bytes).ok_or_else(|| format!("«{name}» не похож на аудиофайл — подойдут mp3, flac, m4a, ogg, wav"))?;
+    Ok((bytes, name, ext))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropInfo {
+    pub name: String,
+    pub size: u64,
+    pub ext: String,
+    /// длительность (мс) — только у mp3 (по кадрам); для остальных её узнаёт интерфейс
+    pub duration_ms: u64,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+}
+
+/// Что за трек перетащили: формат, размер, теги (название, исполнитель, альбом).
+#[tauri::command]
+pub async fn drop_audio_info(app: AppHandle, pick: usize) -> Result<DropInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (b, name, ext) = read_drop(&app, pick)?;
+        let (title, artist, album) = audio_tags(&b);
+        Ok(DropInfo {
+            name,
+            size: b.len() as u64,
+            ext: ext.into(),
+            duration_ms: if ext == "mp3" { duration_ms(&b) } else { 0 },
+            title,
+            artist,
+            album,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Перетащенный трек — к себе на этот компьютер (только здесь, файл в папке студии).
+///  * replaces — номер трека Яндекса: файл становится его заменой (origin «replace»): трек остаётся тем же треком
+///    (лайк ставится ему самому — это делает интерфейс), а играет вместо него этот файл. Прошлая замена того же трека
+///    удаляется: у трека одна замена.
+///  * без replaces — свой трек (origin «import»); liked — сразу в «Лайки» (по умолчанию да).
+/// meta — как у версий (исполнители, обложка, альбом: от совпавшего трека Яндекса, если нашёлся).
+#[tauri::command]
+pub async fn drop_audio_local(
+    app: AppHandle,
+    pick: usize,
+    title: String,
+    meta: serde_json::Value,
+    duration: Option<u64>,
+    replaces: Option<String>,
+    liked: Option<bool>,
+) -> Result<Item, String> {
+    let replaces = match replaces {
+        Some(r) => Some(track_num(&r)?),
+        None => None,
+    };
+    let title = clean_text(&title, 200);
+    if title.is_empty() {
+        return Err("Дай треку название".into());
+    }
+    let meta = clean_meta(meta);
+    tauri::async_runtime::spawn_blocking(move || {
+        let (b, _, ext) = read_drop(&app, pick)?;
+        let dur = if ext == "mp3" { duration_ms(&b) } else { duration.unwrap_or(0).min(24 * 3600 * 1000) };
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let d = dir(&app)?;
+        let mut items = load_index(&d);
+        if items.len() >= MAX_ITEMS {
+            return Err(format!("В студии уже {MAX_ITEMS} треков — удали ненужные"));
+        }
+        let now = now_secs();
+        let like = replaces.is_none() && liked.unwrap_or(true);
+        // у трека одна замена: прошлая (если была) уходит вместе с файлом
+        if let Some(src) = &replaces {
+            let (old, keep): (Vec<Item>, Vec<Item>) = items.drain(..).partition(|i| i.origin == "replace" && &i.src_id == src);
+            items = keep;
+            for it in &old {
+                let _ = std::fs::remove_file(path_of(&d, it));
+            }
+        }
+        let item = Item {
+            id: new_id()?, src_id: replaces.clone().unwrap_or_default(), title, meta, start_ms: 0, end_ms: dur, duration_ms: dur,
+            liked: like, liked_at: if like { now } else { 0 }, created: now, size: b.len() as u64, ext: ext.into(),
+            origin: if replaces.is_some() { "replace".into() } else { "import".into() },
+        };
+        let tmp = d.join(format!("{}.part", item.id));
+        std::fs::write(&tmp, &b).map_err(|e| format!("не удалось записать файл: {e}"))?;
+        std::fs::rename(&tmp, path_of(&d, &item)).map_err(|e| format!("не удалось записать файл: {e}"))?;
+        items.insert(0, item.clone());
+        if let Err(err) = save_index(&d, &items) {
+            let _ = std::fs::remove_file(path_of(&d, &item));
+            return Err(err);
+        }
+        Ok(item)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Перетащенный трек — в Whisper Archive: в свой альбом (album_id) или в новый (album_title + обложка).
+/// file_name — имя трека в архиве («Исполнитель - Название»: так архив подменяет им версию Яндекса).
+#[tauri::command]
+pub async fn drop_audio_archive(
+    app: AppHandle,
+    pick: usize,
+    file_name: String,
+    album_id: Option<String>,
+    album_title: Option<String>,
+    cover_url: Option<String>,
+    cover_bytes: Option<Vec<u8>>,
+) -> Result<WaResponse, String> {
+    let up = upload::begin(album_id.as_deref(), cover_bytes.as_ref().map(|b| b.len()))?;
+    let a = app.clone();
+    let (b, _, _) = tauri::async_runtime::spawn_blocking(move || read_drop(&a, pick)).await.map_err(|e| e.to_string())??;
+    send_to_archive(up, &b, &file_name, album_id, album_title, cover_url, cover_bytes).await
 }
 
 /// «Слушать вместе»: своя версия — во временный кэш комнаты для гостей (как wa_room_cache_track, только файл свой).
@@ -612,6 +897,37 @@ mod tests {
             b.extend(frame(false));
         }
         assert_eq!(frames(&b).len(), 10);
+    }
+
+    #[test]
+    fn drop_kinds_and_tags() {
+        assert_eq!(audio_ext(&mp3(10)), Some("mp3"));
+        assert_eq!(audio_ext(b"fLaC\0\0\0\0"), Some("flac"));
+        assert_eq!(audio_ext(b"RIFF\0\0\0\0WAVEfmt "), Some("wav"));
+        assert_eq!(audio_ext(b"just some text, not audio"), None);
+        // ID3v2.3: TIT2 (latin-1) и TPE1 (UTF-16 с BOM)
+        let mut tag = Vec::new();
+        let mut frame = |id: &[u8], body: &[u8]| {
+            tag.extend_from_slice(id);
+            tag.extend_from_slice(&(body.len() as u32).to_be_bytes());
+            tag.extend_from_slice(&[0, 0]);
+            tag.extend_from_slice(body);
+        };
+        frame(b"TIT2", b"\0Song Name");
+        let mut a = vec![1u8, 0xFF, 0xFE];
+        for u in "Группа".encode_utf16() {
+            a.extend_from_slice(&u.to_le_bytes());
+        }
+        frame(b"TPE1", &a);
+        let n = tag.len();
+        let mut b = b"ID3\x03\0\0".to_vec();
+        b.extend_from_slice(&[(n >> 21) as u8 & 0x7F, (n >> 14) as u8 & 0x7F, (n >> 7) as u8 & 0x7F, n as u8 & 0x7F]);
+        b.extend(tag);
+        b.extend(mp3(5)[15..].iter());
+        let (t, ar, _) = audio_tags(&b);
+        assert_eq!((t.as_str(), ar.as_str()), ("Song Name", "Группа"));
+        assert_eq!(ext_ok("FLAC"), "flac");
+        assert_eq!(ext_ok("../x"), "mp3");
     }
 
     #[test]

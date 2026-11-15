@@ -232,7 +232,9 @@
   $s("qlSeg")?.addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (c && c.dataset.v !== cfgS.quality) setQuality(c.dataset.v); });
   $s("fmtRefresh")?.addEventListener("click", () => paintFmt(true));
   const page = $s("settingsPage");
-  if (page) new MutationObserver(() => paintFmt(true)).observe(page, { attributes: true, attributeFilter: ["hidden", "data-tab"] });
+  // «Сведения о формате» — заново, только когда вкладка «Звук» открылась (раньше опрос устройств шёл при любом
+  // открытии и закрытии настроек и смене вкладки — лишняя работа на каждом переходе)
+  if (page) new MutationObserver(() => { if (!page.hidden && page.dataset.tab === "out") paintFmt(true); }).observe(page, { attributes: true, attributeFilter: ["hidden", "data-tab"] });
   navigator.mediaDevices?.addEventListener?.("devicechange", () => { epsAt = 0; paintFmt(); });
   paintNorm(); paintQual();
 

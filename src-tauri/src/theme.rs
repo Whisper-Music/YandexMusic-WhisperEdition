@@ -7,7 +7,7 @@ use tauri_plugin_dialog::DialogExt;
 
 const MAX_THEME: usize = 64 * 1024 * 1024; // как MAX_FILE в src/wmt.js (аудит F-07)
 
-fn file_stem(name: &str) -> String {
+pub(crate) fn file_stem(name: &str) -> String {
     let s: String = name
         .chars()
         .map(|c| if c.is_control() || "<>:\"/\\|?*".contains(c) { ' ' } else { c })
@@ -21,7 +21,7 @@ fn file_stem(name: &str) -> String {
 }
 
 /// «%D0%9A%D0%BE…» -> «Ко…» (имя темы приходит в заголовке, где можно только ASCII)
-fn pct_decode(s: &str) -> String {
+pub(crate) fn pct_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;

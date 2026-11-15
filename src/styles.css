@@ -112,6 +112,10 @@ button { font: inherit; color: var(--text); cursor: pointer; border: 0; backgrou
 .list li { display: flex; align-items: center; gap: 14px; padding: 7px 10px; border-radius: 14px; cursor: pointer; transition: background .12s; }
 .list li:hover { background: rgba(255,255,255,.08); }
 .list li.playing { background: rgba(255,255,255,.1); }
+/* длинный список (больше 300 строк, main.js renderList): строки вне экрана не раскладываются и не рисуются —
+   прокрутка тысяч лайков не тормозит. auto — запоминает настоящую высоту строки, когда та хоть раз показалась.
+   Играющая и подсвеченная строки — как обычно: у тем на них бывает свечение за краями строки */
+.list.biglist > li:not(.playing):not(.flash):not(.dragging):not(:hover) { content-visibility: auto; contain-intrinsic-size: auto 62px; }
 .list li.playing .t { color: var(--accent); text-shadow: 0 0 12px color-mix(in srgb, var(--glow-c) 70%, transparent); }
 .list img, .cover { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; background: rgba(255,255,255,.08); }
 .t { display: block; font-weight: 500; }
@@ -793,6 +797,21 @@ a { color: var(--accent); }
 }
 
 .stgrid { min-height: 96px; }
+/* закрепить жанр: звёздочка в углу пункта — при наведении, у закреплённого всегда */
+.stgrid { padding: 6px 6px 2px 0; }
+.stgrid .pill { position: relative; }
+.stgrid .ststar {
+  position: absolute; top: -7px; right: -7px; z-index: 1; width: 19px; height: 19px; border-radius: 50%;
+  display: grid; place-items: center; font-style: normal; font-size: 12px; line-height: 1; cursor: pointer;
+  color: var(--on-accent, #0b0618); background: var(--accent2); text-shadow: none;
+  opacity: 0; transform: scale(.6); transition: opacity .12s, transform .12s; pointer-events: none;
+}
+.stgrid .pill:hover .ststar, .stgrid .pill:focus-visible .ststar { opacity: 1; transform: none; pointer-events: auto; }
+.stgrid .ststar.on { opacity: 1; transform: none; pointer-events: auto; width: 15px; height: 15px; top: -5px; right: -5px; font-size: 10px; }
+.stgrid .pill:hover .ststar.on { width: 19px; height: 19px; top: -7px; right: -7px; font-size: 12px; }
+.stgrid .ststar:hover { filter: brightness(1.2); }
+.stgrid .stbreak { flex: 1 0 100%; height: 1px; margin: 3px 0; background: rgba(255,255,255,.1); }
+:root[data-anim="off"] .stgrid .ststar { transition: none; }
 .stmsg { flex: 1 0 100%; margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
 
 /* кнопки справа в шапке («Моя волна по артисту», «Скачать», «Закрепить») — одной группой у правого края:
@@ -1766,6 +1785,9 @@ a { color: var(--accent); }
 .tmenu .mback { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 50%; flex: none; color: var(--muted); }
 .tmenu .msep { border: 0; border-top: 1px solid rgba(255,255,255,.1); margin: 4px 6px; }
 .tmenu .mnote { margin: 4px 10px 6px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+/* подзаголовок группы сам её отделяет: линия перед ним лишняя, вместо неё — небольшой отступ */
+.tmenu .msep:has(+ .mnote) { display: none; }
+.tmenu > :not(.msep) + .mnote { margin-top: 10px; }
 .tmenu .mscroll { max-height: min(46vh, 330px); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
 .tmenu .mpl { padding: 6px 10px; }
 .tmenu .mpl small { flex: none; font-size: 11px; color: var(--muted); }
@@ -2108,6 +2130,23 @@ body.vizfull-on #dim { opacity: .4; }
 .ccgrp.ccbulk > summary { flex-wrap: wrap; row-gap: 2px; }
 .ccgrp.ccbulk > summary small { flex-basis: 100%; order: 3; }
 .ccrow.mixed > small { display: inline; font-style: italic; }
+/* «живые» темы (themefx.js): слой украшений и холст частиц — никогда не мешают щелчкам.
+   Сзади — сразу после #dim (над обоями, под окном), спереди — над окном, но под меню (60), подсказками (70) и окнами (80) */
+.fxlayer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; contain: strict; }
+.fxlayer[data-place="front"] { z-index: 50; }
+.fxlayer i { position: absolute; display: block; }
+.fxcanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 55; pointer-events: none; }
+/* окно «Настроить тему…» (theme.js → openThemeSetup): выбор темы сверху, ниже — эффекты и интро */
+.thsetpick { margin: 0 0 14px; flex-wrap: wrap; gap: 6px; }
+.thsetsec { display: flex; flex-direction: column; gap: 10px; }
+.thsetsec + .thsetsec { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.08); }
+.thsetsec h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.thsetsec .status { margin: 0; }
+.thsetrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.thsetempty { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+/* строка, на которой окно открыли правым щелчком по элементу («Цвета этого места…») */
+.ccrow.ccflash { animation: ccFlash 1.6s ease-out; box-shadow: inset 2px 0 0 var(--accent2); }
+@keyframes ccFlash { from { background: color-mix(in srgb, var(--accent2) 42%, transparent); } to { background: transparent; } }
 .ccrow.mixed input[type=color] { opacity: .8; }
 
 /* ---------- маленькое окно: верхняя, боковая и нижняя панели видны целиком в любом стиле ---------- */
@@ -2401,6 +2440,57 @@ body.room-guest #seek, body.room-guest #fSeek { cursor: default; }
 .lsday { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
 .lsday i { width: 100%; border-radius: 4px 4px 0 0; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent2) 60%, transparent)); }
 .lsday small { font-size: 10px; color: var(--muted); white-space: nowrap; }
+/* исполнители: имя, «треков · прослушиваний», полоска; справа — время и доля */
+.lsartist { padding: 5px 6px; }
+.lsartist img { width: 40px; height: 40px; }
+.lsartist img.rnd { border-radius: 50%; }
+.lsval2 b { color: var(--text); }
+.lsartist .lsmid { gap: 2px; }
+.lsartist .lsmid > span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lsartist .lsbar { height: 3px; margin-top: 3px; }
+.lsval2 { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex: none; line-height: 1.15; }
+.lsval2 b { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.lsval2 small { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* кольца (жанры, время суток): слева кольцо с подписью в середине, справа легенда */
+.lsperiod .lsexport { margin-left: auto; }
+.lspie { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; align-items: center; margin-top: 6px; }
+.lsring { position: relative; width: 150px; aspect-ratio: 1; }
+.lsring svg { display: block; width: 100%; height: 100%; }
+.lsring circle { transition: stroke-width .18s ease; }
+.lsring circle:not(.lsringbg):hover { stroke-width: 6.4; }
+.lsringbg { stroke: rgba(255,255,255,.07); }
+.lsringmid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.lsringmid b { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.lsringmid small { font-size: 11.5px; color: var(--muted); }
+.lspielegend { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.lsleg.click { cursor: pointer; border-radius: 8px; margin: -3px -6px; padding: 3px 6px; }
+.lsleg.click:hover { background: rgba(255,255,255,.06); }
+@media (max-width: 620px) { .lspie { grid-template-columns: minmax(0, 1fr); justify-items: center; } .lspielegend { width: 100%; } }
+/* «кто ты по жанрам» — над кольцом жанров */
+.lswho { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; margin: 2px 0 8px; border-radius: 12px; background: linear-gradient(100deg, color-mix(in srgb, var(--accent) 26%, transparent), color-mix(in srgb, var(--accent2) 14%, transparent)); }
+.lswho small { font-size: 12px; color: var(--muted); }
+.lswho b { font-size: 21px; font-weight: 800; line-height: 1.2; }
+.lswho em { font-style: normal; font-size: 12.5px; color: var(--muted); }
+.lswho.locked { background: rgba(255,255,255,.05); }
+.lswho.locked b { font-size: 15px; font-weight: 600; }
+.lswho.locked .lsbar { margin: 5px 0 2px; }
+/* по дням / по месяцам: плитки, время — цифрами на каждой; чем больше слушалось, тем плитка ярче (--k 0…1) */
+.lstiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; margin-top: 8px; }
+.lstiles.week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.lstiles.months { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+.lstile {
+  aspect-ratio: 1; min-width: 0; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: color-mix(in srgb, var(--accent) calc(var(--k, 0) * 62% + 10%), rgba(255,255,255,.04));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.lstiles.week .lstile, .lstiles.months .lstile { aspect-ratio: auto; height: 64px; }
+.lstile small { font-size: 10.5px; line-height: 1; color: color-mix(in srgb, var(--text) 68%, transparent); white-space: nowrap; }
+.lstile b { font-size: 14px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lstile.zero { background: rgba(255,255,255,.03); }
+.lstile.zero b { font-weight: 400; color: var(--muted); }
+.lstile:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent2) 70%, transparent); }
+:root[data-style="royal"] :is(.lstile, .lswho), :root[data-style="steam"] :is(.lstile, .lswho) { border-radius: 3px; }
+:root[data-anim="off"] .lsring circle { transition: none; }
 @media (max-width: 1100px) { .lsfav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .lshero { grid-column: 1 / -1; } }
 :root[data-style="royal"] :is(.lshero img, .lsmini img:not(.rnd), .lsgicon, .lsrow, .lsstack), :root[data-style="steam"] :is(.lshero img, .lsmini img:not(.rnd), .lsgicon, .lsrow, .lsstack) { border-radius: 3px; }
 
@@ -2452,6 +2542,7 @@ body.cli-on .cli {
 
 /* ---------- аватарка артиста / обложка альбома на весь экран (imgview.js) ---------- */
 .headimg.zoomable { cursor: zoom-in; transition: transform .15s, filter .15s; }
+#fCover.zoomable { cursor: zoom-in; }
 .headimg.zoomable:hover { transform: scale(1.04); filter: brightness(1.08); }
 .imgview {
   position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; cursor: zoom-out;

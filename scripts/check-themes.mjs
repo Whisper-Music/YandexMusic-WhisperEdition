@@ -39,7 +39,57 @@ const norm = (s) => String(s || "").trim().toLowerCase();
 async function openTheme(path) {
   const th = await WMT.open(new Uint8Array(await readFile(path)));
   minimumWarnings(path, th);
+  perfWarnings(path, th);
   return th.manifest;
+}
+const relOf = (path) => { const r = relative(repo, path).replaceAll("\\", "/"); return !r || r.startsWith("..") ? path : r; };
+
+// ---------- производительность ----------
+// Бесконечная анимация чего-то, кроме transform / opacity (translate, rotate, scale), пересчитывается основным
+// потоком и перерисовывает элемент каждый кадр — а если он под стеклом (.panel с backdrop-filter), стекло ещё и
+// заново размывается. Шаги (steps(…)) снижают это до нескольких раз в секунду — их не трогаем.
+// Плавная SMIL-анимация в SVG-картинке (фон через url(asset:…)) тоже растеризует картинку заново каждый кадр.
+const CHEAP = /^(transform|translate|rotate|scale|opacity|offset-distance|visibility|z-index|content)$/;
+function perfWarnings(path, th) {
+  let css = "", st = {};
+  try { css = [th.css("whisper-core"), th.css("whisper-music")].filter(Boolean).join("\n").replace(/\/\*[\s\S]*?\*\//g, ""); st = th.settings("whisper-music") || {}; } catch { return; }
+  const rel = relOf(path), out = [];
+  // какие свойства меняет каждый @keyframes
+  const kf = new Map();
+  for (const m of css.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
+    const props = new Set([...m[2].matchAll(/([\w-]+)\s*:/g)].map((x) => x[1].toLowerCase()).filter((p) => !/^\d/.test(p)));
+    kf.set(m[1], props);
+  }
+  const seen = new Set();
+  for (const [, sel, body] of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+    for (const [, val] of body.matchAll(/(?:^|;)\s*animation\s*:([^;]+)/gi)) {
+      for (const one of val.split(",")) {
+        if (!/\binfinite\b/.test(one) || /steps\s*\(|step-(start|end)/.test(one)) continue;
+        const name = one.trim().split(/\s+/).find((w) => kf.has(w));
+        if (!name || seen.has(name)) continue;
+        const heavy = [...kf.get(name)].filter((p) => !CHEAP.test(p));
+        if (!heavy.length) continue;
+        seen.add(name);
+        out.push(`анимация «${name}» (${sel.trim().slice(0, 60)}) бесконечно меняет ${heavy.join(", ")} — это перерисовка каждый кадр. `
+          + (heavy.includes("background-position") ? "Двигай слой через transform (слой выше на плитку и сдвиг ровно на плитку — без шва)" : "Сделай через transform/opacity или добавь steps(…)"));
+      }
+    }
+  }
+  for (const [name, a] of th.assets || []) {
+    if (!/\.svg$/i.test(name) || !a?.bytes) continue;
+    const svg = new TextDecoder().decode(a.bytes);
+    const smooth = (svg.match(/<animate(Transform|Motion)?\b(?![^>]*calcMode\s*=\s*["']discrete)/g) || []).length;
+    if (!smooth) continue;
+    const blur = /feGaussianBlur|feDropShadow/.test(svg);
+    if (blur || smooth > 6) out.push(`${name}: ${smooth} плавных анимаций внутри SVG${blur ? " и размытие" : ""} — картинка растеризуется заново каждый кадр. `
+      + "Мигание огоньков лучше ступеньками: calcMode=\"discrete\"");
+  }
+  const P = st.particles && typeof st.particles === "object" ? st.particles : {};
+  for (const [k, p] of Object.entries(P)) {
+    if (p?.on === "always" && Number(p.rate) > 30) out.push(`частицы «${k}»: rate ${p.rate} в секунду — много для постоянного потока, хватит 10–20`);
+  }
+  for (const m of out.slice(0, 6)) warn(`${rel}: производительность — ${m}`);
+  if (out.length > 6) warn(`${rel}: производительность — и ещё ${out.length - 6}`);
 }
 
 // ---------- обязательный минимум (то же, что проверяет src/themeguard.js в приложении) ----------

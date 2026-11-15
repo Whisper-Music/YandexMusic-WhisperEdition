@@ -47,20 +47,105 @@
   // соответствующие настройки (и выключить анимации / режим «Скрывать закреплённые» / маскота).
   // Нет поля — как у основы стиля (main.js, feature()).
   const FEATURES = ["glow", "animations", "panelOpacity", "pinHide", "mascot"];
-  function setFeatures(id, settings) {
+  // th — сама тема: по её CSS находятся эффекты, помеченные data-fx-… (см. setHooks)
+  function setFeatures(id, settings, th = null) {
     const f = settings?.features, out = {};
     if (f && typeof f === "object") for (const k of FEATURES) if (typeof f[k] === "boolean") out[k] = f[k];
     themeFeatures[id] = out;
-    setHooks(id, settings);
+    let css = "";
+    try { css = [th?.css(CORE), th?.css(APP)].filter(Boolean).join("\n"); } catch {}
+    setHooks(id, settings, css);
   }
   // ---------- возможности сверх CSS: controls, layout, buttons (main.js → applyHooks) ----------
   // { "controls": { "volume": "knob" }, "layout": "fixed", "buttons": { "power": "wave", "ch-up": "next" }, "console": true }
   // Действия кнопок — только из списка приложения (TH_ACTIONS): тема может нажать кнопку приложения, но не больше.
   const BTN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
-  function setHooks(id, settings) {
+  // подпись эффекта, у которого автор её не написал: частые имена — по-русски, остальные — как есть
+  const FX_NAMES = { snow: "Снег", rain: "Дождь", lights: "Гирлянда", garland: "Гирлянда", stars: "Звёзды", sparkles: "Искры",
+    leaves: "Листопад", fog: "Туман", glow: "Свечение", shine: "Блики", particles: "Частицы", hearts: "Сердечки",
+    petals: "Лепестки", fire: "Огонь", bats: "Летучие мыши", noise: "Шум", scanlines: "Полосы развёртки", flicker: "Мерцание" };
+  const fxLabel = (k) => FX_NAMES[k] || k.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+  // Частицы: settings whisper-music → "particles": { "имя": { "on": "like", "shape": "star", … } } (themefx.js рисует).
+  // Всё приводится к безопасным границам: тема не может попросить тысячи частиц или бесконечную жизнь.
+  const P_ON = ["tap", "like", "dislike", "play", "pause", "track", "start", "page", "beat", "always"];
+  const P_FROM = ["tap", "center", "top", "bottom", "screen", "cover", "play", "like", "wave"];
+  const P_SHAPES = ["dot", "square", "star", "heart", "snow", "confetti", "ring", "spark"];
+  const P_COLOR = /^(accent|accent2|text|muted|#[0-9a-f]{3,8})$/i;
+  function particleSpec(v) {
+    const on = P_ON.includes(v.on) ? v.on : null;
+    if (!on) return null;
+    const num = (x, d, lo, hi) => (Number.isFinite(+x) ? Math.min(hi, Math.max(lo, +x)) : d);
+    const rng = (x, d, lo, hi) => {
+      const a = Array.isArray(x) ? x : [x, x];
+      const p = num(a[0], d[0], lo, hi), q = num(a[1], d[1], lo, hi);
+      return [Math.min(p, q), Math.max(p, q)];
+    };
+    const img = typeof v.shape === "string" && /^asset:[A-Za-z0-9._-]{1,100}$/.test(v.shape) ? v.shape.slice(6) : "";
+    const colors = (Array.isArray(v.colors) ? v.colors : [v.colors]).filter((c) => typeof c === "string" && P_COLOR.test(c)).slice(0, 6);
+    const always = on === "always";
+    return {
+      on, img,
+      shape: img ? "image" : P_SHAPES.includes(v.shape) ? v.shape : "dot",
+      from: P_FROM.includes(v.from) ? v.from : always ? "top" : "",
+      count: Math.round(num(v.count, 24, 1, 120)),            // в одной вспышке
+      rate: num(v.rate, 12, 0.5, 60),                         // для "always": штук в секунду
+      colors: colors.length ? colors : ["accent", "accent2"],
+      size: rng(v.size, [4, 9], 1, 64),
+      speed: rng(v.speed, always ? [30, 80] : [160, 420], 0, 2000),
+      dir: num(v.direction, always ? 90 : -90, -360, 360),   // градусы: 0 — вправо, -90 — вверх, 90 — вниз
+      spread: num(v.spread, always ? 30 : 360, 0, 360),
+      gravity: num(v.gravity, always ? 0 : 520, -3000, 3000),
+      drag: num(v.drag, 1.2, 0, 10),
+      life: num(v.life, always ? 8 : 1.1, 0.2, 20),
+      spin: num(v.spin, v.shape === "confetti" ? 360 : 0, 0, 1440),
+      sway: num(v.sway, v.shape === "snow" ? 18 : 0, 0, 200),
+      fade: v.fade !== false,
+      glow: num(v.glow, 0, 0, 30),
+      blend: v.blend === "add" ? "lighter" : "source-over",
+    };
+  }
+  function setHooks(id, settings, css = "") {
     const h = {};
     if (settings?.controls?.volume === "knob") h.volKnob = true;
     if (settings?.layout === "fixed") h.layoutFixed = true;
+    // Эффекты темы (снег, гирлянда, блики…) — то, что можно выключить отдельно от остального оформления.
+    // Описание: settings whisper-music → "effects": { "snow": { "label": "Снег", "hint": "…", "default": true } }
+    // (старое имя "options" тоже понимаем). Пометка в CSS — селектор :root[data-fx-snow="on"]: эффект, о котором
+    // в settings ничего не сказано, тоже попадает в список (подпись — по имени). До 12 эффектов (вместе со стайками частиц).
+    // Выключатели — в окне «Настроить тему…» (Оформление → «Эффекты и анимации»), на <html> — data-fx-<имя>="on|off".
+    const fx = new Map();
+    for (const src of [settings?.options, settings?.effects]) {
+      if (!src || typeof src !== "object" || Array.isArray(src)) continue;
+      for (const [k, v] of Object.entries(src)) {
+        if (!BTN_NAME.test(k)) continue;
+        const o = v && typeof v === "object" ? v : {};
+        const label = typeof o.label === "string" && o.label.trim() ? o.label.trim().slice(0, 40) : fxLabel(k);
+        fx.set(k, { k, label, hint: typeof o.hint === "string" ? o.hint.trim().slice(0, 200) : "", def: v !== false && o.default !== false });
+      }
+    }
+    for (const m of String(css || "").matchAll(/data-fx-([a-z][a-z0-9-]{0,23})/g)) if (!fx.has(m[1])) fx.set(m[1], { k: m[1], label: fxLabel(m[1]), hint: "", def: true });
+    // «Живые» темы (themefx.js): события и курсор включаются, только если CSS темы ими пользуется —
+    // у остальных стилей приложение не тратит на это ни кадра
+    const cssText = String(css || "");
+    if (/\.ev-[a-z]|\.w-tap\b|--tap-[xy]\b|--tap-l[xy]\b/.test(cssText)) h.events = true;
+    if (/--mp?[xy]\b/.test(cssText)) h.pointer = true;
+    const L = settings?.layer;
+    const lc = typeof L === "number" ? L : L && typeof L === "object" ? L.count : 0;
+    if (Number.isFinite(lc) && lc >= 1) h.layer = { count: Math.min(64, Math.round(lc)), place: L?.place === "back" ? "back" : "front" };
+    const P = settings?.particles;
+    if (P && typeof P === "object" && !Array.isArray(P)) {
+      const list = [];
+      for (const [k, v] of Object.entries(P)) {
+        if (!BTN_NAME.test(k) || !v || typeof v !== "object" || list.length >= 8) continue;
+        const p = particleSpec(v);
+        if (!p) continue;
+        list.push({ k, ...p });
+        // каждая стайка частиц — ещё и эффект: её можно выключить в «Настроить тему…»
+        if (!fx.has(k)) fx.set(k, { k, label: typeof v.label === "string" && v.label.trim() ? v.label.trim().slice(0, 40) : fxLabel(k), hint: typeof v.hint === "string" ? v.hint.trim().slice(0, 200) : "", def: v.default !== false });
+      }
+      if (list.length) h.particles = list;
+    }
+    if (fx.size) h.effects = [...fx.values()].slice(0, 12);
     // консоль вместо обычного интерфейса (cli.js): команды — приложения, тема задаёт только приглашение и приветствие
     const c = settings?.console;
     if (c === true || (c && typeof c === "object" && !Array.isArray(c) && c.enabled !== false)) {
@@ -159,47 +244,101 @@
     setTimeout(() => { if (introNow?.stop === stop) { addEventListener("pointerdown", stop, true); addEventListener("keydown", stop, true); } }, 200);
     return true;
   }
+  // картинка из файла темы для частиц (themefx.js: "shape": "asset:star.svg") — blob: адрес, один на тему и файл
+  const assetUrls = new Map();
+  window.wmtAssetUrl = async (id, name) => {
+    const key = id + "\n" + name;
+    if (assetUrls.has(key)) return assetUrls.get(key);
+    let url = "";
+    try {
+      const th = await loadStored(id), a = th?.asset("asset:" + name);
+      if (a && /^image\//.test(a.mime)) url = URL.createObjectURL(new Blob([a.bytes], { type: a.mime }));
+    } catch {}
+    assetUrls.set(key, url);
+    return url;
+  };
   window.wmtIntro = { play: (id = cfg.style) => playIntro(id, { force: true }), stop: introStop, has: (id = cfg.style) => !!introOf(id) };
 
-  // Оформление → «Стиль оформления», внизу: общий выключатель интро и список стилей, у которых оно есть.
-  // Ни у одного установленного стиля интро нет — блока не видно вовсе (появится вместе с такой темой).
+  // ---------- «Настроить тему…» (Оформление → «Эффекты и анимации») ----------
+  // Одно окно на всё, что у темы можно включить и выключить: её эффекты (снег, гирлянда…, theme.js → setHooks)
+  // и интро при запуске. Сверху — выбор темы: по умолчанию текущая, рядом — остальные установленные, у которых
+  // что-то есть. Под кнопкой в карточке — короткая сводка по текущей теме (paintIntro, имя оставлено старое).
+  const fxOf = (id) => themeHooks[id]?.effects || [];
+  const thName = (id) => {
+    const t = cfg.themes.find((x) => x.id === id);
+    if (t) return (t.author ? `${t.author} · ` : "") + t.name;
+    return document.querySelector(`.stylecard[data-style="${CSS.escape(id)}"] .scname`)?.textContent || id;
+  };
   function paintIntro() {
-    const card = document.getElementById("introCard");
-    if (!card) return;
-    const on = document.getElementById("inOn");
-    if (on) { on.checked = intro.on; on.onchange = () => { intro.on = on.checked; introSave(); paintIntro(); }; }
-    const list = document.getElementById("inList"), note = document.getElementById("inNote");
-    if (!list) return;
-    list.textContent = "";
-    const withIntro = cfg.themes.filter((t) => introOf(t.id));
-    card.hidden = !withIntro.length;
-    for (const t of withIntro) {
-      const it = introOf(t.id), cur = cfg.style === t.id;
-      const row = document.createElement("div"); row.className = "inrow" + (cur ? " cur" : "");
-      const lb = document.createElement("label"); lb.className = "switch";
-      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !intro.off.includes(t.id); cb.disabled = !intro.on;
-      cb.onchange = () => { intro.off = intro.off.filter((x) => x !== t.id); if (!cb.checked) intro.off.push(t.id); introSave(); };
-      const tx = document.createElement("span");
-      tx.textContent = (t.author ? `${t.author} · ` : "") + t.name;
-      const sm = document.createElement("small");
-      sm.textContent = [it.name, `${String(it.duration).replace(".", ",")} с`].filter(Boolean).join(" · ");
-      tx.append(sm);
-      lb.append(cb, document.createElement("i"), tx);
-      row.append(lb);
-      if (cur) {
-        const b = document.createElement("button"); b.type = "button"; b.className = "nav"; b.textContent = "Показать";
-        b.title = "Посмотреть интро сейчас — щелчок или клавиша пропускают его";
-        b.onclick = () => playIntro(t.id, { force: true });
-        row.append(b);
-      }
-      list.append(row);
-    }
-    if (note) {
-      note.textContent = !withIntro.length ? "Пока ни у одного установленного стиля нет интро. Оно бывает у тем из библиотеки — например, ASCII или Madk1d."
-        : motionOff() ? "Анимации интерфейса выключены (Оформление → Эффекты и анимации) — интро не показывается."
-        : "Щелчок или любая клавиша пропускают интро.";
-    }
+    const note = document.getElementById("thSetNote");
+    if (!note) return;
+    const fx = fxOf(cfg.style), it = introOf(cfg.style);
+    const on = fx.filter((o) => themeFx(o.k, o.def, cfg.style)).length;
+    const parts = [];
+    if (fx.length) parts.push(fx.length === 1 ? `${fx[0].label}: ${on ? "вкл." : "выкл."}` : `Эффекты: ${on} из ${fx.length}`);
+    if (it) parts.push(intro.on && !intro.off.includes(cfg.style) ? "интро вкл." : "интро выкл.");
+    note.textContent = parts.length ? parts.join(" · ") : "У этой темы нет своих эффектов и интро";
   }
+  let thDt = null;
+  function openThemeSetup(id = cfg.style) {
+    // в списке — текущая тема и все установленные, у которых есть эффекты или интро
+    const ids = [cfg.style, ...cfg.themes.map((t) => t.id).filter((x) => x !== cfg.style && (fxOf(x).length || introOf(x)))];
+    if (!ids.includes(id)) id = cfg.style;
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const sw = (label, checked, onChange, { hint = "", disabled = false, raw = false } = {}) => {
+      const l = el("label", "switch"); if (hint) l.title = hint;
+      const i = el("input"); i.type = "checkbox"; i.checked = checked; i.disabled = disabled; i.onchange = () => onChange(i.checked);
+      const s = el("span", "", label); if (raw) s.dataset.noi18n = "";     // подпись эффекта — как написал автор темы
+      l.append(i, el("i"), s);
+      return l;
+    };
+    const paint = (body) => {
+      body.textContent = "";
+      if (ids.length > 1) {
+        const row = el("div", "chips thsetpick");
+        for (const x of ids) {
+          const b = el("button", "chip" + (x === id ? " active" : ""), thName(x) + (x === cfg.style ? " · сейчас" : ""));
+          b.type = "button"; b.dataset.noi18n = "";
+          b.onclick = () => { id = x; paint(body); };
+          row.append(b);
+        }
+        body.append(row);
+      }
+      const fx = fxOf(id), it = introOf(id), animOff = document.documentElement.dataset.anim === "off";
+      if (!fx.length && !it) {
+        body.append(el("p", "thsetempty", "У этой темы нет своих эффектов и интро. Они бывают у тем из библиотеки, а в своей теме их можно описать в файле .wmt — см. «Темы оформления» в документации."));
+      }
+      if (fx.length) {
+        const sec = el("div", "thsetsec");
+        sec.append(el("h4", "", "Эффекты"));
+        for (const o of fx) sec.append(sw(o.label, themeFx(o.k, o.def, id), (v) => { themeFxSet(id, o.k, v); paintIntro(); }, { hint: o.hint, raw: true }));
+        if (animOff) sec.append(el("p", "status", "Анимации интерфейса выключены — эффекты стоят неподвижно (если тема это умеет)."));
+        body.append(sec);
+      }
+      if (it) {
+        const sec = el("div", "thsetsec");
+        sec.append(el("h4", "", "Интро при запуске"));
+        const row = el("div", "thsetrow");
+        row.append(sw([it.name, `${String(it.duration).replace(".", ",")} с`].filter(Boolean).join(" · ") || "Интро",
+          !intro.off.includes(id), (v) => { intro.off = intro.off.filter((x) => x !== id); if (!v) intro.off.push(id); introSave(); paintIntro(); },
+          { disabled: !intro.on, hint: "Заставка этой темы при запуске. Щелчок или любая клавиша пропускают её", raw: true }));
+        if (id === cfg.style) {
+          const b = el("button", "nav", "Показать"); b.type = "button";
+          b.title = "Посмотреть интро сейчас — щелчок или клавиша пропускают его";
+          b.onclick = () => { thDt?.close(); playIntro(id, { force: true }); };
+          row.append(b);
+        }
+        sec.append(row);
+        sec.append(sw("Интро у всех тем", intro.on, (v) => { intro.on = v; introSave(); paintIntro(); paint(body); },
+          { hint: "Общий выключатель: без него ни одна тема не показывает заставку при запуске" }));
+        if (motionOff()) sec.append(el("p", "status", "Анимации интерфейса выключены — интро не показывается."));
+        body.append(sec);
+      }
+    };
+    thDt = openDetails({ title: "Настроить тему", sub: "Эффекты темы и интро при запуске — их можно выключить, не трогая остальное оформление.", body: paint, onClose: () => { thDt = null; } });
+  }
+  window.openThemeSetup = openThemeSetup;
+  document.getElementById("thSetBtn")?.addEventListener("click", () => openThemeSetup());
 
   // ---------- виджет для OBS: «@@ css whisper-obs» и «@@ settings whisper-obs» (чистит core/theme-css.js) ----------
   const obsOf = (th) => TC.obsCss(th);
@@ -209,6 +348,8 @@
     DynCss.remove("wmt-" + id);
     for (const u of blobUrls.get(id) || []) URL.revokeObjectURL(u);
     blobUrls.delete(id); previews.delete(id); themeReady.delete(id); meta.delete(id); delete themeFeatures[id]; delete themeHooks[id];
+    // картинки частиц этой темы (wmtAssetUrl): тема обновилась или удалена — старые больше не нужны
+    for (const [k, u] of assetUrls) if (k.startsWith(id + "\n")) { if (u) URL.revokeObjectURL(u); assetUrls.delete(k); }
   }
 
   // Сохранённая тема: текст (строка) или архив (Blob) — как её загрузили.
@@ -297,7 +438,7 @@
     if (known >= 0) cfg.themes[known] = entry; else cfg.themes.push(entry);
     const settings = th.settings(APP);
     meta.set(id, { manifest: m, tokens: th.tokens, settings, obs: obsOf(th), intro: TC.introInfo(th) });
-    setFeatures(id, settings);
+    setFeatures(id, settings, th);
     cfg.s[id] = defaultsFrom({ tokens: th.tokens, settings }, base);
     inject(id, th);
     await applyThemeBg(th, id);
@@ -578,7 +719,7 @@
         meta.set(t.id, { manifest: th.manifest, tokens: th.tokens, settings: th.settings(APP), obs: obsOf(th), intro: TC.introInfo(th) });
         const au = authorOf(th.manifest);                 // темы, загруженные до появления подписи автора
         if ((t.author || "") !== au) { t.author = au; changed = true; }
-        setFeatures(t.id, th.settings(APP));
+        setFeatures(t.id, th.settings(APP), th);
         inject(t.id, th);
       } catch (e) {
         console.warn(`Стиль ${t.id} не загружен:`, e?.message);

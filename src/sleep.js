@@ -6,6 +6,7 @@
   const TIMES = [15, 30, 45, 60, 90, 120, 180];
   const CALM = { seed: "settingMoodEnergy:calm", name: "Спокойное" };      // уточняется по списку Яндекса (auto)
   const SEED_OK = /^[\w-]+:[\w.-]+$/;
+  const vol01 = (x) => typeof x === "number" && x >= 0 && x <= 1;
   ICON.moon = svgp("M12.34 2.02C6.59 1.82 2 6.42 2 12c0 5.52 4.48 10 10 10 3.71 0 6.93-2.02 8.66-5.02-7.51-.25-12.09-8.43-8.32-14.96z");
 
   const cfgS = (() => {
@@ -16,6 +17,9 @@
       seed: typeof v.seed === "string" && SEED_OK.test(v.seed) ? v.seed : CALM.seed,
       name: typeof v.name === "string" && v.name ? v.name.slice(0, 100) : CALM.name,
       auto: typeof v.seed === "string" && SEED_OK.test(v.seed) ? !!v.auto : true,   // настроение ещё не выбирали — «Спокойное» по умолчанию
+      volOn: v.volOn !== false,
+      vol: vol01(v.vol) ? v.vol : null,         // громкость для сна (0…1); null — ещё не выставляли
+      prev: vol01(v.prev) ? v.prev : null,      // обычная громкость, пока режим включён (переживает перезагрузку страницы)
     };
   })();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfgS)); } catch {} };
@@ -67,6 +71,35 @@
     if (audio) audio.volume = outVol();     // громкость в настройках не трогали — возвращаем как была
   }
 
+  // ---------- своя громкость для сна ----------
+  // Пока режим включён, громкость «ночная»: её крутят как обычно, а запоминается она отдельно (cfgS.vol) и
+  // возвращается при следующем включении. Обычная ждёт в cfgS.prev и встаёт на место, когда режим кончился
+  // (или при следующем запуске, если компьютер выключился раньше, чем страница успела её вернуть).
+  function paintVol() {
+    $("#slVol").checked = cfgS.volOn;
+    $("#slVolVal").textContent = cfgS.volOn && vol01(cfgS.vol) ? Math.round(cfgS.vol * 100) + "%" : "";
+  }
+  function volEnter() {
+    if (!cfgS.volOn || vol01(cfgS.prev)) return;
+    cfgS.prev = volume; save();
+    if (vol01(cfgS.vol) && cfgS.vol !== volume) setVol(cfgS.vol);
+  }
+  function volLeave() {
+    if (!vol01(cfgS.prev)) return;
+    const p = cfgS.prev; cfgS.prev = null; save();
+    setVol(p);
+  }
+  window.Whisper?.on("volume", () => {
+    if (!cfgS.volOn || !vol01(cfgS.prev) || deadline <= Date.now() || cfgS.vol === volume) return;
+    cfgS.vol = volume; save(); paintVol();
+  });
+  $("#slVol").onchange = (e) => {
+    cfgS.volOn = e.target.checked;
+    if (!cfgS.volOn) cfgS.prev = null;            // выключили на ходу — громкость остаётся как есть и снова общая
+    else if (deadline > Date.now()) volEnter();
+    save(); paintVol();
+  };
+
   // ---------- включение / выключение ----------
   async function resolveCalm() {
     if (!cfgS.auto) return;
@@ -87,6 +120,7 @@
       return;
     }
     setDeadline(st.deadline);
+    volEnter();
     showToast(`Режим сна на ${fmtMin(cfgS.min)}: ${cfgS.act === "off" ? "потом компьютер выключится" : "потом музыка остановится"}. Волна «${cfgS.name}»`, 5000, { kind: "ok" });
     await resolveCalm();
     // волна для сна — без сохранения как обычной: завтра Моя волна будет прежней
@@ -101,6 +135,7 @@
     try { await invoke("sleep_cancel"); } catch {}
     fadeStop();
     setDeadline(0);
+    volLeave();
     if (manual) showToast("Режим сна выключен", 3000, { kind: "ok" });
   }
 
@@ -111,12 +146,16 @@
     if (audio && !audio.paused) audio.pause();
     if (audio) audio.volume = outVol();
     setDeadline(0);
+    volLeave();
     if (cfgS.act === "off") {
       showToast("Режим сна: компьютер выключится через минуту", 60000, { action: { label: "Не выключать", fn: () => { invoke("sleep_cancel").catch(() => {}); showToast("Выключение отменено", 3000, { kind: "ok" }); } } });
     }
   });
   // страницу перезагрузили, а режим включён — показываем его
-  invoke("sleep_status").then((st) => { if (st?.deadline) { cfgS.act = st.shutdown ? "off" : "stop"; setDeadline(st.deadline); } }).catch(() => {});
+  invoke("sleep_status").then((st) => {
+    if (st?.deadline) { cfgS.act = st.shutdown ? "off" : "stop"; setDeadline(st.deadline); }
+    else volLeave();          // режим кончился без нас (компьютер выключился) — возвращаем обычную громкость
+  }).catch(() => {});
 
   // ---------- настройки ----------
   function renderCfg() {
@@ -132,6 +171,7 @@
       c.onclick = () => { if (deadline > Date.now()) { $("#slNote").textContent = "Новое действие сработает при следующем включении режима сна"; } cfgS.act = c.dataset.v; save(); renderCfg(); };
     });
     $("#slWaveName").textContent = cfgS.name;
+    paintVol();
     paint();
   }
   let slTab = "mood";

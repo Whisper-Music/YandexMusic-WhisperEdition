@@ -56,14 +56,26 @@
     return cv;
   }
 
-  // строка схлопывается по высоте, остальные плавно подъезжают
+  // Строка убирается сразу, а строки под ней, что видны на экране, подъезжают на её место (FLIP): им ставится
+  // сдвиг вниз на высоту убранной, и он плавно уходит в ноль. Анимируется только transform — это делает
+  // видеокарта, без пересчёта раскладки. Раньше схлопывалась высота строки, и на каждом кадре заново
+  // раскладывался весь список (в «Лайках» — тысячи строк): отсюда и рывки.
   function collapse(li) {
-    const h = li.getBoundingClientRect().height;
-    Object.assign(li.style, { height: h + "px", overflow: "hidden", boxSizing: "border-box" });
-    void li.offsetHeight;
-    li.style.transition = "height .34s ease, padding .34s ease, margin .34s ease, border-width .34s ease";
-    Object.assign(li.style, { height: "0px", paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px", borderTopWidth: "0px", borderBottomWidth: "0px" });
-    setTimeout(() => li.remove(), 380);
+    const cs = getComputedStyle(li);
+    const h = li.getBoundingClientRect().height + Math.max(parseFloat(cs.marginTop) || 0, parseFloat(cs.marginBottom) || 0);
+    const after = [];
+    for (let n = li.nextElementSibling; n && after.length < 60; n = n.nextElementSibling) {
+      if (n.getBoundingClientRect().top > innerHeight) break;           // ниже экрана — сдвиг не виден
+      after.push(n);
+    }
+    li.remove();
+    if (!after.length) return;
+    for (const el of after) { el.style.transition = "none"; el.style.transform = `translateY(${h}px)`; el.style.willChange = "transform"; }
+    void after[0].offsetHeight;                                           // одна раскладка — с уже убранной строкой
+    requestAnimationFrame(() => {
+      for (const el of after) { el.style.transition = "transform .34s cubic-bezier(.2, .7, .25, 1)"; el.style.transform = ""; }
+      setTimeout(() => { for (const el of after) { el.style.transition = el.style.willChange = ""; } }, 400);
+    });
   }
 
   window.rowDust = (li) => new Promise((done) => {
@@ -86,15 +98,21 @@
     const g = cv.getContext("2d");
     g.imageSmoothingEnabled = false;
 
-    // ~2500 квадратиков на строку, но не мельче 3 px: кадр — пара миллисекунд
-    const cell = Math.max(3, Math.ceil(Math.sqrt((r.width * r.height) / 2500)));
+    // ~1800 квадратиков на строку, но не мельче 4 px. Задержка старта растёт по столбцам слева направо
+    // (SPREAD) плюс случайная добавка не больше JIT — значит, всё правее «фронта» (x/w·SPREAD > t) ещё
+    // на месте и рисуется одним куском, а по кусочку — только то, что уже летит. Частицы отсортированы
+    // по столбцам: перебор кончается на фронте.
+    const SPREAD = 0.55, JIT = 0.16;
+    const cell = Math.max(4, Math.ceil(Math.sqrt((r.width * r.height) / 1800)));
     const ps = [];
-    for (let y = 0; y < r.height; y += cell)
-      for (let x = 0; x < r.width; x += cell) {
+    for (let x = 0; x < r.width; x += cell)
+      for (let y = 0; y < r.height; y += cell) {
         const a = -(0.04 + Math.random() * 0.42) * Math.PI;       // вверх-вправо
         const sp = 45 + Math.random() * 120;                       // px/с
-        ps.push({ x, y, d: (x / r.width) * 0.55 + Math.random() * 0.16, l: 0.5 + Math.random() * 0.4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp });
+        const l = 0.5 + Math.random() * 0.4;
+        ps.push({ x, y, d: (x / r.width) * SPREAD + Math.random() * JIT, l, dx: Math.cos(a) * sp * l, dy: Math.sin(a) * sp * l });
       }
+    const sc = cell * dpr;
     li.style.visibility = "hidden";                   // настоящая строка прячется сразу — дальше видна только пыль
     setTimeout(() => collapse(li), 420);
 
@@ -103,18 +121,22 @@
       const t = (now - t0) / 1000;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, W, H);
-      let alive = false;
+      // столбцы, которые точно ещё не тронулись, — одним drawImage
+      const front = t <= 0 ? 0 : Math.min(r.width, Math.floor(((t / SPREAD) * r.width) / cell) * cell);
+      if (front < r.width) g.drawImage(src, front * dpr, 0, src.width - front * dpr, src.height, PAD + front, PAD, r.width - front, r.height);
+      let alive = front < r.width, alpha = 1;
       for (const p of ps) {
+        if (p.x >= front) break;
         const u = (t - p.d) / p.l;
         if (u >= 1) continue;
         alive = true;
-        let ox = 0, oy = 0;
+        let ox = 0, oy = 0, a = 1;
         if (u > 0) {
           const e = 1 - (1 - u) * (1 - u);            // разлёт с затуханием скорости
-          ox = p.vx * p.l * e; oy = p.vy * p.l * e;
-          g.globalAlpha = 1 - u * u;
-        } else g.globalAlpha = 1;
-        g.drawImage(src, p.x * dpr, p.y * dpr, cell * dpr, cell * dpr, PAD + p.x + ox, PAD + p.y + oy, cell, cell);
+          ox = p.dx * e; oy = p.dy * e; a = 1 - u * u;
+        }
+        if (a !== alpha) g.globalAlpha = alpha = a;
+        g.drawImage(src, p.x * dpr, p.y * dpr, sc, sc, PAD + p.x + ox, PAD + p.y + oy, cell, cell);
       }
       g.globalAlpha = 1;
       if (alive && t < 3) requestAnimationFrame(frame);

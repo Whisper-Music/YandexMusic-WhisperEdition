@@ -17,6 +17,7 @@
     "allow-wa-save-track",
     "allow-studio-to-archive",
     "allow-studio-room-cache",
+    "allow-drop-audio-archive",
     "allow-wa-room-cache-track",
     "allow-wa-room-create",
     "allow-wa-room-get",

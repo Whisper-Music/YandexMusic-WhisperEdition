@@ -137,8 +137,9 @@
     if (albumOf(t)) m.item(LINK_ICON, "Ссылка на альбом", () => copy(`${SHARE_BASE}album/${albumOf(t)}`, "Ссылка"));
     m.place();
   }
+  // slot "bottom" — внизу меню, рядом со «Скачать трек» (main.js → trackMenuBuild зовёт trackMenu.build(…, "bottom"))
   W?.ui.trackMenu.add({
-    id: "share",
+    id: "share", slot: "bottom",
     build(t, m) {
       if (!trackOf(t)) return false;         // не трек Яндекса (например, из комнаты с другим сервисом) — делиться нечем
       m.item(SHARE_ICON, "Поделиться", () => shareMenu(t, m), { keep: true, arrow: true });

@@ -18,25 +18,32 @@
   };
 
   let view = null;
+  let from = head;                    // что вернуть в фокус после закрытия
   function close() {
     if (!view) return;
     document.removeEventListener("keydown", view.onKey, true);
     view.wrap.classList.remove("on");
     const w = view.wrap; view = null;
     setTimeout(() => w.remove(), 180);
-    head.focus?.({ preventScroll: true });
+    from?.focus?.({ preventScroll: true });
   }
   function open() {
     const src = head.currentSrc || head.src;
     if (!src || head.hidden || (typeof COVER_W !== "undefined" && head.getAttribute("src") === COVER_W)) return;      // заглушка «W» — смотреть нечего
+    show(src, { square: head.classList.contains("sq"), from: head });
+  }
+  // любая картинка (обложка в развёрнутом плеере — main.js): src — что уже показано, square — без круга
+  function show(src, { square = true, from: f = null } = {}) {
+    if (!src) return;
     if (view) return close();
+    from = f || document.activeElement;
     const wrap = document.createElement("div");
     wrap.className = "imgview";
     wrap.setAttribute("role", "dialog");
     wrap.setAttribute("aria-label", document.getElementById("title")?.textContent || "Картинка");
     const img = document.createElement("img");
     img.alt = ""; img.src = src; img.draggable = false;
-    if (!head.classList.contains("sq")) img.classList.add("rnd");      // артист — круг, как в шапке
+    if (!square) img.classList.add("rnd");      // артист — круг, как в шапке
     const hint = document.createElement("span");
     hint.className = "ivhint"; hint.textContent = "Esc или щелчок — закрыть";
     wrap.append(img, hint);
@@ -55,5 +62,5 @@
   }
   head.addEventListener("click", open);
   head.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); open(); } });
-  window.imgView = { open, close };
+  window.imgView = { open, close, show };
 })();

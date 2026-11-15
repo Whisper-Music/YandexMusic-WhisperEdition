@@ -1,0 +1,54 @@
+/* Перетаскивание в окно (dropin.js): подсказка поверх окна и окно «Что сделать с треком».
+   Окно — обычный .modal .login-box .modalbox (как modal() в main.js), поэтому стили и темы оформляют его сами. */
+.drophint {
+  position: fixed; inset: 0; z-index: 900; pointer-events: none;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, #000 35%, transparent);
+  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: -14px;
+}
+.drophint[hidden] { display: none; }
+.drophint-box {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 26px; border-radius: 14px; max-width: 420px;
+  text-align: center; color: var(--text); background: color-mix(in srgb, #000 55%, transparent);
+}
+.drophint-box b { font-size: 18px; }
+.drophint-box span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+:root[data-anim="on"] .drophint-box { animation: dropIn .18s ease-out; }
+@keyframes dropIn { from { transform: scale(.96); opacity: 0; } }
+
+.dropbox { width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 80px); overflow-y: auto; }
+.dropbox [hidden] { display: none !important; }
+.dropbox h4 { margin: 14px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.dropfile { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.dropft { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.dropft b { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dropft span { color: var(--muted); font-size: 12.5px; }
+.dropplay { flex: none; padding: 7px 12px; }
+.dropq { width: 100%; box-sizing: border-box; }
+.dropcands { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.dropcand, .dropopt {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--text); border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+:root[data-base="royal"] :is(.dropcand, .dropopt), :root[data-base="steam"] :is(.dropcand, .dropopt) { border-radius: 2px; }
+.dropcand:hover, .dropopt:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.dropcand.on, .dropopt.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.dropcand .dcart { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex: none; background: color-mix(in srgb, var(--text) 8%, transparent); }
+.dctx { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.dctx b, .dctx small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dctx small { color: var(--muted); font-size: 12px; }
+.dropcand.none .dctx { color: var(--muted); padding: 6px 0; }
+.dcdur { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.dropnote { margin: 6px 0 0; font-size: 12.5px; }
+.dropwhere { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.droplike { margin-top: 2px; }
+.dropopt { flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; }
+.dropopt small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.droparch { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.droparch .field { width: 100%; box-sizing: border-box; }
+@media (max-width: 560px) { .dropwhere { grid-template-columns: 1fr; } }
