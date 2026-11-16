@@ -2050,5 +2050,18 @@ add({
   "Не удалось сбросить: {}": "Couldn't reset: {}",
   "С Яндекса за {} — {}": "From Yandex in {} — {}", "С Яндекса, ещё грузится — {}": "From Yandex, still loading — {}",
   "снимок был пустой": "the snapshot was empty", "снимка ещё не было": "there was no snapshot yet",
+  // исходный вид стиля (main.js resetStyle, theme.js wmtResetStyle)
+  "↺ Исходный вид стиля": "↺ Restore style",
+  "Вернуть текущему стилю вид из его файла темы: фон темы, цвета, свечение, затемнение, прозрачность панелей и эффекты. Тему заново загружать не нужно": "Give the current style its look from the theme file back: the theme background, colors, glow, dimming, panel opacity and effects. No need to load the theme again",
+  "Вернуть исходный вид стиля?": "Restore the original style?",
+  "Стиль «{}» станет таким, как в его файле темы: фон из темы, цвета, свечение, затемнение, прозрачность панелей и эффекты. Свой фон и подобранные цвета у этого стиля пропадут.": "The «{}» style becomes as in its theme file: theme background, colors, glow, dimming, panel opacity and effects. Your own background and picked colors for this style will be gone.",
+  "Стиль «{}» станет таким, каким был изначально: цвета, свечение, затемнение и прозрачность панелей, без своего фона.": "The «{}» style becomes as it was originally: colors, glow, dimming and panel opacity, without your own background.",
+  "Не удалось вернуть исходный вид: {}": "Couldn't restore the original look: {}",
+  "Стиль «{}» — снова в исходном виде": "The «{}» style is back to its original look",
+  "файл темы не сохранился — загрузи тему заново": "the theme file wasn't kept — load the theme again",
+  "Исходный вид": "Original look",
+  "Цвета, свечение, затемнение и прозрачность — как изначально, без своего фона.": "Colors, glow, dimming and opacity as originally, without your own background.",
+  "Фон, цвета, свечение, затемнение, прозрачность и эффекты — как в файле темы.": "Background, colors, glow, dimming, opacity and effects as in the theme file.",
+  "↺ Вернуть": "↺ Restore",
 });
 })();

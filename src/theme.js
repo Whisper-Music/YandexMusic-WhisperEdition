@@ -334,6 +334,18 @@
         if (motionOff()) sec.append(el("p", "status", "Анимации интерфейса выключены — интро не показывается."));
         body.append(sec);
       }
+      // поменял фон или цвета и хочешь как было — без повторной загрузки темы (main.js → resetStyle)
+      const sec = el("div", "thsetsec");
+      sec.append(el("h4", "", "Исходный вид"));
+      const row = el("div", "thsetrow");
+      row.append(el("span", "status", BUILTIN.includes(id)
+        ? "Цвета, свечение, затемнение и прозрачность — как изначально, без своего фона."
+        : "Фон, цвета, свечение, затемнение, прозрачность и эффекты — как в файле темы."));
+      const rb = el("button", "nav", "↺ Вернуть"); rb.type = "button";
+      rb.onclick = () => { thDt?.close(); window.resetStyle?.(id); };
+      row.append(rb);
+      sec.append(row);
+      body.append(sec);
     };
     thDt = openDetails({ title: "Настроить тему", sub: "Эффекты темы и интро при запуске — их можно выключить, не трогая остальное оформление.", body: paint, onClose: () => { thDt = null; } });
   }
@@ -683,6 +695,20 @@
     if (!t || !mm) return null;
     const d = defaultsFrom({ tokens: mm.tokens, settings: mm.settings }, t.base);
     return { accent: d.accent, accent2: d.accent2 };
+  };
+
+  // «Исходный вид стиля» (main.js → resetStyle): один свой стиль — снова как в его файле .wmt: фон из темы,
+  // цвета, свечение, затемнение, прозрачность панелей, тонкая настройка цветов и выключатели эффектов.
+  // Файл темы хранится в IndexedDB как его загрузили — заново загружать тему не нужно.
+  window.wmtResetStyle = async (id) => {
+    const t = cfg.themes.find((x) => x.id === id);
+    if (!t) return false;
+    const th = await loadStored(id);
+    if (!th) throw new Error("файл темы не сохранился — загрузи тему заново");
+    cfg.s[id] = defaultsFrom({ tokens: th.tokens, settings: th.settings(APP) }, t.base);
+    await applyThemeBg(th, id);
+    renderCards();
+    return true;
   };
 
   // «Сбросить всё» в настройках: цвета и фон своих стилей — как в их файлах

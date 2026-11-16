@@ -380,6 +380,9 @@ connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data: blob:`.
 - Частицы (themefx.js) рисуются готовыми спрайтами (форма + цвет + размер + свечение — один раз), одним setTransform,
   стирается только область прошлого кадра, плотность ≤ 1,5; при тяжёлых кадрах `quality` снижает число частиц.
   Не возвращай shadowBlur и drawImage(SVG) в покадровый цикл — это и было «съедает FPS».
+- «↺ Исходный вид стиля» (Оформление → Фон, и раздел «Исходный вид» в «Настроить тему…»): main.js → `resetStyle(st)` —
+  свой стиль заново из файла в IndexedDB (theme.js → `wmtResetStyle`: defaultsFrom + applyThemeBg — фон, цвета, cc, fx),
+  встроенный — `STYLE_DEF` без фона. Трогает только этот стиль; «Сбросить всё» (`#cfgReset`) — все стили и общие настройки.
 - Формат .wmt: строгое описание — src/core/docs/WMT-FORMAT.md (подмодуль whisper-core, раздел 5: effects, layer, particles,
   события и курсор), гайд для авторов — docs/THEMES.md. Новое в settings / CSS темы — правь оба (и коммить подмодуль отдельно).
 - Длинные списки (main.js renderList): первые 70 строк сразу, остальное — в свободное время (requestIdleCallback, ≤6 мс)

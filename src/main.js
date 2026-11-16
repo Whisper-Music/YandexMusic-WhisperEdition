@@ -1400,6 +1400,29 @@ window.__TAURI__.event?.listen("bg-drop", async (e) => {
   else showToast(note || "Не получилось поставить фон", 6000, { kind: "err" });
 });
 $("#bgReset").onclick = async () => { await clearBg(); applyCfg(); saveCfg(); };
+// «Исходный вид стиля»: текущий стиль — как задумано. Свой (.wmt) — как в его файле (фон из темы, цвета, эффекты:
+// theme.js → wmtResetStyle), встроенный — как в STYLE_DEF и без своего фона. Остальные стили и общие настройки не трогаются.
+async function resetStyle(st = cfg.style) {
+  const custom = !BUILTIN.includes(st);
+  const card = document.querySelector(`.stylecard[data-style="${CSS.escape(st)}"]`);
+  const name = card?.querySelector(".scname")?.textContent || card?.querySelector("b")?.textContent || st;
+  const ok = await modal({
+    title: "Вернуть исходный вид стиля?",
+    text: custom
+      ? `Стиль «${name}» станет таким, как в его файле темы: фон из темы, цвета, свечение, затемнение, прозрачность панелей и эффекты. Свой фон и подобранные цвета у этого стиля пропадут.`
+      : `Стиль «${name}» станет таким, каким был изначально: цвета, свечение, затемнение и прозрачность панелей, без своего фона.`,
+    ok: "Вернуть", danger: true,
+  });
+  if (!ok) return;
+  try {
+    if (custom) await window.wmtResetStyle(st);
+    else { await clearBg(st); cfg.s[st] = { ...STYLE_DEF[st], cc: {} }; }
+  } catch (e) { showToast("Не удалось вернуть исходный вид: " + (e?.message || e), 6000, { kind: "err" }); return; }
+  applyCfg(); saveCfg(); syncControls();
+  showToast(`Стиль «${name}» — снова в исходном виде`, 3500, { kind: "ok" });
+}
+window.resetStyle = resetStyle;
+$("#styleRestore").onclick = () => resetStyle();
 $("#cfgReset").onclick = async () => {
   if (!(await modal({ title: "Сбросить оформление?", text: "Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.", ok: "Сбросить", danger: true }))) return;
   const keep = cfg.style, themes = cfg.themes;
