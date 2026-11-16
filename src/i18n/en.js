@@ -259,7 +259,7 @@ add({
   "Виджет не запустился: {}": "The widget didn't start: {}",
   "В OBS: Источники → «+» → Браузер → вставь адрес. {}": "In OBS: Sources → “+” → Browser → paste the address. {}",
   "Размер для этого стиля: {} × {}.": "Size for this style: {} × {}.",
-  "Размер: 520 × 130 (для «Полоски» — 560 × 60).": "Size: 520 × 130 (560 × 60 for “Bar”).",
+  "Размер: {} × {} — одинаковый у всех стилей.": "Size: {} × {} — the same for every style.",
   "Виджет для OBS": "OBS widget",
   "Мини-плеер для стрима": "Mini player for streams",
   "Копировать": "Copy",

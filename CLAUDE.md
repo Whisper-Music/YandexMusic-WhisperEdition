@@ -527,13 +527,15 @@ id в файле ≠ в списке, битые темы, файлы вне с�
 @@ settings whisper-obs
 { "layout": "card",               // card | compact | bar — вид по умолчанию
   "layouts": ["card", "compact"], // необязательно: какие виды стиль умеет
-  "opacity": 0.55,                // фон 0…1
-  "size": [410, 270] }            // размер источника в OBS (40…4000)
+  "opacity": 0.55 }               // фон 0…1 ("size" — устаревшее, размеры стандартные)
 ```
+**Размеры стандартные для всех стилей** (источник OBS / поле `#w`): card 640×220 / 616×196, compact 480×120 / 456×96,
+bar 560×60 / 536×36 — задаёт widget.html; тема раскладывает всё внутри поля, `#w` не растягивает (подсказка — obs.js `SIZES`).
 CSS без привязки к стилю, после встроенного. Разметка: `#w.w[data-base][data-layout][data-playing][data-empty][data-paused-hidden]`
 → `.w-bg`, `.w-art > img.w-cover`, `.w-info` (`.w-title .w-artist .w-bar > i .w-time > .w-cur .w-dur`), `.w-eq > i×4`,
-`.w-play > i` (скрыт; включать `display: grid`), `.w-deco > i×6` (скрыт; слой inset:0, у `i` есть ::before/::after).
-Переменные на `#w`: `--a --b --alpha --p --cover`. Ресурсы `url(asset:…)` встраиваются (≤1,5 МБ каждый);
+`.w-play > i` (скрыт; включать `display: grid`), `.w-viz > i×32` (скрыт; «живой» визуализатор, у `i` — `--i --h --lv`),
+`.w-deco > i×6` (скрыт; слой inset:0, у `i` есть ::before/::after).
+Переменные на `#w`: `--a --b --alpha --p --cover --beat`. Ресурсы `url(asset:…)` встраиваются (≤1,5 МБ каждый);
 `@import`, `url(http…)`, `image-set` вырезаются. Перекрыть встроенные виды — селекторами через `#w`.
 
 ### Интро (`whisper-intro`)
