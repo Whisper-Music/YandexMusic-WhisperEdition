@@ -1,6 +1,6 @@
 [package]
 name = "yandex-desktop"
-version = "1.1.0"
+version = "1.1.1"
 description = "Yandex Music — Whisper Edition"
 authors = ["you"]
 edition = "2021"
