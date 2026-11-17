@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-lib-list"
+description = "Enables the wa_lib_list command without any pre-configured scope."
+commands.allow = ["wa_lib_list"]
+
+[[permission]]
+identifier = "deny-wa-lib-list"
+description = "Denies the wa_lib_list command without any pre-configured scope."
+commands.deny = ["wa_lib_list"]

@@ -140,6 +140,13 @@ fn remember(app: &AppHandle, roots: &[PathBuf]) -> Vec<Entry> {
     list
 }
 
+/// Один файл, который приложение получило само (linkdl.rs: трек по ссылке), — в тот же список, что и выбранные
+/// пользователем: дальше его открывает то же окно «Что сделать с треком» с той же проверкой при чтении.
+pub fn remember_one(app: &AppHandle, path: &Path) -> Option<Entry> {
+    std::fs::symlink_metadata(path).ok().filter(|m| m.is_file())?;
+    remember(app, &[path.to_path_buf()]).into_iter().next()
+}
+
 /// Кнопка «Выбрать папку обоев»: системный диалог выбора папки.
 #[tauri::command]
 pub async fn bg_dir_pick(app: AppHandle) -> Result<Option<Vec<Entry>>, String> {

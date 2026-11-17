@@ -1,6 +1,6 @@
 [package]
 name = "yandex-desktop"
-version = "1.1.1"
+version = "1.2.0"
 description = "Yandex Music — Whisper Edition"
 authors = ["you"]
 edition = "2021"
@@ -27,6 +27,8 @@ tauri-plugin-http = "2"
 md5 = "0.8.1"
 keyring = "3"
 getrandom = "0.3"
+# контрольная сумма yt-dlp при установке (linkdl.rs); sha2 уже есть в сборке через Tauri
+sha2 = "0.10"
 # семафор для тяжёлых загрузок (net.rs::heavy_slot) и пауза перед повтором запроса (lyrics.rs); tokio уже есть в сборке через Tauri
 tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 # список установленных шрифтов для выбора шрифта интерфейса (fonts.rs): читает только заголовки файлов, чистый Rust
@@ -65,10 +67,20 @@ libc = "0.2"
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
 
-# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+# Локальная сборка — лёгкая: полный LTO с codegen-units = 1 на слабом ПК (2 ядра) в конце сборки
+# десятки минут гоняет один поток и съедает гигабайты памяти — компьютер зависал намертво.
+# Без LTO и с 16 частями бинарник чуть больше, но собирается в разы быстрее.
+# Выпуски в CI (release.yml) по-прежнему собираются с полным LTO: там профиль перекрывают
+# переменные CARGO_PROFILE_RELEASE_LTO / CARGO_PROFILE_RELEASE_CODEGEN_UNITS.
+# Про размер: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
-codegen-units = 1
-lto = true
+codegen-units = 16
+lto = false
 opt-level = 3
 panic = "abort"
 strip = true
+
+# dev: только номера строк в отладочной информации (для паник и стека хватает) — меньше
+# памяти при линковке и места в target/, пересборка быстрее
+[profile.dev]
+debug = "line-tables-only"

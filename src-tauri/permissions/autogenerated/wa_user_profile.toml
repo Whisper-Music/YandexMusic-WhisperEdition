@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-user-profile"
+description = "Enables the wa_user_profile command without any pre-configured scope."
+commands.allow = ["wa_user_profile"]
+
+[[permission]]
+identifier = "deny-wa-user-profile"
+description = "Denies the wa_user_profile command without any pre-configured scope."
+commands.deny = ["wa_user_profile"]

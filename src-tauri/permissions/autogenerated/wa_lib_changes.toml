@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-lib-changes"
+description = "Enables the wa_lib_changes command without any pre-configured scope."
+commands.allow = ["wa_lib_changes"]
+
+[[permission]]
+identifier = "deny-wa-lib-changes"
+description = "Denies the wa_lib_changes command without any pre-configured scope."
+commands.deny = ["wa_lib_changes"]

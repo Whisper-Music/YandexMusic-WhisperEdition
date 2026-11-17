@@ -52,3 +52,26 @@
 .droparch { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .droparch .field { width: 100%; box-sizing: border-box; }
 @media (max-width: 560px) { .dropwhere { grid-template-columns: 1fr; } }
+
+/* «Добавить трек» (linkadd.js → addTrack): поле для ссылки сверху, зона «перетащи файл или выбери» снизу */
+.addtrack { width: min(460px, calc(100vw - 40px)); }
+.addtrack .addlab { display: block; margin: 4px 0 6px; font-size: 13px; color: var(--muted); }
+.addtrack .addline { display: flex; gap: 8px; }
+.addtrack .addline .field { flex: 1; min-width: 0; margin: 0; }
+.addtrack .addline .nav { flex: none; }
+.addtrack .addnote { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); }
+.addtrack .addmsg { min-height: 1.2em; margin: 4px 2px 0; color: #ff8a8a; }
+.addtrack .addmsg:empty { min-height: 0; margin: 0; }
+.addtrack .addor { display: flex; align-items: center; gap: 10px; margin: 14px 0 12px; color: var(--muted); font-size: 12.5px; }
+.addtrack .addor::before, .addtrack .addor::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,.12); }
+.addtrack .adddrop {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 20px 14px; margin-bottom: 14px;
+  border-radius: 14px; border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  background: rgba(255,255,255,.04); color: var(--text); text-align: center; transition: background .15s, border-color .15s;
+}
+.addtrack .adddrop svg { color: var(--accent); margin-bottom: 4px; }
+.addtrack .adddrop b { font-weight: 600; }
+.addtrack .adddrop small { color: var(--muted); font-size: 12.5px; }
+.addtrack .adddrop:hover, .addtrack .adddrop:focus-visible, .addtrack .adddrop.over {
+  background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: var(--accent); outline: none;
+}

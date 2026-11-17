@@ -54,13 +54,15 @@
   // замена трека (origin «replace») — не отдельный трек: в «Лайках» не появляется, лайк ставится самому треку Яндекса
   window.studioLikedList = () => items.filter((x) => x.liked && x.origin !== "replace").map((x) => ({ raw: toRaw(x), at: (x.likedAt || x.created || 0) * 1000 }));
   const likesRedraw = () => { if (typeof likesStudioChanged === "function") likesStudioChanged(); };
+  // версии изменились — синхронизация через архив (libsync.js) отправит это чуть позже одной пачкой
+  const synced = () => window.libsyncPoke?.();
   window.studioToggleLike = async (t) => {
     const it = byId(String(t?.id));
     if (!it) return;
     const want = !it.liked;
     it.liked = want; it.likedAt = want ? Math.floor(Date.now() / 1000) : 0;
     paintList(); refreshHearts();
-    try { Object.assign(it, await invoke("studio_update", { id: it.id, liked: want })); }
+    try { Object.assign(it, await invoke("studio_update", { id: it.id, liked: want })); synced(); }
     catch (e) { it.liked = !want; toast("Не удалось изменить лайк: " + err(e), 5000); }
     paintList(); refreshHearts(); likesRedraw();
   };
@@ -74,6 +76,12 @@
     paintList(); refreshHearts();
     if (items.some((x) => x.liked)) likesRedraw();
   }
+  // libsync.js: из архива пришли треки или лайки с другого устройства — перечитать список с диска
+  window.studioReload = async () => {
+    const had = items.some((x) => x.liked);
+    await loadItems();
+    if (had && !items.some((x) => x.liked)) likesRedraw();
+  };
 
   // ---------- страница ----------
   function show() {
@@ -396,7 +404,7 @@
       const it = await invoke("studio_save", {
         trackId: String(ed.t.id), startMs: Math.round(ed.a * 1000), endMs: Math.round(ed.b * 1000), title: name, meta: metaOf(ed.t),
       });
-      items.unshift(it); filter = "all"; paintList();
+      items.unshift(it); filter = "all"; paintList(); synced();
       toast(`«${it.title}» — в «Моих версиях»`, 3500, { kind: "ok", action: { label: "Слушать", fn: () => playItem(it.id) } });
     } catch (e) { toast("Не удалось сохранить: " + err(e), 6000); }
     b.disabled = false;
@@ -416,7 +424,7 @@
     // у трека одна замена — прошлую Rust уже удалил (drop_audio_local)
     if (it.origin === "replace") items = items.filter((x) => !(x.origin === "replace" && x.srcId === it.srcId));
     items.unshift(it);
-    paintList(); refreshHearts(); likesRedraw();
+    paintList(); refreshHearts(); likesRedraw(); synced();
   };
   window.studioPlay = (id) => playItem(String(id));
   function playItem(id) {
@@ -468,7 +476,7 @@
   async function rename(it) {
     const r = await modal({ title: "Название версии", input: { value: it.title, placeholder: "Название", max: 200 }, ok: "Сохранить" });
     if (!r) return;
-    try { Object.assign(it, await invoke("studio_update", { id: it.id, title: r.value })); paintList(); syncQueue(it); }
+    try { Object.assign(it, await invoke("studio_update", { id: it.id, title: r.value })); paintList(); syncQueue(it); synced(); }
     catch (e) { toast("Не удалось переименовать: " + err(e), 5000); }
   }
   // переименованная версия в очереди — с новым названием (в плеере обновится со следующим включением)
@@ -476,7 +484,10 @@
     for (const q of queue) if (String(q?.id) === it.id) q.title = it.title;
   }
   async function remove(it) {
-    const r = await modal({ title: "Удалить версию?", text: `«${it.title}» удалится с диска. Копия в архиве (если есть) останется.`, ok: "Удалить", danger: true });
+    const text = window.libsyncActive?.()
+      ? `«${it.title}» удалится с диска и с других устройств (синхронизация через архив). Копия в альбоме архива (если есть) останется.`
+      : `«${it.title}» удалится с диска. Копия в архиве (если есть) останется.`;
+    const r = await modal({ title: "Удалить версию?", text, ok: "Удалить", danger: true });
     if (!r) return;
     const cur = String(queue[current]?.id ?? "").split(":")[0];
     if (cur === it.id || (it.origin === "replace" && cur === it.srcId)) { toast("Эта версия сейчас играет — включи другой трек и удали её"); return; }
@@ -484,7 +495,7 @@
       await invoke("studio_delete", { id: it.id });
       items = items.filter((x) => x.id !== it.id);
       const sh = sharedAll(); if (sh[it.id]) { delete sh[it.id]; saveShared(sh); }
-      paintList();
+      paintList(); synced();
     } catch (e) { toast("Не удалось удалить: " + err(e), 5000); }
   }
   async function exportFile(it) {

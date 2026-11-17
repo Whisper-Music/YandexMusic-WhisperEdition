@@ -1623,7 +1623,7 @@ document.addEventListener("DOMContentLoaded", () => { domReady = true; });
 function startPage() {
   let p = "wave";
   try { p = localStorage.getItem("ym_start") || "wave"; if (p === "last") p = localStorage.getItem("ym_start_last") || "wave"; } catch {}
-  const id = { likes: "likes", stats: "statsBtn", studio: "studioBtn" }[p];
+  const id = { likes: "likes", stats: "statsBtn", studio: "studioBtn", friends: "friendsBtn" }[p];
   if (!id) return goTop(showWave);
   const go = () => {
     const b = $("#" + id);
@@ -1661,8 +1661,39 @@ $("#loginBtn").onclick = async () => {
     afterLogin();
   } catch (e) { showLogin("Не удалось войти: " + (e?.message || e)); }
 };
+// «Профиль»: выбор — Whisper Archive (страница в приложении, core/profile.js) или Яндекс (сайт id.yandex.ru в браузере);
+// там же — «Выйти из Яндекса»
+$("#profile").onclick = () => {
+  if (document.querySelector(".modal")) return;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const wrap = el("div", "login modal");
+  const box = el("div", "panel login-box modalbox prochoose");
+  box.append(el("h2", "", "Профиль"));
+  const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  const opt = (icon, title, sub, fn) => {
+    const b = el("button", "addopt"); b.type = "button";
+    const i = el("span", "addico", icon), tx = el("span");
+    tx.append(el("b", "", title), el("small", "", sub));
+    b.append(i, tx);
+    b.onclick = () => { close(); fn(); };
+    return b;
+  };
+  const list = el("div", "addopts");
+  if (window.Whisper?.modules?.waprofile) list.append(opt("W", "Whisper Archive", "Здесь, в приложении: альбомы, лайки, друзья, ник и аватар", () => window.Whisper.modules.waprofile.open()));
+  list.append(opt("Я", "Яндекс", "Откроется сайт Яндекс ID в браузере", () => { try { window.__TAURI__.opener.openUrl("https://id.yandex.ru/"); } catch {} }));
+  const row = el("div", "row");
+  const out = el("button", "nav danger", "Выйти из Яндекса"); out.type = "button"; out.onclick = () => { close(); logoutYandex(); };
+  const no = el("button", "nav", "Отмена"); no.type = "button"; no.onclick = close;
+  row.append(out, no);
+  box.append(list, row);
+  wrap.onpointerdown = (e) => { if (e.target === wrap) close(); };
+  document.addEventListener("keydown", onKey, true);
+  wrap.append(box); document.body.append(wrap);
+  list.querySelector("button")?.focus();
+};
 // выход из аккаунта — только после подтверждения в окне (Esc, «Отмена» или клик мимо окна — остаёмся)
-$("#profile").onclick = async () => {
+async function logoutYandex() {
   const ok = await modal({
     title: "Выйти из аккаунта?",
     text: "Вход будет сброшен на этом компьютере. Чтобы снова слушать музыку, нужно будет войти в Яндекс заново.",
@@ -1674,7 +1705,7 @@ $("#profile").onclick = async () => {
   catch (e) { showToast("Не удалось удалить токен из системного хранилища: " + (e?.message || e) + ". Выход не выполнен — попробуй ещё раз.", 6000, { kind: "err" }); return; }   // не делаем вид, что вышли
   await forgetAccountData();
   location.reload();
-};
+}
 // Всё, что относится к аккаунту: очередь и место в треке, лайки, закладки, станция волны, «уже слышал», история
 // прослушивания и поиска, свои обложки плейлистов. Настройки приложения, стили и скачанные треки остаются.
 const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_wave_pins", "ym_liked_artists", "ym_search_hist", "ym_search_picks", "ym_history"];
@@ -1932,6 +1963,7 @@ function resetView() {
   $("#more").hidden = true; $("#status").textContent = "";
   $("#chips").hidden = true; $("#lkFind").hidden = true; $("#lastAlbum").hidden = true; $("#similar").hidden = true;
   $("#wavePage").hidden = true; $("#settingsPage").hidden = true; $("#statsPage").hidden = true; $("#studioPage").hidden = true;
+  document.querySelectorAll(".main > .kitpage").forEach((s) => { s.hidden = true; });     // страницы общих модулей (kit.page)
   $("#plPage").hidden = true; $("#plBar").hidden = true; $("#plRecs").hidden = true; $("#plCreateBtn").hidden = true;
   curPl = null; recArr.length = 0; $("#plRecList").innerHTML = "";
   dlCur = null; $("#dlAllBtn").hidden = true;
@@ -3978,7 +4010,7 @@ function modal({ title, text = "", input = null, check = null, ok = "Готов�
     wrap.onpointerdown = (e) => { if (e.target === wrap) done(null); };
     box.onsubmit = (e) => {
       e.preventDefault();
-      if (inp && !inp.value.trim()) { err.textContent = "Введи название"; inp.focus(); return; }
+      if (inp && !inp.value.trim()) { err.textContent = input.empty || "Введи название"; inp.focus(); return; }
       done({ value: inp ? inp.value.trim() : "", checked: cb ? cb.checked : false });
     };
     wrap.append(box); document.body.append(wrap);

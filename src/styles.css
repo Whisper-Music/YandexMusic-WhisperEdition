@@ -1136,6 +1136,7 @@ a { color: var(--accent); }
 :root[data-style="steam"] #statsBtn { --ic: var(--i-stats); }
 :root[data-style="steam"] #settingsBtn { --ic: var(--gear); }
 :root[data-style="steam"] #studioBtn { --ic: var(--ly-i-studio); }
+:root[data-style="steam"] #friendsBtn { --ic: var(--ly-i-friends); }
 :root[data-style="steam"] #profile { --ic: var(--i-user); }
 :root[data-style="steam"] .search, :root[data-style="steam"] input[type=password], :root[data-style="steam"] .field {
   border-radius: 3px; border: 1px solid var(--ln); font-family: inherit;
@@ -1399,6 +1400,7 @@ a { color: var(--accent); }
 :root[data-style="lolitta"] #statsBtn { --ic: var(--i-stats); }
 :root[data-style="lolitta"] #settingsBtn { --ic: var(--i-gear); }
 :root[data-style="lolitta"] #studioBtn { --ic: var(--ly-i-studio); }
+:root[data-style="lolitta"] #friendsBtn { --ic: var(--ly-i-friends); }
 :root[data-style="lolitta"] #profile { --ic: var(--i-user); }
 :root[data-style="lolitta"] #profile::before { width: 22px; height: 22px; }
 

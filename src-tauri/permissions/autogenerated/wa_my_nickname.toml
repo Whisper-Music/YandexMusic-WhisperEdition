@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-my-nickname"
+description = "Enables the wa_my_nickname command without any pre-configured scope."
+commands.allow = ["wa_my_nickname"]
+
+[[permission]]
+identifier = "deny-wa-my-nickname"
+description = "Denies the wa_my_nickname command without any pre-configured scope."
+commands.deny = ["wa_my_nickname"]

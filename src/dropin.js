@@ -22,7 +22,8 @@
   hint.setAttribute("aria-hidden", "true");
   hint.innerHTML = '<div class="drophint-box"><b>Отпусти файл</b><span>Картинка или видео — на фон, трек — выбери, что с ним сделать</span></div>';
   document.body.append(hint);
-  window.dropHint = (on) => { hint.hidden = !on || !!document.querySelector(".dropdlg"); };
+  // открыто окно «Добавить трек» (linkadd.js) — у него своя зона для файла, общая подсказка не нужна
+  window.dropHint = (on) => { hint.hidden = !on || !!document.querySelector(".dropdlg, .addtrack"); };
 
   // ---------- что за трек: имя файла и теги → запрос в поиск ----------
   function guess(info) {
@@ -237,9 +238,17 @@
         optLocal.classList.toggle("on", dest === "local");
         optArch.classList.toggle("on", dest === "archive");
         const pt = picked ? titleOf() : "";
-        optLike._note.textContent = picked ? `Вместо «${pt}» будет играть твой файл, а сам трек лайкнется. Только на этом компьютере`
-          : "Появится в «Лайках» и в «Моих версиях» студии. Только на этом компьютере";
-        optLocal._note.textContent = picked ? `Вместо «${pt}» будет играть твой файл, без лайка. Только на этом компьютере`
+        // синхронизация через архив (libsync.js) включена — трек будет и на других устройствах
+        // (строки целиком, а не склейкой: так их переводит i18n.js)
+        const all = !!window.libsyncActive?.();
+        optLike._note.textContent = picked
+          ? (all ? `Вместо «${pt}» будет играть твой файл, а сам трек лайкнется. На всех устройствах — через Whisper Archive`
+            : `Вместо «${pt}» будет играть твой файл, а сам трек лайкнется. Только на этом компьютере`)
+          : (all ? "Появится в «Лайках» и в «Моих версиях» студии. На всех устройствах — через Whisper Archive"
+            : "Появится в «Лайках» и в «Моих версиях» студии. Только на этом компьютере");
+        optLocal._note.textContent = picked
+          ? (all ? `Вместо «${pt}» будет играть твой файл, без лайка. На всех устройствах — через Whisper Archive`
+            : `Вместо «${pt}» будет играть твой файл, без лайка. Только на этом компьютере`)
           : "Только в «Моих версиях» студии, без лайка";
         likeRow.hidden = !picked;
         if (picked) likeTx.textContent = `Лайкнуть «${pt}»`;
@@ -304,7 +313,7 @@
           : { artists: g.artist ? [{ name: g.artist.slice(0, 120) }] : [], albums: g.album ? [{ title: g.album.slice(0, 200) }] : [] };
         const duration = info.ext === "mp3" ? null : await measure().catch(() => 0);
         const replaces = t ? String(t.id).split(":")[0] : null;
-        const it = await invoke("drop_audio_local", { pick: f.id, title: titleOf(), meta, duration: duration || null, replaces, liked: like });
+        const it = await invoke("drop_audio_local", { pick: f.id, title: titleOf(), meta, duration: duration || null, replaces, liked: like, link: typeof f.link === "string" ? f.link : null });
         window.studioAdd?.(it);
         if (t) {
           if (like) await likeTrack(t);
@@ -312,7 +321,8 @@
           toast(like ? `Вместо «${it.title}» теперь играет твой файл, трек в «Лайках»` : `Вместо «${it.title}» теперь играет твой файл`, 5000, { kind: "ok", action: play });
         } else {
           const play = { label: "Слушать", fn: () => window.studioPlay?.(it.id) };
-          toast(like ? `«${it.title}» — в «Лайках», только на этом компьютере` : `«${it.title}» сохранён в «Моих версиях» студии`, 4500, { kind: "ok", action: play });
+          const here = window.libsyncActive?.() ? `«${it.title}» — в «Лайках»` : `«${it.title}» — в «Лайках», только на этом компьютере`;
+          toast(like ? here : `«${it.title}» сохранён в «Моих версиях» студии`, 4500, { kind: "ok", action: play });
         }
       }
       async function toArchive() {

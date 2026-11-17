@@ -54,6 +54,12 @@
   <link rel="stylesheet" href="notify.css" />
   <script src="notify.js" defer></script>
   <script src="core/together.js" defer></script>
+  <!-- «Друзья» — общий модуль ядра (Whisper Archive: /api/friends, Rust — whisper/friends.rs); страница — kit.page в yandex.js -->
+  <link rel="stylesheet" href="core/friends.css" />
+  <script src="core/friends.js" defer></script>
+  <!-- свой профиль Whisper Archive (core/profile.js): открывается из «Профиля» (выбор Яндекс / архив — main.js) -->
+  <link rel="stylesheet" href="core/profile.css" />
+  <script src="core/profile.js" defer></script>
   <script src="listenstats.js" defer></script>
   <script src="plays.js" defer></script>
   <!-- кэш приложения: популярные нескачанные треки и проигранное из текущего плейлиста (cache.rs) -->
@@ -70,6 +76,10 @@
   <!-- перетаскивание в окно на любой странице: трек — окно «Что сделать с треком» (в «Лайки» / в архив) -->
   <link rel="stylesheet" href="dropin.css" />
   <script src="dropin.js" defer></script>
+  <!-- трек по ссылке (YouTube, SoundCloud, видео ВК → linkdl.rs, yt-dlp) — дальше то же окно, что у dropin.js -->
+  <script src="linkadd.js" defer></script>
+  <!-- синхронизация своих треков (студии) через Whisper Archive: /api/library, Rust — whisper/library.rs + studio.rs -->
+  <script src="libsync.js" defer></script>
   <!-- Настройки → «Панели»: порядок и видимость кнопок боковой панели -->
   <link rel="stylesheet" href="panels.css" />
   <script src="panels.js" defer></script>
@@ -150,6 +160,7 @@
       <button class="nav" id="statsBtn">Статистика</button>
       <button class="nav" id="settingsBtn">Настройки</button>
       <button class="nav" id="studioBtn">Студия</button>
+      <button class="nav" id="friendsBtn">Друзья</button>
       <div class="spacer"></div>
       <!-- только во вкладке браузера (html.webmode) -->
       <button class="nav webback" id="webBackBtn" hidden>Вернуться в приложение</button>
@@ -226,6 +237,11 @@
         </div>
         <button id="vizFsBtn" class="vizfsbtn" title="Визуализатор на весь экран (F)" aria-label="Визуализатор на весь экран"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </section>
+
+      <!-- «Друзья» (core/friends.js рисует содержимое сам; показывает/прячет — kit.page в yandex.js) -->
+      <section id="friendsPage" class="kitpage" hidden></section>
+      <!-- «Профиль» → Whisper Archive (core/profile.js; кнопка — #profile, щелчок по ней обрабатывает main.js) -->
+      <section id="waprofilePage" class="kitpage" hidden></section>
 
       <!-- «Студия» (studio.js): обрезка трека и свои версии с локальным лайком -->
       <section id="studioPage" class="studio" hidden>
@@ -575,6 +591,18 @@
           <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
           <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
           <div class="dcline"><span class="dcnote">Клавиши внутри окна: стрелки, Пробел, Ctrl+F и другие</span><button class="nav" id="kbHelpBtn">Список (F1)</button></div>
+        </div>
+        <div class="card" id="linkCard" data-tab="app">
+          <h3>Треки по ссылке <i class="hint" title="YouTube, SoundCloud, видео и клипы ВКонтакте: скачивается только звук (m4a или mp3), дальше — то же окно, что при перетаскивании файла. Качает бесплатная программа yt-dlp: официальный выпуск с GitHub, контрольная сумма сверяется, раз в неделю обновляется сама. Ссылка вставляется и через Ctrl+V прямо в окне.">i</i></h3>
+          <p class="status" id="linkState">—</p>
+          <div class="row">
+            <button type="button" class="nav" id="linkAdd">Добавить трек…</button>
+            <button type="button" class="nav" id="linkUpdate">Обновить yt-dlp</button>
+            <button type="button" class="nav danger" id="linkRemove" hidden>Удалить yt-dlp</button>
+          </div>
+          <!-- синхронизация своих треков через архив (libsync.js): по ссылке, свои файлы, версии студии -->
+          <label class="switch" title="Свои треки — по ссылке, свои файлы и версии студии — хранятся в Whisper Archive вместе с местом в «Лайках»: на телефоне и другом компьютере будет то же самое. Файлы занимают место в архиве (5 ГБ на аккаунт). Нужен вход в архив (Настройки → Интеграции)"><input type="checkbox" id="lsOn" /><i></i><span>Синхронизировать через Whisper Archive</span></label>
+          <div class="dcline"><span class="dcnote" id="lsState">—</span><button type="button" class="nav" id="lsNow">Синхронизировать</button></div>
         </div>
         <div class="card" id="updCard" data-tab="app">
           <h3>Обновления</h3>

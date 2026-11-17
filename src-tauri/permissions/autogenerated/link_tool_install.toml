@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-link-tool-install"
+description = "Enables the link_tool_install command without any pre-configured scope."
+commands.allow = ["link_tool_install"]
+
+[[permission]]
+identifier = "deny-link-tool-install"
+description = "Denies the link_tool_install command without any pre-configured scope."
+commands.deny = ["link_tool_install"]

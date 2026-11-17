@@ -101,6 +101,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+          # выпуски — с полным LTO (меньше и быстрее бинарник); в Cargo.toml профиль облегчён для локальной сборки
+          CARGO_PROFILE_RELEASE_LTO: 'true'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
         with:
           tagName: v__VERSION__
           args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}

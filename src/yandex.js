@@ -389,6 +389,43 @@
       if (first && firstOf) firstOf.before(card); else page.append(card);
       return true;
     },
+    // страница общего модуля в боковой панели (core/friends.js): кнопка #<key>Btn и раздел #<key>Page.kitpage — в index.html,
+    // прячет раздел resetView (main.js). render(sec) — нарисовать содержимое при каждом открытии.
+    // Ответ — { el, open(), shown() } или null, если в разметке такой страницы нет.
+    // o.btn — своя кнопка вместо #<key>Btn (подсвечивается в панели), o.bind: false — щелчок по ней модуль не забирает
+    // (core/profile.js: кнопку «Профиль» обрабатывает main.js — сначала выбор «Яндекс или Whisper Archive»)
+    // кнопка «Профиль» в боковой панели — для core/profile.js (свой профиль Whisper Archive)
+    profileButton: "profile",
+    page: (key, { title, render, btn: btnId, bind = true } = {}) => {
+      const btn = document.getElementById(btnId || key + "Btn"), sec = document.getElementById(key + "Page");
+      if (!btn || !sec) return null;
+      const show = () => {
+        ++nav;
+        setHead({ title: title || btn.textContent }); setActive(btn.id); renderTabs(false); resetView();
+        $("#list").hidden = true; sec.hidden = false;
+        try { render?.(sec); } catch (e) { console.error(e); }
+      };
+      if (bind) btn.onclick = () => goTop(show);
+      return { el: sec, open: () => goTop(show), shown: () => !sec.hidden };
+    },
+    // послушать треки альбома архива (друг поделился своим публичным альбомом): номер в плеере — «wa-<трек>»,
+    // играет файл архива (core/archive.js, waShared) — как версия по ссылке-приглашению (studio.js → studioOpenShared).
+    // tracks — [{ id (uuid), title, durationMs }], o — { author, album (uuid) }
+    playArchive: (tracks, start = 0, o = {}) => {
+      const U = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const author = String(o.author || "").slice(0, 120);
+      const raws = (tracks || []).filter((x) => U.test(String(x?.id || ""))).map((x) => ({
+        id: "wa-" + String(x.id).toLowerCase(),
+        title: String(x.title || "Трек").slice(0, 200),
+        artists: author ? [{ name: author }] : [],
+        durationMs: Math.max(0, Math.round(+x.durationMs || 0)),
+        waShared: String(x.id).toLowerCase(),
+        waAlbum: U.test(String(o.album || "")) ? String(o.album) : undefined,
+      }));
+      if (!raws.length) return false;
+      W.queue.play(raws, Math.max(0, Math.min(start, raws.length - 1)));
+      return true;
+    },
     // меню «⋯» трека (main.js) для пунктов общих модулей (Whisper.ui.trackMenu): то же, чем пользуется само меню
     menu: (raw, ctx) => ({
       item: (icon, text, fn, o) => menuItem(icon, text, fn, o),

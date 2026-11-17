@@ -51,7 +51,41 @@ pub struct Item {
     /// «replace» — свой файл вместо трека Яндекса src_id: на этом компьютере играет он (main.js → studioReplacement)
     #[serde(default = "cut_origin")]
     pub origin: String,
+    /// откуда файл: сайт и ссылка (трек по ссылке — linkdl.rs), «file» — свой файл; у обрезок нет.
+    /// Нужно синхронизации через архив (libsync.js → /api/library: source), чтобы на телефоне было видно, откуда трек
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ItemSource>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
+pub struct ItemSource {
+    /// youtube, soundcloud, vk-video, file (как source.site в docs/LIBRARY-SYNC.md архива)
+    pub site: String,
+    #[serde(default)]
+    pub url: String,
+    /// номер на сайте: id видео YouTube, «автор/трек» SoundCloud, «video-1_2» ВК
+    #[serde(default)]
+    pub id: String,
+}
+
+/// Источник из того, что пришло от интерфейса или из архива: ссылка заново проверяется (linkdl::check_url),
+/// сайт — только из известных; неизвестное — «file» без ссылки.
+fn clean_source(site: &str, url: &str, id: &str) -> ItemSource {
+    if !url.is_empty() {
+        if let Some((u, s, i)) = crate::linkdl::source_info(url) {
+            return ItemSource { site: s.into(), url: u, id: i };
+        }
+    }
+    let site = if site.len() <= 24 && !site.is_empty() && site.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+        site.to_string()
+    } else {
+        "file".into()
+    };
+    ItemSource { site, url: String::new(), id: clean_text(id, 128) }
+}
+
+/// Площадка этого приложения в библиотеке архива (/api/library/{service}).
+pub const LIB_SERVICE: &str = "yandex";
 
 fn mp3_ext() -> String {
     "mp3".into()
@@ -436,7 +470,7 @@ pub async fn studio_save(
         std::fs::rename(&tmp, file_of(&d, &id)).map_err(|e| format!("не удалось записать файл: {e}"))?;
         let item = Item {
             id, src_id, title, meta, start_ms: s, end_ms: e, duration_ms: e - s, liked: false, liked_at: 0,
-            created: now_secs(), size: cut.len() as u64, ext: mp3_ext(), origin: cut_origin(),
+            created: now_secs(), size: cut.len() as u64, ext: mp3_ext(), origin: cut_origin(), source: None,
         };
         items.insert(0, item.clone());
         if let Err(err) = save_index(&d, &items) {
@@ -462,9 +496,10 @@ pub fn studio_list(app: AppHandle) -> Result<Vec<Item>, String> {
     Ok(live)
 }
 
-/// Локальный лайк и название.
+/// Локальный лайк и название. liked_at (секунды) — время лайка с другого устройства (libsync.js): версия встаёт
+/// в «Лайках» туда же, где она там; без него — момент нажатия.
 #[tauri::command]
-pub fn studio_update(app: AppHandle, id: String, liked: Option<bool>, title: Option<String>) -> Result<Item, String> {
+pub fn studio_update(app: AppHandle, id: String, liked: Option<bool>, title: Option<String>, liked_at: Option<u64>) -> Result<Item, String> {
     if !id_ok(&id) {
         return Err("Некорректный номер версии".into());
     }
@@ -479,6 +514,11 @@ pub fn studio_update(app: AppHandle, id: String, liked: Option<bool>, title: Opt
             it.liked_at = 0;
         }
         it.liked = l;
+    }
+    if let Some(at) = liked_at.filter(|a| *a > 0) {
+        if it.liked {
+            it.liked_at = at.min(now_secs() + 86400);
+        }
     }
     if let Some(t) = title {
         let t = clean_text(&t, 200);
@@ -759,7 +799,10 @@ pub async fn drop_audio_info(app: AppHandle, pick: usize) -> Result<DropInfo, St
 ///    удаляется: у трека одна замена.
 ///  * без replaces — свой трек (origin «import»); liked — сразу в «Лайки» (по умолчанию да).
 /// meta — как у версий (исполнители, обложка, альбом: от совпавшего трека Яндекса, если нашёлся).
+/// link — ссылка, по которой трек скачан (linkadd.js → linkdl.rs): запоминается источником (сайт, ссылка, номер);
+/// без неё источник — «file».
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn drop_audio_local(
     app: AppHandle,
     pick: usize,
@@ -768,7 +811,9 @@ pub async fn drop_audio_local(
     duration: Option<u64>,
     replaces: Option<String>,
     liked: Option<bool>,
+    link: Option<String>,
 ) -> Result<Item, String> {
+    let source = clean_source("file", link.as_deref().unwrap_or(""), "");
     let replaces = match replaces {
         Some(r) => Some(track_num(&r)?),
         None => None,
@@ -801,6 +846,7 @@ pub async fn drop_audio_local(
             id: new_id()?, src_id: replaces.clone().unwrap_or_default(), title, meta, start_ms: 0, end_ms: dur, duration_ms: dur,
             liked: like, liked_at: if like { now } else { 0 }, created: now, size: b.len() as u64, ext: ext.into(),
             origin: if replaces.is_some() { "replace".into() } else { "import".into() },
+            source: Some(source),
         };
         let tmp = d.join(format!("{}.part", item.id));
         std::fs::write(&tmp, &b).map_err(|e| format!("не удалось записать файл: {e}"))?;
@@ -841,6 +887,140 @@ pub async fn studio_room_cache(app: AppHandle, code: String, id: String, file_na
     let (_, audio) = read_item_file(&app, &id)?;
     let track = upload::TrackFile::new(&file_name, &audio).ok_or_else(|| "Файл версии в неизвестном формате".to_string())?;
     up.to_room_cache(&code, track).await
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// синхронизация через архив (libsync.js, ядро — whisper/library.rs, сервер — /api/library, docs/LIBRARY-SYNC.md)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Файл версии → в библиотеку архива (запись с тем же key интерфейс уже отправил: wa_lib_changes).
+#[tauri::command]
+pub async fn studio_lib_upload(app: AppHandle, id: String) -> Result<WaResponse, String> {
+    let a = app.clone();
+    let (item, bytes) = tauri::async_runtime::spawn_blocking(move || read_item_file(&a, &id)).await.map_err(|e| e.to_string())??;
+    crate::whisper::library::upload_file(LIB_SERVICE, &item.id, &item.title, &bytes).await
+}
+
+/// Трек библиотеки с другого устройства — как его описал интерфейс по записи архива (libsync.js → fromLib).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Restore {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub meta: serde_json::Value,
+    #[serde(default)]
+    pub origin: String,
+    #[serde(default)]
+    pub src_id: String,
+    #[serde(default)]
+    pub liked: bool,
+    #[serde(default)]
+    pub liked_at: u64,
+    #[serde(default)]
+    pub created: u64,
+    #[serde(default)]
+    pub start_ms: u64,
+    #[serde(default)]
+    pub end_ms: u64,
+    #[serde(default)]
+    pub duration_ms: u64,
+    #[serde(default)]
+    pub source: Option<ItemSource>,
+}
+
+/// Проверенная версия из Restore (без файла): номер, название, вид, исходник, время — в своих границах.
+fn restored(r: Restore, now: u64) -> Result<Item, String> {
+    if !id_ok(&r.id) {
+        return Err("Некорректный номер версии".into());
+    }
+    let title = clean_text(&r.title, 200);
+    if title.is_empty() {
+        return Err("У трека нет названия".into());
+    }
+    let origin = match r.origin.as_str() {
+        "cut" | "replace" | "import" => r.origin.clone(),
+        _ => "import".to_string(),
+    };
+    let src_id = if origin == "import" { String::new() } else { track_num(&r.src_id)? };
+    let time = |t: u64| t.min(now + 86400);
+    let like = r.liked && origin != "replace";
+    let dur = r.duration_ms.min(24 * 3600 * 1000);
+    let (start_ms, end_ms) = if origin == "cut" && r.end_ms > r.start_ms { (r.start_ms, r.end_ms) } else { (0, dur) };
+    Ok(Item {
+        id: r.id,
+        src_id,
+        title,
+        meta: clean_meta(r.meta),
+        start_ms,
+        end_ms,
+        duration_ms: dur,
+        liked: like,
+        liked_at: if like { time(if r.liked_at > 0 { r.liked_at } else { now }) } else { 0 },
+        created: time(if r.created > 0 { r.created } else { now }),
+        size: 0,
+        ext: mp3_ext(),
+        origin,
+        source: r.source.map(|s| clean_source(&s.site, &s.url, &s.id)),
+    })
+}
+
+/// Скачать файл трека из библиотеки архива и положить в студию с тем же номером (на всех устройствах один key),
+/// лайком и временем лайка — в «Лайках» он встаёт на то же место. Уже есть — возвращается как есть.
+#[tauri::command]
+pub async fn studio_lib_restore(app: AppHandle, item: Restore) -> Result<Item, String> {
+    let mut item = restored(item, now_secs())?;
+    {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let items = load_index(&dir(&app)?);
+        if let Some(it) = items.iter().find(|i| i.id == item.id) {
+            return Ok(it.clone());
+        }
+        if items.len() >= MAX_ITEMS {
+            return Err(format!("В студии уже {MAX_ITEMS} треков — удали ненужные"));
+        }
+    }
+    let bytes = crate::whisper::library::download_file(LIB_SERVICE, &item.id).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let ext = audio_ext(&bytes).ok_or("файл из архива — не звук")?;
+        item.ext = ext.into();
+        item.size = bytes.len() as u64;
+        if ext == "mp3" {
+            let d = duration_ms(&bytes);
+            if d > 0 {
+                item.duration_ms = d;
+                if item.origin != "cut" {
+                    item.end_ms = d;
+                }
+            }
+        }
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let d = dir(&app)?;
+        let mut items = load_index(&d);
+        if let Some(it) = items.iter().find(|i| i.id == item.id) {
+            return Ok(it.clone()); // пока качали, его уже положили
+        }
+        // у трека одна замена: прошлая уходит (синхронизация удалит её и в архиве)
+        if item.origin == "replace" {
+            let (old, keep): (Vec<Item>, Vec<Item>) = items.drain(..).partition(|i| i.origin == "replace" && i.src_id == item.src_id);
+            items = keep;
+            for it in &old {
+                let _ = std::fs::remove_file(path_of(&d, it));
+            }
+        }
+        let tmp = d.join(format!("{}.part", item.id));
+        std::fs::write(&tmp, &bytes).map_err(|e| format!("не удалось записать файл: {e}"))?;
+        std::fs::rename(&tmp, path_of(&d, &item)).map_err(|e| format!("не удалось записать файл: {e}"))?;
+        items.push(item.clone());
+        items.sort_by(|a, b| b.created.cmp(&a.created)); // «Мои версии» — новые сверху, как при добавлении
+        if let Err(err) = save_index(&d, &items) {
+            let _ = std::fs::remove_file(path_of(&d, &item));
+            return Err(err);
+        }
+        Ok(item)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -939,6 +1119,46 @@ mod tests {
         assert!((127..=129).contains(&i.bitrate), "{}", i.bitrate);
         assert_eq!(i.id3, 15);
         assert!(mp3_info(b"nope").is_none());
+    }
+
+    #[test]
+    fn sources() {
+        let s = clean_source("file", "https://youtu.be/jNQXAC9IVRw", "");
+        assert_eq!(s, ItemSource { site: "youtube".into(), url: "https://www.youtube.com/watch?v=jNQXAC9IVRw".into(), id: "jNQXAC9IVRw".into() });
+        // чужая ссылка не сохраняется, сайт — только из латиницы
+        assert_eq!(clean_source("youtube", "https://evil.example/x", "1"), ItemSource { site: "youtube".into(), url: "".into(), id: "1".into() });
+        assert_eq!(clean_source("../x", "", "").site, "file");
+        assert_eq!(clean_source("", "", "").site, "file");
+        // старый index.json без source читается
+        let it: Item = serde_json::from_str(r#"{"id":"studio-0123456789abcdef0123456789abcdef","srcId":"","title":"t","startMs":0,"endMs":1,"durationMs":1,"created":1,"size":1}"#).unwrap();
+        assert!(it.source.is_none());
+        assert!(!serde_json::to_string(&it).unwrap().contains("source"));
+    }
+
+    #[test]
+    fn restore_from_library() {
+        let now = 1_800_000_000;
+        let base = || Restore {
+            id: "studio-0123456789abcdef0123456789abcdef".into(), title: " Трек \n с YouTube ".into(), meta: serde_json::json!({ "coverUri": "x" }),
+            origin: "import".into(), src_id: "".into(), liked: true, liked_at: 1_700_000_000, created: 1_699_999_000,
+            start_ms: 0, end_ms: 0, duration_ms: 1000, source: Some(ItemSource { site: "youtube".into(), url: "https://youtu.be/jNQXAC9IVRw".into(), id: "".into() }),
+        };
+        let it = restored(base(), now).unwrap();
+        assert_eq!(it.title, "Трек с YouTube");
+        assert_eq!((it.liked, it.liked_at, it.created, it.end_ms), (true, 1_700_000_000, 1_699_999_000, 1000));
+        assert_eq!(it.source.unwrap().id, "jNQXAC9IVRw");
+        // время из будущего — не дальше суток
+        assert_eq!(restored(Restore { liked_at: u64::MAX, ..base() }, now).unwrap().liked_at, now + 86400);
+        // замена: лайк — самому треку Яндекса, у неё нет; без номера трека — нельзя
+        let r = restored(Restore { origin: "replace".into(), src_id: "123:456".into(), ..base() }, now).unwrap();
+        assert_eq!((r.liked, r.liked_at, r.src_id.as_str()), (false, 0, "123"));
+        assert!(restored(Restore { origin: "replace".into(), ..base() }, now).is_err());
+        // обрезка помнит границы
+        let c = restored(Restore { origin: "cut".into(), src_id: "77".into(), start_ms: 500, end_ms: 900, ..base() }, now).unwrap();
+        assert_eq!((c.start_ms, c.end_ms), (500, 900));
+        assert!(restored(Restore { id: "studio-../x".into(), ..base() }, now).is_err());
+        assert!(restored(Restore { title: " ".into(), ..base() }, now).is_err());
+        assert_eq!(restored(Restore { origin: "evil".into(), ..base() }, now).unwrap().origin, "import");
     }
 
     #[test]

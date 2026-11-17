@@ -16,12 +16,13 @@
     { id: "statsBtn", label: "Статистика", flag: "statsBtnOn" },
     { id: "settingsBtn", label: "Настройки", lock: true },
     { id: "studioBtn", label: "Студия", flag: "stuOn" },
+    { id: "friendsBtn", label: "Друзья" },
   ];
   const byId = Object.fromEntries(ITEMS.map((it) => [it.id, it]));
   // Стартовая страница — галочка в строке кнопки (одна на весь список). localStorage ym_start: wave | likes | stats |
-  // studio (main.js → startPage). Кнопку спрятали — при запуске откроется «Моя волна».
+  // studio | friends (main.js → startPage). Кнопку спрятали — при запуске откроется «Моя волна».
   const START = "ym_start";
-  const START_OF = { wave: "wave", likes: "likes", statsBtn: "stats", studioBtn: "studio" };
+  const START_OF = { wave: "wave", likes: "likes", statsBtn: "stats", studioBtn: "studio", friendsBtn: "friends" };
   const startNow = () => { let v = "wave"; try { v = localStorage.getItem(START) || "wave"; } catch {} return Object.values(START_OF).includes(v) ? v : "wave"; };
   const setStart = (v) => { try { localStorage.setItem(START, v); } catch {} };
   let st = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } })();

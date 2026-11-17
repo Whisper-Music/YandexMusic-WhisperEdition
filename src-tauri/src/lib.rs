@@ -14,6 +14,7 @@ mod engine;
 mod export;
 mod fonts;
 mod hotkeys;
+mod linkdl;
 mod lyrics;
 mod mini;
 mod mixer;
@@ -376,6 +377,12 @@ pub fn run() {
             bg::bg_read,
             theme::theme_save,
             export::export_save,
+            linkdl::link_check,
+            linkdl::link_tool_status,
+            linkdl::link_tool_install,
+            linkdl::link_tool_remove,
+            linkdl::link_download,
+            linkdl::link_cancel,
             // Whisper Archive: у каждой операции своя команда, путь собирает Rust (src/core/rust/whisper/)
             whisper::wa_token_exists,
             whisper::wa_token_set,
@@ -402,6 +409,22 @@ pub fn run() {
             studio::studio_export,
             studio::studio_to_archive,
             studio::studio_room_cache,
+            // синхронизация своих треков через архив (libsync.js; ядро — whisper/library.rs)
+            whisper::library::wa_lib_list,
+            whisper::library::wa_lib_changes,
+            whisper::friends::wa_friends_list,
+            whisper::friends::wa_friends_search,
+            whisper::friends::wa_friend_request,
+            whisper::friends::wa_friend_accept,
+            whisper::friends::wa_friend_remove,
+            whisper::friends::wa_user_profile,
+            whisper::friends::wa_image,
+            whisper::profile::wa_my_profile,
+            whisper::profile::wa_my_nickname,
+            whisper::profile::wa_my_avatar,
+            whisper::profile::wa_my_avatar_remove,
+            studio::studio_lib_upload,
+            studio::studio_lib_restore,
             whisper_yandex::wa_room_cache_track,
             whisper::stream::wa_prefetch,
             whisper::rooms::wa_room_create,

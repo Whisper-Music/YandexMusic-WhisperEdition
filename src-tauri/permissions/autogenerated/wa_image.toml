@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-image"
+description = "Enables the wa_image command without any pre-configured scope."
+commands.allow = ["wa_image"]
+
+[[permission]]
+identifier = "deny-wa-image"
+description = "Denies the wa_image command without any pre-configured scope."
+commands.deny = ["wa_image"]

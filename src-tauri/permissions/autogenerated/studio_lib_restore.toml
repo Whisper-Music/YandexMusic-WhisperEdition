@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-studio-lib-restore"
+description = "Enables the studio_lib_restore command without any pre-configured scope."
+commands.allow = ["studio_lib_restore"]
+
+[[permission]]
+identifier = "deny-studio-lib-restore"
+description = "Denies the studio_lib_restore command without any pre-configured scope."
+commands.deny = ["studio_lib_restore"]

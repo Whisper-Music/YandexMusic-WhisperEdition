@@ -22,8 +22,17 @@ WebKitGTK в Linux). Фронтенд — **чистый JS/CSS/HTML без сб
 git submodule update --init   # ядро Whisper (src/core) — подмодуль, без него приложение не соберётся
 npm install
 npm run tauri dev      # разработка
-npm run tauri build    # установщик (Windows: …_x64-setup.exe; Linux — см. README)
+npm run build          # установщик для себя (Windows: …_x64-setup.exe; Linux — см. README): без подписи обновлений
+npm run tauri build    # как в CI: с .sig для latest.json — нужен ключ TAURI_SIGNING_PRIVATE_KEY
 ```
+
+- `npm run build` = `tauri build --config src-tauri/tauri.local.conf.json` (`createUpdaterArtifacts: false`): ни ключа, ни
+  `.sig` рядом с установщиком. Выпуски собирает только CI (release.yml): там подписи нужны — из них tauri-action собирает
+  `latest.json`, сами `.sig` в выпуск не выкладываются (`uploadUpdaterSignatures: false`).
+- Release-профиль в Cargo.toml облегчён (без LTO, 16 частей) — полный LTO включает CI переменными `CARGO_PROFILE_RELEASE_*`.
+- Всё из `src/` (frontendDist) Tauri встраивает в exe и в release сжимает brotli в один поток. `build.rs` (check_frontend)
+  останавливает release-сборку, если в `src/` есть папка `target`/`node_modules` или файлов больше 100 МБ (в dev —
+  предупреждение). Крейт проверки ядра `src/core/rust/check` после `cargo check` оставляет такую `target` — удаляй её.
 
 - Тестов нет — проверка руками в приложении. После правок JS достаточно перезапуска dev, после Rust — пересборка.
 - `node --check src/файл.js` — быстрая проверка синтаксиса JS.
@@ -44,6 +53,13 @@ src/                      фронтенд (без сборки, файлы от
                           (сразу после styles.css; в styles.css — только гость на «Моей волне» и затемнённые кнопки)
   core/archive.js/.css    ОБЩИЙ модуль Whisper Archive: источник звука «archive» (Whisper.sources), вход, карточка
                           в «Интеграциях», «Сохранить в архив» (Whisper.ui.trackMenu; файл трека — provider.archiveSave)
+  core/friends.js/.css    ОБЩИЙ модуль «Друзья» (kit.page("friends") — кнопка #friendsBtn): список, заявки, поиск, профиль друга
+  core/profile.js/.css    ОБЩИЙ свой профиль Whisper Archive (kit.page("waprofile", { btn: kit.profileButton, bind: false })):
+                          аватар (сменить/убрать), никнейм (раз в час), место, свои и лайкнутые альбомы (послушать), друзья.
+                          Открывает main.js: кнопка «Профиль» → окно выбора «Whisper Archive» (эта страница) / «Яндекс»
+                          (id.yandex.ru в браузере) / «Выйти из Яндекса» (logoutYandex). Rust — whisper/profile.rs (wa_my_*),
+                          сервер — /api/app/me (AppProfileController: по API-ключу только лицо; устройства и синхронизация —
+                          только на сайте, кнопка «Устройства — на сайте ↗»)
   core/wmt.js             ОБЩИЙ формат .wmt: разбор/сборка (без зависимостей; браузер и Node 18+)
   core/theme-css.js       ОБЩИЙ движок CSS тем: привязка к стилю, фильтр безопасности (cssSafe), роли, tokens, OBS
   core/rust/whisper/      ОБЩИЙ Whisper Archive на Rust (подключён из src-tauri/src/lib.rs через #[path]): mod (ключ,
@@ -101,6 +117,28 @@ src/                      фронтенд (без сборки, файлы от
   cache.js                кэш приложения (Rust — cache.rs, папка app_cache_dir/tracks): популярные (дослушаны 3 раза)
                           и проигранные треки текущего плейлиста; играет тем же ymlocal:// (download::open_local
                           смотрит в кэш, если трек не скачан), window.appCache.has(id); карточка «Кэш» во «Воспроизведении»
+  linkadd.js              «Добавить трек»: по ссылке (YouTube, SoundCloud, видео/клипы ВК) или с компьютера (audio_pick).
+                          Одно окно window.addTrack: поле для ссылки + зона «Перетащи файл сюда или выбери» (щелчок —
+                          audio_pick; брошенный файл идёт обычным bg-drop → dropin.js, окно закрывается). Открывают: меню
+                          пустого места «Лайков» (tmenu.js addTrackItem), кнопка в #linkCard («Приложение»), а ссылка с этих
+                          сайтов, вставленная в поиск (или Enter) или Ctrl+V в окне, — window.linkAdd(url): то же окно со ссылкой в поле.
+                          Rust — linkdl.rs: check_url (хосты + только один трек, адрес пересобирается), yt-dlp с GitHub
+                          (SHA2-256SUMS, app_local_data_dir/tools, сам обновляется раз в 7 дней), запуск с --ignore-config
+                          --no-plugin-dirs --no-exec --downloader native --use-extractors <сайт>, только m4a/mp3 без видео,
+                          ≤100 МБ, ≤1 ч; check_audio (ftyp/ID3, нет hdlr «vide», symphonia декодирует) → bg::remember_one →
+                          dropin.js dropAudio (то же окно, что при перетаскивании). Без ffmpeg: постобработки нет вовсе.
+                          Настоящая загрузка: cargo test --lib linkdl::tests::real_download -- --ignored --nocapture
+                          Ссылка едет с файлом (entry.link) → drop_audio_local(link) → Item.source { site, url, id }
+                          (linkdl::source_info: youtube | soundcloud | vk-video; без ссылки — «file»)
+  libsync.js              синхронизация своих треков (всё из студии: по ссылке, свои файлы, обрезки, замены) через
+                          Whisper Archive — на телефоне и другом ПК те же треки на тех же местах в «Лайках» (likedAt).
+                          Сервер — /api/library/{service} (service = "yandex"; описание — docs/LIBRARY-SYNC.md в репозитории
+                          архива), Rust — ядро whisper/library.rs (wa_lib_list, wa_lib_changes, upload_file/download_file) и
+                          studio.rs (studio_lib_upload, studio_lib_restore — тот же key studio-…, studio_update(likedAt)).
+                          Порядок: забрать (since=rev) → применить → отправить пачками по 100 → догрузить файлы. Состояние —
+                          localStorage ym_libsync { rev, sent, bad, uid } (в резервную копию НЕ попадает — backup.js SKIP),
+                          выключатель #lsOn (ym_libsync_on) в #linkCard. Запуск: через 8 с после старта, window.libsyncPoke
+                          (studio.js после лайка, добавления, переименования, удаления) и раз в 5 минут
   pagecache.js            карточка «Кэш страниц» там же: снимок «Лайков» (IndexedDB likes:v1 — main.js snapSave/likesSnap,
                           window.pageCache.info/clear): размер, возраст описаний, чтение с диска, как открылись «Лайки»
                           в последний раз (likesPerf: память / снимок / Яндекс), что в памяти (PL.full, artistCache)

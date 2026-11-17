@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-my-avatar-remove"
+description = "Enables the wa_my_avatar_remove command without any pre-configured scope."
+commands.allow = ["wa_my_avatar_remove"]
+
+[[permission]]
+identifier = "deny-wa-my-avatar-remove"
+description = "Denies the wa_my_avatar_remove command without any pre-configured scope."
+commands.deny = ["wa_my_avatar_remove"]

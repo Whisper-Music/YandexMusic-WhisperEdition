@@ -203,9 +203,19 @@
   // ссылка, вставленная в поиск (или набранная и Enter), — открыть, а не искать
   const search = document.getElementById("search");
   if (search) {
+    // ссылка на YouTube / SoundCloud / видео ВК — не искать, а предложить добавить трек (linkadd.js: окно «Добавить
+    // трек» со ссылкой в поле — остаётся нажать «Скачать»)
+    const offerLink = (text) => {
+      if (!window.linkLooks?.(text) || !window.linkAdd) return false;
+      if (typeof searchTimer !== "undefined") clearTimeout(searchTimer);
+      search.value = ""; search.blur();
+      window.linkAdd(text);
+      return true;
+    };
     search.addEventListener("paste", (e) => {
-      const L = parseLink(e.clipboardData?.getData("text") || "");
-      if (!L) return;
+      const text = e.clipboardData?.getData("text") || "";
+      const L = parseLink(text);
+      if (!L) { if (offerLink(text)) e.preventDefault(); return; }
       e.preventDefault();
       search.value = "";
       search.blur();
@@ -215,7 +225,10 @@
     document.addEventListener("keydown", (e) => {
       if (e.target !== search || e.key !== "Enter") return;
       const L = parseLink(search.value);
-      if (!L) return;
+      if (!L) {
+        if (window.linkLooks?.(search.value)) { e.preventDefault(); e.stopImmediatePropagation(); offerLink(search.value); }
+        return;
+      }
       e.preventDefault(); e.stopImmediatePropagation();
       if (typeof searchTimer !== "undefined") clearTimeout(searchTimer);     // main.js: поиск «на лету» по набранному
       search.value = ""; search.blur();
@@ -226,9 +239,10 @@
   document.addEventListener("paste", (e) => {
     const el = e.target;
     if (el?.closest?.("input, textarea, [contenteditable]") || document.querySelector(".modal")) return;
-    const L = parseLink(e.clipboardData?.getData("text") || "");
-    if (!L) return;
-    e.preventDefault();
-    openTarget(L);
+    const text = e.clipboardData?.getData("text") || "";
+    const L = parseLink(text);
+    if (L) { e.preventDefault(); openTarget(L); return; }
+    // ссылка на YouTube / SoundCloud / видео ВК — окно «Добавить трек» со ссылкой в поле (linkadd.js; проверка — в Rust)
+    if (window.linkLooks?.(text) && window.linkAdd) { e.preventDefault(); window.linkAdd(text); }
   });
 })();

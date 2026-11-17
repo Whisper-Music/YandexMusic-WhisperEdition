@@ -205,12 +205,9 @@
   // ---------- меню пустого места «Лайков» ----------
   const DL = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const ADD = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M17 14v6M14 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
-  // «Добавить трек…» — выбор файла с диска (bg.rs → audio_pick), дальше то же окно, что при перетаскивании (dropin.js)
-  async function pickAudio() {
-    if (!window.dropAudio) return showToast("Добавлять треки с диска здесь нельзя", 3500);
-    let files;
-    try { files = await invoke("audio_pick"); } catch (e) { return showToast("Не удалось открыть файл: " + (e?.message || e), 5000); }
-    if (files?.length) window.dropAudio(files);
+  // «Добавить трек…» — одно окно (linkadd.js → addTrack): поле для ссылки и зона «перетащи файл или выбери»
+  function addTrackItem() {
+    if (window.addTrack) menuItem(ADD, "Добавить трек…", () => window.addTrack());
   }
   function likesMenu(x, y, at) {
     if (tmenuBtn === anchor) closeTrackMenu();
@@ -224,7 +221,7 @@
         const b = menuItem(DL, busy ? "Остановить скачивание" : all ? "Лайки уже скачаны" : "Скачать лайки", () => dl.click());
         if (all && !busy) b.disabled = true;
       }
-      menuItem(ADD, "Добавить трек…", pickAudio);
+      addTrackItem();
       exportItem({ type: "likes" }, build);
       colorsItem(at);
       recentRow();
