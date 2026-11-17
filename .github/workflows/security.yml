@@ -1,5 +1,5 @@
 # Проверки безопасности (аудит F-12): тесты Rust на Windows и Linux, известные уязвимости зависимостей
-# (RustSec через cargo audit и cargo deny), синтаксис JavaScript. Сборка падает при новом advisory.
+# (RustSec через cargo audit и cargo deny), синтаксис JavaScript, политика команд Tauri. Сборка падает при новом advisory.
 name: security
 on:
   push:
@@ -32,20 +32,37 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
             libayatana-appindicator3-dev librsvg2-dev
       # cargo test --lib включает отрицательные тесты политики IPC: операции Яндекса и архива,
-      # окно входа, подмена файлов (bg.rs, download.rs), сокет Discord, ключ OBS
+      # окно входа, подмена файлов (bg.rs, download.rs), сокет Discord, ключ OBS, а ещё:
+      # трек по ссылке (linkdl.rs: только эти сайты и один трек, безопасные флаги yt-dlp, проверка звука),
+      # профиль архива (whisper/profile.rs: никнейм, тип картинки аватара), друзья (whisper/friends.rs: id, поиск).
+      # Настоящая загрузка через yt-dlp (linkdl::tests::real_download) помечена #[ignore] — в CI сеть к YouTube не нужна.
       - run: cargo test --locked --lib
         working-directory: src-tauri
+      # build.rs при сборке заново генерирует файлы разрешений: если они разошлись с git или новый файл не добавлен —
+      # на чистой машине выпуск соберётся с другими правами, чем проверено здесь
+      - name: Разрешения команд совпадают с git
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          git diff --exit-code -- src-tauri/permissions
+          new=$(git ls-files --others --exclude-standard -- src-tauri/permissions)
+          if [ -n "$new" ]; then echo "::error::Не добавлены в git: $new"; exit 1; fi
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: Синтаксис JavaScript
         shell: bash
-        run: for f in src/*.js src/core/*.js; do node --check "$f"; done
+        run: for f in src/*.js src/core/*.js src/i18n/*.js scripts/*.mjs; do node --check "$f"; done
+      # каждая команда — в lib.rs, build.rs, capabilities и permissions; нет лишних разрешений на удалённые команды
+      - name: Команды Tauri и их разрешения
+        if: runner.os == 'Linux'
+        run: node scripts/check-commands.mjs
 
   audit:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      # исключения — .cargo/audit.toml и src-tauri/deny.toml (одинаковый список с причинами и датой пересмотра)
       - name: cargo audit (RustSec)
         run: |
           cargo install cargo-audit --locked

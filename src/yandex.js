@@ -394,8 +394,9 @@
     // Ответ — { el, open(), shown() } или null, если в разметке такой страницы нет.
     // o.btn — своя кнопка вместо #<key>Btn (подсвечивается в панели), o.bind: false — щелчок по ней модуль не забирает
     // (core/profile.js: кнопку «Профиль» обрабатывает main.js — сначала выбор «Яндекс или Whisper Archive»)
-    // кнопка «Профиль» в боковой панели — для core/profile.js (свой профиль Whisper Archive)
-    profileButton: "profile",
+    // кнопка «Профиль» в боковой панели — для core/profile.js (свой профиль Whisper Archive).
+    // Функцией, а не строкой: набор интерфейса ядра (Whisper.ui.kit) отдаёт модулям только функции
+    profileButton: () => "profile",
     page: (key, { title, render, btn: btnId, bind = true } = {}) => {
       const btn = document.getElementById(btnId || key + "Btn"), sec = document.getElementById(key + "Page");
       if (!btn || !sec) return null;

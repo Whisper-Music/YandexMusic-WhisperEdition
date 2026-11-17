@@ -114,3 +114,25 @@ jobs:
           uploadUpdaterJson: true          # latest.json — по нему приложение находит обновление (подписи внутри)
           uploadUpdaterSignatures: false   # отдельные .sig в выпуске не нужны: те же подписи уже в latest.json
           updaterJsonPreferNsis: true      # обновлять установщиком setup.exe (NSIS), а не .msi
+
+  # Убрать .sig из черновика выпуска. У tauri-action@v0 параметр uploadUpdaterSignatures не срабатывает (в README он
+  # описан для @v1) — подписи всё равно заливались файлами. Обновлению они не нужны: те же подписи лежат внутри
+  # latest.json, а он остаётся. Работает после всех сборок, когда в выпуске уже всё лежит.
+  strip-signatures:
+    needs: [guard, build]
+    if: needs.guard.outputs.skip != 'true' && !cancelled()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Удалить .sig из выпуска
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ needs.guard.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          names=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(endswith(".sig"))' || true)
+          if [ -z "$names" ]; then echo "::notice::В $TAG нет .sig — удалять нечего"; exit 0; fi
+          while IFS= read -r n; do
+            echo "удаляю $n"
+            gh release delete-asset "$TAG" "$n" --repo "$GITHUB_REPOSITORY" --yes
+          done <<< "$names"
