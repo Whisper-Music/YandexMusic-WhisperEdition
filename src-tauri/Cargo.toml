@@ -31,24 +31,28 @@ getrandom = "0.3"
 sha2 = "0.10"
 # семафор для тяжёлых загрузок (net.rs::heavy_slot) и пауза перед повтором запроса (lyrics.rs); tokio уже есть в сборке через Tauri
 tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+# ссылки whisper://room/КОД — приглашения в комнату «Слушать вместе» (deeplink.rs)
+tauri-plugin-deep-link = "2"
+
+
+# Декодер MP3 / AAC (M4A) / FLAC / WAV, чистый Rust: свой звуковой движок (engine.rs, эксклюзивный WASAPI — только Windows)
+# и края трека для «Пропускать тишину» / «Плавных переходов» (edges.rs — на всех системах, поэтому не в cfg(windows))
+symphonia = { version = "0.5.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "pcm", "wav"] }
+
+# Только компьютер (Windows, Linux): на телефоне нет ни второй копии приложения, ни глобальных сочетаний клавиш,
+# ни списка системных шрифтов, а обновляется приложение через магазин / новый APK (lib.rs — модули под cfg(desktop))
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # список установленных шрифтов для выбора шрифта интерфейса (fonts.rs): читает только заголовки файлов, чистый Rust
 fontdb = "0.23"
 # второй запуск приложения не открывает новую копию, а показывает уже запущенное окно
 # (в Linux это единственный способ вернуть окно из трея, если в оболочке нет значков трея)
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
-# ссылки whisper://room/КОД — приглашения в комнату «Слушать вместе» (deeplink.rs)
-tauri-plugin-deep-link = "2"
 tauri-plugin-global-shortcut = "2"
 # обновления из GitHub Releases (update.rs): проверка подписи minisign, установка новой версии.
 # Без функции «zip»: она нужна только для старого формата обновлений в архивах (.nsis.zip, .AppImage.tar.gz),
 # а выпуски собираются в новом формате (createUpdaterArtifacts: true) — сам .exe/.msi/.AppImage.
 # Заодно уходит crate zip 4.x с уязвимостями распаковки (RUSTSEC-2026-0367/0368/0369).
 tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
-
-
-# Декодер MP3 / AAC (M4A) / FLAC / WAV, чистый Rust: свой звуковой движок (engine.rs, эксклюзивный WASAPI — только Windows)
-# и края трека для «Пропускать тишину» / «Плавных переходов» (edges.rs — на всех системах, поэтому не в cfg(windows))
-symphonia = { version = "0.5.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "pcm", "wav"] }
 
 # режим экономии в трее: доступ к движку окна WebView2 (версии те же, что уже тянет Tauri — ничего нового не скачивается)
 [target.'cfg(windows)'.dependencies]

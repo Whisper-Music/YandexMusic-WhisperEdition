@@ -20,9 +20,11 @@ const err = (m) => errors.push(m);
 
 // 1. generate_handler![ … ] — последний сегмент пути (whisper::friends::wa_image → wa_image)
 const lib = read(join(T, "src", "lib.rs")).replace(/\/\/[^\n]*/g, "");
-const gh = /generate_handler!\[([\s\S]*?)\]/.exec(lib);
+// общий список — в макросе commands! (generate_handler! внутри), команды только для компьютера — в commands![…] в run()
+const blocks = [...lib.matchAll(/(?:generate_handler|commands)!\[([\s\S]*?)\]/g)].map((m) => m[1]);
+const gh = blocks.length ? blocks : null;
 if (!gh) { console.error("В lib.rs не найден generate_handler![…]"); process.exit(1); }
-const handler = new Set(gh[1].split(",").map((s) => s.trim()).filter(Boolean).map((s) => s.split("::").pop()));
+const handler = new Set(gh.join(",").split(",").map((s) => s.trim()).filter((s) => s && !s.startsWith("$")).map((s) => s.split("::").pop()));
 
 // 2. COMMANDS в build.rs
 const build = read(join(T, "build.rs")).replace(/\/\/[^\n]*/g, "");
