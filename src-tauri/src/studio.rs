@@ -71,11 +71,15 @@ pub struct ItemSource {
 /// Источник из того, что пришло от интерфейса или из архива: ссылка заново проверяется (linkdl::check_url),
 /// сайт — только из известных; неизвестное — «file» без ссылки.
 fn clean_source(site: &str, url: &str, id: &str) -> ItemSource {
+    // на телефоне загрузки по ссылке (linkdl.rs, yt-dlp) нет — трек с ссылкой с компьютера там просто «file»
+    #[cfg(desktop)]
     if !url.is_empty() {
         if let Some((u, s, i)) = crate::linkdl::source_info(url) {
             return ItemSource { site: s.into(), url: u, id: i };
         }
     }
+    #[cfg(mobile)]
+    let _ = url;
     let site = if site.len() <= 24 && !site.is_empty() && site.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
         site.to_string()
     } else {

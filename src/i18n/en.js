@@ -867,6 +867,8 @@ add({
   "Esc — выйти · Пробел — пауза": "Esc — exit · Space — pause",
   "Вход": "Sign in",
   "Нажми кнопку и войди в аккаунт Яндекса в открывшемся окне. Окно закроется само, копировать ничего не нужно.": "Press the button and sign in to your Yandex account in the window that opens. It closes by itself — nothing to copy.",
+  "Нажми кнопку и войди в аккаунт Яндекса. После входа приложение откроется само, копировать ничего не нужно.": "Press the button and sign in to your Yandex account. The app comes back by itself — nothing to copy.",
+  "Встроенный браузер Android устарел (версия {}), поэтому часть кнопок не видна. Обнови «Android System WebView» в Google Play.": "Android's built-in browser is outdated (version {}), so some buttons are invisible. Update “Android System WebView” in Google Play.",
   "Войти через Яндекс": "Sign in with Yandex",
   "Не получается? Войти вручную по токену": "Not working? Sign in manually with a token",
   "Открыть страницу авторизации Яндекса": "Open the Yandex sign-in page",

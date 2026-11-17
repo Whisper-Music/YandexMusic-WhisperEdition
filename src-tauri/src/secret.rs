@@ -72,7 +72,75 @@ pub fn secret_backend() -> Backend {
     Backend { ym: imp::backend(YM), wa: imp::backend(WA) }
 }
 
-#[cfg(not(target_os = "linux"))]
+/// Android: системной «связки ключей» для keyring там нет (он молча хранил бы токен только в памяти —
+/// до перезапуска). Секрет лежит файлом в личной папке приложения (/data/data/<пакет>/…): другие приложения
+/// без root её не видят, а в резервные копии Android она не попадает (allowBackup выключен в манифесте).
+/// Это первый шаг — потом переедем в Android Keystore (зашифрованное хранилище), см. план мобильной версии.
+#[cfg(target_os = "android")]
+mod imp {
+    use super::Slot;
+    use std::fs;
+    use std::io::Write;
+    use std::path::PathBuf;
+    use std::sync::OnceLock;
+    use tauri::Manager;
+
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+
+    pub fn init(app: &tauri::AppHandle) {
+        if let Ok(d) = app.path().app_data_dir() {
+            let _ = DIR.set(d.join("secrets"));
+        }
+    }
+
+    fn file(slot: Slot) -> Result<PathBuf, String> {
+        DIR.get().map(|d| d.join(slot.file)).ok_or_else(|| "Не удалось найти папку приложения".into())
+    }
+
+    pub fn get(slot: Slot) -> Result<Option<String>, String> {
+        match fs::read_to_string(file(slot)?) {
+            Ok(t) => Ok(Some(t.trim().to_string()).filter(|t| !t.is_empty())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    /// Через временный файл и переименование: прерванная запись не оставит половину токена.
+    pub fn set(slot: Slot, token: &str) -> Result<(), String> {
+        let p = file(slot)?;
+        let dir = p.parent().ok_or("Не удалось найти папку приложения")?;
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let tmp = p.with_extension("tmp");
+        let res = (|| -> std::io::Result<()> {
+            let mut f = fs::File::create(&tmp)?;
+            f.write_all(token.as_bytes())?;
+            f.sync_all()?;
+            fs::rename(&tmp, &p)
+        })();
+        if res.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        res.map_err(|e| format!("Не удалось сохранить токен: {e}"))
+    }
+
+    pub fn clear(slot: Slot) -> Result<(), String> {
+        match fs::remove_file(file(slot)?) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    pub fn backend(slot: Slot) -> &'static str {
+        // личная папка приложения — не «открытый файл» Linux: предупреждать в интерфейсе не о чем
+        match get(slot) {
+            Ok(Some(_)) => "keyring",
+            _ => "none",
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod imp {
     use super::{entry, Slot};
 

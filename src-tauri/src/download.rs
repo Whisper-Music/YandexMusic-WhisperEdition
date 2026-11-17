@@ -191,6 +191,11 @@ fn fmt_ts(ts: u64) -> String {
 }
 
 fn default_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    // Телефон: личная папка приложения — без разрешений на общее хранилище (с Android 10 туда так просто не пишут).
+    // Удаление приложения удалит и треки; общая «Музыка» — потом, вместе с выбором папки.
+    #[cfg(mobile)]
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    #[cfg(desktop)]
     let base = app
         .path()
         .audio_dir()
@@ -710,6 +715,18 @@ pub fn download_dir_get(app: AppHandle) -> Result<DirInfo, String> {
 
 #[tauri::command]
 pub async fn download_dir_pick(app: AppHandle) -> Result<Option<DirInfo>, String> {
+    // на телефоне диалога выбора папки нет: треки лежат в папке приложения (default_dir)
+    #[cfg(mobile)]
+    return {
+        let _ = app;
+        Err("На телефоне папку для треков выбрать пока нельзя".into())
+    };
+    #[cfg(desktop)]
+    download_dir_pick_desktop(app).await
+}
+
+#[cfg(desktop)]
+async fn download_dir_pick_desktop(app: AppHandle) -> Result<Option<DirInfo>, String> {
     let (start, _) = current_dir(&app)?;
     let start = if start.is_dir() { Some(start) } else { start.parent().map(Path::to_path_buf).filter(|p| p.is_dir()) };
     let a = app.clone();

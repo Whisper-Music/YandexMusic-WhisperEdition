@@ -153,7 +153,8 @@ pub fn init(app: &AppHandle) {
         handle(app, &urls, false);
     }
     // установщик Windows (NSIS/MSI) и пакеты .deb/.rpm прописывают схему сами; в отладке и в AppImage — регистрируемся здесь
-    #[cfg(any(debug_assertions, target_os = "linux"))]
+    // (на телефоне схему прописывает манифест при сборке — регистрировать нечего)
+    #[cfg(all(desktop, any(debug_assertions, target_os = "linux")))]
     {
         let _ = app.deep_link().register_all();
     }

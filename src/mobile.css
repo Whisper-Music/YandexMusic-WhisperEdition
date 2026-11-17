@@ -1,0 +1,106 @@
+/* Телефон: html.mobile ставит mobile.js. Первая, минимальная раскладка — та же разметка, что на компьютере:
+   поиск сверху, страница, маленький плеер и кнопки разделов внизу (как в музыкальных приложениях).
+   Подключён последним из .css (после layout.css), а сетка — с !important: режимы «Расположения» (data-ly-*)
+   и встроенные стили задают .app свои колонки, на телефоне они не нужны.
+   Отступы от строки состояния, выреза камеры и полоски жестов: --sys-* сообщает Android-часть (MainActivity.kt →
+   mobile.js), env(safe-area-inset-*) — запасной путь (в старых WebView там всегда 0). */
+html.mobile {
+  --m-top: max(var(--sys-top, 0px), env(safe-area-inset-top, 0px));
+  --m-bot: max(var(--sys-bottom, 0px), env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+html.mobile body { overscroll-behavior: none; }
+
+/* ничего от окна компьютера: рамки, закладок, колонки закреплённых */
+html.mobile #titlebar, html.mobile .tabs, html.mobile #pinRail { display: none !important; }
+
+html.mobile body > .app {
+  padding: calc(8px + var(--m-top)) 8px calc(6px + var(--m-bot)) !important;
+  gap: 8px !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  grid-template-areas: none !important;
+}
+
+/* боковая панель распадается: поиск — строкой сверху, разделы — кнопками внизу */
+html.mobile .app > .side {
+  display: contents !important;
+}
+html.mobile .app > .side > * { display: none !important; }
+/* поиск layout.js завернул в .sbox > .sinner (плавающий поиск свёрнутой панели) — на телефоне это просто строка */
+html.mobile .app > .side > .sbox {
+  display: block !important; position: static !important; grid-column: 1 / -1; grid-row: 1;
+  width: auto !important; height: auto !important; margin: 0; transform: none !important;
+}
+html.mobile .side .sinner { display: contents !important; }
+html.mobile .side .sgrip { display: none !important; }
+html.mobile .side #search {
+  display: block !important; position: static !important; width: 100% !important; box-sizing: border-box; margin: 0;
+  font-size: 16px; /* меньше 16px — Android увеличивает страницу при вводе */
+}
+html.mobile .app > .side > :is(#wave, #likes, #friendsBtn, #settingsBtn, #profile) {
+  display: flex !important; grid-row: 4; align-items: center; justify-content: center;
+  min-width: 0; min-height: 44px; margin: 0; padding: 6px 2px;
+  font-size: 12px; line-height: 1.15; text-align: center; white-space: normal; overflow: hidden;
+}
+html.mobile .side > #wave { grid-column: 1; }
+html.mobile .side > #likes { grid-column: 2; }
+html.mobile .side > #friendsBtn { grid-column: 3; }
+html.mobile .side > #settingsBtn { grid-column: 4; }
+html.mobile .side > #profile { grid-column: 5; }
+
+html.mobile .app > .main {
+  grid-column: 1 / -1 !important; grid-row: 2 !important;
+  padding: 0 2px !important; -webkit-overflow-scrolling: touch;
+}
+html.mobile .main::-webkit-scrollbar { width: 0; }
+
+/* шапка страницы */
+html.mobile .head { flex-wrap: wrap; gap: 10px; margin: 2px 0 10px; }
+html.mobile .head h2 { font-size: 26px; }
+html.mobile .headimg { width: 64px; height: 64px; }
+html.mobile .head .pin { margin-left: 0 !important; }
+
+/* строки треков: кнопки «♡» и «⋯» видны всегда — наведения мышью на телефоне нет */
+html.mobile .list li { gap: 10px; padding: 8px 6px; }
+html.mobile .list li .likebtn, html.mobile .list li .morebtn { opacity: 1; }
+html.mobile .list li .grip { display: none; }
+
+/* плеер: обложка и название слева, кнопки справа, тонкая линия трека снизу. Шире — плеер на весь экран (#full) */
+html.mobile .app > .player {
+  grid-column: 1 / -1 !important; grid-row: 3 !important;
+  grid-template-columns: minmax(0, 1fr) auto !important; grid-template-rows: auto auto;
+  gap: 6px 8px !important; padding: 8px 10px 6px !important;
+}
+html.mobile .player > .pinfo { grid-column: 1; grid-row: 1; gap: 10px; }
+html.mobile .player .cover { width: 44px; height: 44px; }
+html.mobile .player .meta b { font-size: 14px; }
+html.mobile .player > .pcenter { display: contents; }
+html.mobile .player .ctrls { grid-column: 2; grid-row: 1; gap: 6px; }
+html.mobile .player .seekrow { grid-column: 1 / -1; grid-row: 2; gap: 8px; }
+html.mobile .player .time { font-size: 11px; }
+html.mobile .player > .pright, html.mobile .player #disBtn,
+html.mobile .player #shuffleBtn, html.mobile .player #repeatBtn { display: none !important; }
+
+/* настройки: одна колонка, без того, чего на телефоне нет (окно, трей, клавиши, свой звуковой движок, OBS…) */
+html.mobile .settings { columns: 1 !important; max-width: none; }
+html.mobile :is(#layoutCard, #stuCard, #outCard, #dpCard, #trayCard, #ntCard, #webCard, #hkCard, #linkCard, #updCard, #fontCard),
+html.mobile .card.m-hide { display: none !important; } /* Discord, OBS — помечает mobile.js */
+
+/* окна поверх страницы: не шире экрана */
+html.mobile .login-box { width: auto; max-width: calc(100vw - 32px); box-sizing: border-box; }
+html.mobile .tmenu { max-width: calc(100vw - 16px); }
+
+/* подсказка «обнови WebView» (mobile.js → oldWebView). Старый WebView не понимает color-mix — цвета здесь простые */
+.m-oldwv {
+  position: fixed; left: 8px; right: 8px; top: calc(8px + var(--m-top)); z-index: 90;
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px;
+  background: #2a1d4a; color: #fff; font-size: 13px; line-height: 1.3; box-shadow: 0 6px 24px rgba(0,0,0,.5);
+}
+.m-oldwv span { flex: 1; }
+.m-oldwv .nav { flex: none; padding: 8px 12px; background: #7c4dff; color: #fff; }
+.m-oldwv .nav:last-child { background: rgba(255,255,255,.12); }
+
+/* плеер на весь экран: от выреза камеры до полоски жестов */
+html.mobile #full .fwrap { padding-top: calc(12px + var(--m-top)); padding-bottom: calc(12px + var(--m-bot)); }

@@ -44,6 +44,8 @@ async fn confirm_shutdown(app: &AppHandle, minutes: u32) -> bool {
             .title("Режим сна")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom("Включить".into(), "Отмена".into()));
+        // окно-родитель есть только у диалогов компьютера (на телефоне диалог и так поверх приложения)
+        #[cfg(desktop)]
         if let Some(w) = tauri::Manager::get_webview_window(&a, "main") {
             d = d.parent(&w);
         }
@@ -76,16 +78,19 @@ pub async fn sleep_start(app: AppHandle, minutes: u32, shutdown: bool) -> Result
             let left = deadline.saturating_sub(now) / 1000;
             if !faded && left <= FADE_SECS {
                 faded = true;
+                #[cfg(desktop)]
                 crate::power::wake(&app);
                 let _ = app.emit("sleep-fade", left);
             }
             if now >= deadline {
+                #[cfg(desktop)]
                 crate::power::wake(&app);
                 let _ = app.emit("sleep-end", ());
                 DEADLINE.store(0, SeqCst);
                 if SHUTDOWN.load(SeqCst) {
                     std::thread::sleep(Duration::from_secs(3)); // странице — время остановить музыку и сохраниться
                     if GEN.load(SeqCst) == gen {
+                        #[cfg(desktop)]
                         crate::winstate::save(&app);
                         if power_off().is_ok() {
                             SHUTDOWN_SENT.store(true, SeqCst);
