@@ -115,6 +115,70 @@ jobs:
           uploadUpdaterSignatures: false   # отдельные .sig в выпуске не нужны: те же подписи уже в latest.json
           updaterJsonPreferNsis: true      # обновлять установщиком setup.exe (NSIS), а не .msi
 
+  # Android: APK для arm64 (почти все телефоны с 2017 года), подписанный одним ключом выпусков — иначе новая
+  # версия не встанет поверх старой. Ключ — в секретах ANDROID_KEYSTORE_BASE64 (файл .jks в base64) и
+  # ANDROID_KEYSTORE_PASSWORD (пароль хранилища и ключа, псевдоним — whisper). Ждёт build: черновик выпуска
+  # создаёт tauri-action, сюда APK только докладывается.
+  android:
+    needs: [guard, build]
+    if: needs.guard.outputs.skip != 'true' && !cancelled()
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+
+      - name: Android SDK и NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          # NDK уже есть в образе GitHub; платформу compileSdk (gen/android/app/build.gradle.kts) ставим сами
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37" > /dev/null
+
+      - name: Ключ подписи
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Нет секретов ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD — без подписи APK не установится"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/whisper-release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=whisper\n' \
+            "$RUNNER_TEMP/whisper-release.jks" "$KEYSTORE_PASSWORD" "$KEYSTORE_PASSWORD" > src-tauri/gen/android/keystore.properties
+
+      - run: npm ci
+      - run: npx tauri android build --apk --target aarch64 --ci
+
+      - name: APK в выпуск
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ needs.guard.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VER"
+          apk="Yandex.Music.Whisper.Edition_${VER}_android_arm64.apk"
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "$apk"
+          # черновик обычно уже создан сборкой для компьютера; если она упала целиком — создаём сами
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 ||
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --title "Yandex Music Whisper Edition $tag" --notes "Что нового — смотри коммиты."
+          gh release upload "$tag" "$apk" --repo "$GITHUB_REPOSITORY" --clobber
+
   # Убрать .sig из черновика выпуска. У tauri-action@v0 параметр uploadUpdaterSignatures не срабатывает (в README он
   # описан для @v1) — подписи всё равно заливались файлами. Обновлению они не нужны: те же подписи лежат внутри
   # latest.json, а он остаётся. Работает после всех сборок, когда в выпуске уже всё лежит.
