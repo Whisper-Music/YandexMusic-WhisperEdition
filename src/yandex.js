@@ -361,6 +361,8 @@
     themeImport: (bytes) => window.wmtImport?.(bytes) ?? false,
     sleeping: () => !!window.sleepActive?.(),                              // sleep.js: режим сна включён (Discord — «Засыпает»)
     notify: (o) => window.sysNotify?.(o) ?? Promise.resolve(false),       // notify.js: «Уведомления» в настройках
+    // сколько компьютер без мыши и клавиатуры, мс (idle.rs; null — система не говорит) — статус «отошёл» у друзей
+    idleMs: () => (window.__WEB__ ? Promise.resolve(null) : invoke("sys_idle_ms").catch(() => null)),
     // лайк в строке общих модулей (история и очередь, core/queue.js): та же кнопка .likebtn, что в списках, —
     // refreshHearts() обновляет её по li[data-id] вместе со всеми остальными сердечками
     likeButton: (t) => {

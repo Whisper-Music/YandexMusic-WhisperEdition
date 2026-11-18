@@ -46,13 +46,14 @@ fn parts(url: &Url) -> Option<(String, Vec<String>)> {
     Some((host, segs))
 }
 
-/// whisper://room/K7QH2M → "K7QH2M". Код — 4–12 латинских букв и цифр (как у сервера комнат), регистр не важен.
+/// whisper://room/K7QH2MXP4R → "K7QH2MXP4R". Код — 4–12 латинских букв и цифр (сейчас сервер выдаёт 10),
+/// регистр и дефисы не важны: whisper://room/k7qh2-mxp4r — тот же код.
 pub fn room_code(url: &Url) -> Option<String> {
     let (host, segs) = parts(url)?;
     if (host != "room" && host != "join") || segs.len() != 1 {
         return None;
     }
-    let code = segs[0].to_ascii_uppercase();
+    let code: String = segs[0].chars().filter(|&c| c != '-').collect::<String>().to_ascii_uppercase();
     if (4..=12).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
         Some(code)
     } else {
@@ -190,7 +191,9 @@ mod tests {
         assert_eq!(code("WHISPER://join/ABCD").as_deref(), Some("ABCD"));
         assert_eq!(code("whisper:/room/ABCD12").as_deref(), Some("ABCD12"));
         assert_eq!(code("whisper://room/AB"), None); // короче 4
-        assert_eq!(code("whisper://room/ABC-12"), None); // недопустимый символ
+        assert_eq!(code("whisper://room/ABC_12"), None); // недопустимый символ
+        assert_eq!(code("whisper://room/k7qh2-mxp4r").as_deref(), Some("K7QH2MXP4R")); // дефисы не важны
+        assert_eq!(code("whisper://join/K7QH2MXP4R").as_deref(), Some("K7QH2MXP4R"));
         assert_eq!(code("whisper://room/ABCD/extra"), None);
         assert_eq!(code("whisper://album/123"), None);
         assert_eq!(code("https://origin.whisper-archive.ru/join/K7QH2M"), None);

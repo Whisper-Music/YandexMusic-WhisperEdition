@@ -74,21 +74,25 @@
   apply();
 
   // ---------- цвет значка: обычный, чёрный, белый, в цветах стиля ----------
-  // Рисуем здесь на холсте (знак «W» с волнами, как на значке приложения) и отдаём Rust готовые пиксели (tray_icon).
-  // Чёрный и белый — один знак без круга, как системные значки; «как в стиле» — круг в цветах акцента.
+  // Рисуем здесь на холсте (знак «W» с орбитой, как на значке приложения) и отдаём Rust готовые пиксели (tray_icon).
+  // «Обычный» — цветной знак без фона, его держит сам Rust (icons/tray.rgba); чёрный и белый — тот же знак одним
+  // цветом, как системные значки; «как в стиле» — круг в цветах акцента.
   const IC_KEY = "ym_tray_icon", IC_SIZE = 64, ICONS = ["app", "black", "white", "style"];
   let icon = "app";
   try { const v = localStorage.getItem(IC_KEY); if (ICONS.includes(v)) icon = v; } catch {}
   let icLast = "";
-  function glyph(g, color, k) {
-    g.save();
-    g.translate(32, 32); g.scale(k, k); g.translate(-32, -32);
-    g.strokeStyle = color; g.lineCap = "round"; g.lineJoin = "round";
-    g.lineWidth = 8.5;
-    g.beginPath(); g.moveTo(6, 22); g.lineTo(15, 44); g.lineTo(25, 29); g.lineTo(35, 44); g.lineTo(44, 22); g.stroke();
-    g.lineWidth = 4.5;
-    for (const r of [15, 22]) { g.beginPath(); g.arc(40, 33, r, -0.7, 0.7); g.stroke(); }
-    g.restore();
+  // Форма знака — из картинки значка (tray-mono.png: белая W с орбитой, объём — прозрачностью), а не нарисована
+  // линиями: так одноцветный значок совпадает с цветным. Красим её в нужный цвет (source-in).
+  const MONO = new Image();
+  MONO.src = "tray-mono.png";
+  function glyph(dst, color, k) {
+    // свой холст: перекраска (source-in) иначе залила бы и круг «как в стиле» под знаком
+    const cv = document.createElement("canvas"); cv.width = cv.height = IC_SIZE;
+    const g = cv.getContext("2d"), s = IC_SIZE * k;
+    g.drawImage(MONO, (IC_SIZE - s) / 2, (IC_SIZE - s) / 2, s, s);
+    g.globalCompositeOperation = "source-in";
+    g.fillStyle = color; g.fillRect(0, 0, IC_SIZE, IC_SIZE);
+    dst.drawImage(cv, 0, 0);
   }
   // светлый акцент — знак тёмный, иначе белый (как --on-accent у стилей)
   // (--accent зарегистрирован как <color>, поэтому getComputedStyle отдаёт его как rgb(…), а не #rrggbb)
@@ -108,6 +112,8 @@
     if (!force && key === icLast) return;
     icLast = key;
     if (icon === "app") { call("tray_icon", { rgba: null, size: 0 }); return; }
+    // картинка знака ещё грузится — нарисуем, когда загрузится
+    if (!MONO.complete || !MONO.naturalWidth) { icLast = ""; MONO.onload = () => paintIcon(true); return; }
     const cv = document.createElement("canvas"); cv.width = cv.height = IC_SIZE;
     const g = cv.getContext("2d");
     if (icon === "style") {

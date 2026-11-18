@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# готовые пиксели значка трея (icons/tray.rgba, shell.rs) — без перевода строк
+*.rgba binary

@@ -25,7 +25,7 @@ pub(crate) fn tray_menu(app: &tauri::AppHandle, on: bool) {
 
 /// Значок в трее (Настройки → Приложение → Трей): чёрный, белый или в цветах стиля. Картинку рисует страница
 /// (traymini.js, холст size×size, RGBA) — у Rust нет растеризатора SVG, а цвета стиля знает только страница.
-/// `rgba: None` — обычный значок приложения.
+/// `rgba: None` — обычный значок трея (tray_default).
 #[tauri::command]
 pub fn tray_icon(app: tauri::AppHandle, rgba: Option<Vec<u8>>, size: u32) -> Result<(), String> {
     let Some(h) = app.try_state::<TrayHandle>() else { return Ok(()) };
@@ -34,9 +34,17 @@ pub fn tray_icon(app: tauri::AppHandle, rgba: Option<Vec<u8>>, size: u32) -> Res
             tauri::image::Image::new_owned(px, size, size)
         }
         Some(_) => return Err("неверный размер значка".into()),
-        None => app.default_window_icon().cloned().ok_or("нет значка приложения")?,
+        None => tray_default(),
     };
     h.tray.set_icon(Some(img)).map_err(|e| format!("значок не сменился: {e}"))
+}
+
+/// Обычный значок трея: W с орбитой без фона — знак из значка приложения (icons/tray.png). Значок окна — с
+/// фоном-квадратом, а в трее среди системных значков квадрат в 16 px читался как цветное пятно. Готовые пиксели
+/// 64×64 RGBA, а не PNG: у tauri без функции image-png декодера нет, а тянуть его ради одной картинки незачем.
+/// Пересобрать из icons/tray.png: RGBA без заголовка (PIL: Image.open(...).convert("RGBA").tobytes()).
+pub(crate) fn tray_default() -> tauri::image::Image<'static> {
+    tauri::image::Image::new(include_bytes!("../icons/tray.rgba"), 64, 64)
 }
 
 // Язык пунктов меню в трее (Настройки → Интерфейс → Язык; i18n.js зовёт tray_lang). Меню рисует система —
@@ -262,7 +270,7 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
     // * Windows, режим «Мини-плеер» (настройка) — меню у значка снимается (mini::tray_mode),
     //   и правый клик открывает мини-плеер.
     let tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(tray_default())
         .tooltip("Моя Музыка")
         .menu(&menu)
         .show_menu_on_left_click(cfg!(not(windows))) // в Linux флаг не действует, меню есть всегда

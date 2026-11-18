@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-kick"
+description = "Enables the wa_room_kick command without any pre-configured scope."
+commands.allow = ["wa_room_kick"]
+
+[[permission]]
+identifier = "deny-wa-room-kick"
+description = "Denies the wa_room_kick command without any pre-configured scope."
+commands.deny = ["wa_room_kick"]

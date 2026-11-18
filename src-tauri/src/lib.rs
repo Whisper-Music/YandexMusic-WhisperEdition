@@ -28,6 +28,8 @@ mod fonts;
 #[cfg(desktop)]
 mod hotkeys;
 #[cfg(desktop)]
+mod idle;
+#[cfg(desktop)]
 mod linkdl;
 mod lyrics;
 #[cfg(desktop)]
@@ -177,6 +179,8 @@ macro_rules! commands {
             whisper::friends::wa_friend_request,
             whisper::friends::wa_friend_accept,
             whisper::friends::wa_friend_remove,
+            whisper::friends::wa_friend_block,
+            whisper::friends::wa_friend_unblock,
             whisper::friends::wa_user_profile,
             whisper::friends::wa_image,
             whisper::profile::wa_my_profile,
@@ -198,10 +202,14 @@ macro_rules! commands {
             whisper::rooms::wa_room_ping,
             whisper::rooms::wa_room_missing,
             whisper::rooms::wa_room_wink,
+            whisper::rooms::wa_room_kick,
+            whisper::rooms::wa_room_unban,
+            whisper::rooms::wa_room_lock,
             whisper::rooms::wa_room_friends,
             whisper::rooms::wa_room_friend_forget,
             whisper::rooms::wa_room_invite,
             whisper::rooms::wa_room_invites,
+            whisper::rooms::wa_room_presence,
             whisper::rooms::wa_room_invite_dismiss,
             whisper::rooms::wa_room_theme_share,
             whisper::rooms::wa_room_theme_get,
@@ -290,6 +298,7 @@ pub fn run() {
         hotkeys::hotkeys_set,
         thumbbar::thumbbar_state,
         fonts::system_fonts,
+        idle::sys_idle_ms,
         obs::obs_config,
         obs::obs_state,
         obs::obs_theme,
@@ -346,6 +355,12 @@ pub fn run() {
             #[cfg(desktop)]
             shell::on_window_event(_window, _event);
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, event| {
+            // приложение закрывается совсем (не «свернуть в трей») — друзья сразу видят «не в сети», а не через 70 с
+            if let tauri::RunEvent::Exit = event {
+                tauri::async_runtime::block_on(whisper::rooms::presence_offline());
+            }
+        });
 }

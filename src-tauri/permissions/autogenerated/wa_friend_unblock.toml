@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-friend-unblock"
+description = "Enables the wa_friend_unblock command without any pre-configured scope."
+commands.allow = ["wa_friend_unblock"]
+
+[[permission]]
+identifier = "deny-wa-friend-unblock"
+description = "Denies the wa_friend_unblock command without any pre-configured scope."
+commands.deny = ["wa_friend_unblock"]

@@ -125,6 +125,7 @@
     "allow-lyrics-lrclib",
     "allow-thumbbar-state",
     "allow-system-fonts",
+    "allow-sys-idle-ms",
     "allow-obs-config",
     "allow-obs-state",
     "allow-obs-theme",

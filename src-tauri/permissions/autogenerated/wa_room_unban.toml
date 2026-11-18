@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-unban"
+description = "Enables the wa_room_unban command without any pre-configured scope."
+commands.allow = ["wa_room_unban"]
+
+[[permission]]
+identifier = "deny-wa-room-unban"
+description = "Denies the wa_room_unban command without any pre-configured scope."
+commands.deny = ["wa_room_unban"]

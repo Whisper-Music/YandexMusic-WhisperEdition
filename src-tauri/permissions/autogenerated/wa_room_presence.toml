@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wa-room-presence"
+description = "Enables the wa_room_presence command without any pre-configured scope."
+commands.allow = ["wa_room_presence"]
+
+[[permission]]
+identifier = "deny-wa-room-presence"
+description = "Denies the wa_room_presence command without any pre-configured scope."
+commands.deny = ["wa_room_presence"]

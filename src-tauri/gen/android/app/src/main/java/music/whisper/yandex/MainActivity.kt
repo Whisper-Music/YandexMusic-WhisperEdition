@@ -1,8 +1,12 @@
 package music.whisper.yandex
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.Base64
 import androidx.activity.SystemBarStyle
 import android.os.Build
 import android.os.Bundle
@@ -51,6 +55,73 @@ class MainActivity : TauriActivity() {
     })
 
     askFirstRun()
+    takeIntent(intent)
+  }
+
+  // Приложение уже открыто (launchMode singleTask) — «Открыть с помощью» приходит сюда
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    takeIntent(intent)
+  }
+
+  // ---------- файл темы из другого приложения ----------
+  // Тему (.wmt) открыли из Telegram или файлового менеджера («Открыть с помощью» → Whisper) или отправили через
+  // «Поделиться». Файл копируется в кэш приложения, страница забирает его кусками через мост (incoming*) и ставит
+  // тем же путём, что «Загрузить тему…» (mobile.js → window.wmtImport). Ссылка content:// живёт недолго — поэтому
+  // копия, а не чтение по ссылке потом.
+  private val incomingMax = 64L * 1024 * 1024      // как WMT.MAX_FILE (core/wmt.js)
+  @Volatile private var incomingInfo = ""
+
+  private fun takeIntent(intent: Intent?) {
+    val i = intent ?: return
+    val uri: Uri = when (i.action) {
+      Intent.ACTION_VIEW -> i.data
+      Intent.ACTION_SEND ->
+        if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM)
+      else -> null
+    } ?: return
+    if (uri.scheme != "content" && uri.scheme != "file") return    // whisper://… — это ссылки, их разбирает deeplink.rs
+    i.action = Intent.ACTION_MAIN                                    // поворот экрана не откроет тот же файл второй раз
+    Thread {
+      incomingInfo = copyIncoming(uri)
+      runOnUiThread { webView?.evaluateJavascript("window.whisperIncoming&&window.whisperIncoming()", null) }
+    }.start()
+  }
+
+  private fun incomingFile() = java.io.File(cacheDir, "incoming.bin")
+
+  /** Копия файла в кэш; ответ для страницы — { name, size } или { name, error }. */
+  private fun copyIncoming(uri: Uri): String {
+    val j = JSONObject()
+    var name = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+    try {
+      contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) name = c.getString(0)
+      }
+    } catch (_: Exception) {}
+    j.put("name", name.take(200))
+    try {
+      val out = incomingFile()
+      var total = 0L
+      contentResolver.openInputStream(uri)?.use { inp ->
+        out.outputStream().use { o ->
+          val buf = ByteArray(64 * 1024)
+          while (true) {
+            val n = inp.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > incomingMax) { j.put("error", "big"); break }
+            o.write(buf, 0, n)
+          }
+        }
+      } ?: j.put("error", "не удалось открыть")
+      if (!j.has("error")) j.put("size", total) else out.delete()
+    } catch (e: Exception) {
+      incomingFile().delete()
+      j.put("error", e.message ?: "ошибка чтения")
+    }
+    return j.toString()
   }
 
   override fun onDestroy() {
@@ -110,6 +181,28 @@ class MainActivity : TauriActivity() {
 
   inner class Bridge {
     @JavascriptInterface fun insets(): String = this@MainActivity.insets
+
+    /** Файл, открытый из другого приложения: JSON { name, size } / { name, error } или "" — ничего не пришло. */
+    @JavascriptInterface fun incoming(): String = incomingInfo
+
+    /** Кусок этого файла в base64 (страница собирает его в Uint8Array по 1 МБ — одна строка на 64 МБ не пролезла бы). */
+    @JavascriptInterface fun incomingRead(offset: Long, length: Int): String {
+      val f = incomingFile()
+      if (!f.exists() || offset < 0 || length <= 0) return ""
+      java.io.RandomAccessFile(f, "r").use { r ->
+        if (offset >= r.length()) return ""
+        r.seek(offset)
+        val b = ByteArray(minOf(length.toLong(), 4L * 1024 * 1024, r.length() - offset).toInt())
+        r.readFully(b)
+        return Base64.encodeToString(b, Base64.NO_WRAP)
+      }
+    }
+
+    /** Страница забрала файл (или он не тема) — копия больше не нужна. */
+    @JavascriptInterface fun incomingDone() {
+      incomingInfo = ""
+      incomingFile().delete()
+    }
 
     /** Что играет: { title, artist, cover, duration, position (мс), playing } — mobilemedia.js. Пустой title — трека нет. */
     @JavascriptInterface fun media(json: String) {

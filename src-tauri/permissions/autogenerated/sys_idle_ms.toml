@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sys-idle-ms"
+description = "Enables the sys_idle_ms command without any pre-configured scope."
+commands.allow = ["sys_idle_ms"]
+
+[[permission]]
+identifier = "deny-sys-idle-ms"
+description = "Denies the sys_idle_ms command without any pre-configured scope."
+commands.deny = ["sys_idle_ms"]

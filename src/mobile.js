@@ -89,6 +89,7 @@
     swipes();
     playerSwipes();
     waveHere();
+    incoming();                             // приложение открыли файлом темы (из Telegram и т. п.)
     // режим сна: выключить телефон приложение не может — по истечении времени только останавливаем музыку
     // (строку выбора прячем, по умолчанию там «Выключить компьютер»)
     const slAct = document.getElementById("slAct");
@@ -263,6 +264,47 @@
     const fix = () => { const s = document.querySelector("#waveQBtn span"); if (s && s.textContent !== "История") s.textContent = "История"; };
     fix(); setTimeout(fix, 1500);           // кнопку очереди модуль ядра ставит сам — может появиться позже
   }
+
+  // ---------- тема из другого приложения ----------
+  // «Открыть с помощью → Whisper» или «Поделиться» на файле .wmt: MainActivity.kt копирует его в кэш и зовёт
+  // window.whisperIncoming() (или страница сама спрашивает при запуске). Файл забираем кусками по 1 МБ и ставим
+  // как «Загрузить тему…» (theme.js → window.wmtImport: тот же вопрос «Заменить стиль?», тот же тост)
+  let inBusy = false, inAgain = false;
+  async function incoming() {
+    const A = window.WhisperAndroid;
+    if (!A?.incoming || document.readyState === "loading") return;      // до загрузки страницы — позовёт DOMContentLoaded
+    if (inBusy) { inAgain = true; return; }
+    let info = null;
+    try { info = JSON.parse(A.incoming() || "null"); } catch {}
+    if (!info) return;
+    inBusy = true;
+    try {
+      const name = String(info.name || "файл");
+      if (info.error === "big") { showToast("Файл темы больше 64 МБ — такую тему не открыть", 5000); return; }
+      if (info.error) { showToast(`Не удалось открыть «${name}»: ${info.error}`, 5000); return; }
+      const size = Number(info.size) || 0, buf = new Uint8Array(size), STEP = 1 << 20;
+      for (let o = 0; o < size; o += STEP) {
+        const s = atob(A.incomingRead(o, STEP));
+        if (!s) throw new Error("файл пропал из кэша");
+        for (let k = 0; k < s.length; k++) buf[o + k] = s.charCodeAt(k);
+      }
+      // тема — текст с «#WMT» в начале или zip-архив (theme.wmt внутри проверит сам разбор)
+      let head = new TextDecoder().decode(buf.subarray(0, 64));
+      if (head.charCodeAt(0) === 0xfeff) head = head.slice(1);        // метка UTF-8 в начале файла
+      head = head.trimStart();
+      const zip = buf[0] === 0x50 && buf[1] === 0x4b;
+      if (!/^#WMT\b/.test(head) && !zip) { showToast(`«${name}» — не тема Whisper (.wmt)`, 5000); return; }
+      if (typeof window.wmtImport !== "function") throw new Error("темы ещё не загрузились");
+      await window.wmtImport(buf);
+    } catch (e) {
+      showToast("Не удалось открыть тему: " + (e?.message || e), 5000);
+    } finally {
+      try { A.incomingDone(); } catch {}
+      inBusy = false;
+      if (inAgain) { inAgain = false; incoming(); }
+    }
+  }
+  window.whisperIncoming = incoming;
 
   // ---------- мини-плеер на «Моей волне» ----------
   // открыта «Моя волна» и играет она — пуск/пауза уже есть большой кнопкой на экране, в мини-плеере её прячем
