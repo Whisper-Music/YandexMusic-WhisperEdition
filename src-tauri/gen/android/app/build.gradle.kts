@@ -14,8 +14,26 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Подпись выпусков: ключ хранится вне репозитория. CI (release.yml) пишет keystore.properties из секретов,
+// дома — свой файл src-tauri/gen/android/keystore.properties (в .gitignore). Нет файла — APK без подписи.
+// Ключ один на все выпуски: иначе новая версия не встанет поверх старой
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     compileSdk = 37
+    if (keystoreProperties.getProperty("storeFile") != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
     namespace = "music.whisper.yandex"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
@@ -39,6 +57,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             optimization {
                enable = true
             }
@@ -75,6 +94,8 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // MediaSession и уведомление плеера (MediaStyle) — управление с экрана блокировки, шторки и наушников (MediaService.kt)
+    implementation("androidx.media:media:1.7.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

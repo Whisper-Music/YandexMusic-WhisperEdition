@@ -32,6 +32,8 @@
     play: { name: "пауза", el: "#play", th: ["play"], cli: true },
     settings: { name: "настройки", el: "#settingsBtn", th: ["page:settings"], cli: true },
   };
+  // на телефоне окна нет вовсе (ни рамки, ни кнопок — их и не должно быть видно): проверяем только плеер и настройки
+  if (window.isMobile) { delete ACTS.close; delete ACTS.minimize; delete ACTS.drag; }
   let bar = null, fails = 0, lastStyle = "", checkT = 0;
 
   // ---------- видно ли и можно ли нажать ----------

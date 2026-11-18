@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- фон значка (адаптивная иконка Android 8+): тёмный, как у приложения; сам значок — из src-tauri/icons/icon.png (npx tauri icon) -->
+  <color name="ic_launcher_background">#140B26</color>
+</resources>

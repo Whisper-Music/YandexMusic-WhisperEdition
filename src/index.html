@@ -49,6 +49,8 @@
   <link rel="stylesheet" href="core/discord.css" />
   <script src="core/discord.js" defer></script>
   <script src="traymini.js" defer></script>
+  <!-- телефон: уведомление плеера и музыка в фоне (Android — MediaService.kt) -->
+  <script src="mobilemedia.js" defer></script>
   <link rel="stylesheet" href="core/obs.css" />
   <script src="core/obs.js" defer></script>
   <script src="update.js" defer></script>
@@ -624,7 +626,7 @@
         <!-- ===== Данные: Статистика, Резервная копия | Сброс ===== -->
         <div class="card" id="statCard" data-tab="data">
           <h3>Статистика</h3>
-          <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
+          <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lstOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
           <div class="row"><button type="button" class="nav danger" id="lsClear">Очистить записанное…</button></div>
         </div>
         <div class="card" id="bkCard" data-tab="data">

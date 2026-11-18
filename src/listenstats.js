@@ -615,7 +615,9 @@
   };
 
   // ---------- настройки ----------
-  const sw = document.getElementById("lsOn"), clr = document.getElementById("lsClear");
+  // #lstOn, а не #lsOn: тот же id был у выключателя синхронизации (libsync.js) — запись статистики цеплялась к нему,
+  // и «Записывать статистику» не сохранялась
+  const sw = document.getElementById("lstOn"), clr = document.getElementById("lsClear");
   if (sw) {
     sw.checked = on;
     sw.onchange = () => {

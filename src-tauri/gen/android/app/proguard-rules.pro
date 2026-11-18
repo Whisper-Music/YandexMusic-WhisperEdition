@@ -11,6 +11,11 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+# Мост WhisperAndroid (MainActivity.kt: insets, media): страница зовёт методы по имени — R8 не должен их
+# переименовывать или выкидывать в выпускной сборке
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.

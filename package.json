@@ -6,6 +6,8 @@
   "scripts": {
     "tauri": "tauri",
     "build": "tauri build --config src-tauri/tauri.local.conf.json",
+    "android:apk": "tauri android build --debug --apk --target aarch64",
+    "android:release": "tauri android build --apk --target aarch64",
     "version": "node scripts/set-version.mjs"
   },
   "devDependencies": {

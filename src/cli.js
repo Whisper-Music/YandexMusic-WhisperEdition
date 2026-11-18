@@ -270,7 +270,7 @@
   // Сервисы и настройки
   def("stats", "[7|30|365|all|on|off]", "статистика прослушиваний (по умолчанию за 30 дней)", "Сервисы", async (a) => {
     const s = String(a[0] || "30").toLowerCase();
-    if (onOff(s) !== null) return dim("Запись статистики: " + (setCheck("lsOn", onOff(s)) ? "вкл" : "выкл"));
+    if (onOff(s) !== null) return dim("Запись статистики: " + (setCheck("lstOn", onOff(s)) ? "вкл" : "выкл"));
     const L = window.lstatsApi;
     if (!L?.on()) return dim("Запись статистики выключена: stats on");
     const days = s === "all" ? 0 : parseInt(s, 10) || 30;
