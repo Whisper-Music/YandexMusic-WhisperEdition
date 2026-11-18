@@ -1,0 +1,458 @@
+/* Телефон: html.mobile ставит mobile.js; на компьютере ни одно правило файла не действует (все — под html.mobile).
+   Раскладка по макету «Whisper — мобильный интерфейс»: страница, мини-плеер и четыре раздела внизу с подписями
+   (Волна, Коллекция, Друзья, Профиль; настройки — в профиле), плеер на весь экран с подписанными кнопками,
+   меню трека и «Настроить волну» — листами снизу.
+   Здесь только расположение и размеры. Цвета, шрифты, рамки, фон панелей и карточек — от стиля (встроенного или
+   своей темы): берём var(--accent), var(--text), var(--muted) и классы .card / .panel, чтобы темы не ломались.
+   Сетка и размеры — с !important: режимы «Расположения» (data-ly-*) и правила стилей задают свои.
+   Отступы от строки состояния, выреза камеры и полоски жестов: --sys-* сообщает Android-часть (MainActivity.kt →
+   mobile.js), env(safe-area-inset-*) — запасной путь (в старых WebView там всегда 0). */
+html.mobile {
+  --m-top: max(var(--sys-top, 0px), env(safe-area-inset-top, 0px));
+  --m-bot: max(var(--sys-bottom, 0px), env(safe-area-inset-bottom, 0px));
+  --m-pad: 14px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  /* значки страницы «Профиль» и кнопок плеера (маски: красит currentColor) */
+  --m-i-wa: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8h16v11H4zM3 4h18v4H3zM10 12h4'/%3E%3C/svg%3E");
+  --m-i-ya: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17'/%3E%3C/svg%3E");
+  --m-i-pen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4'/%3E%3C/svg%3E");
+  --m-i-find: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
+  --m-i-look: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Ccircle cx='8.5' cy='10' r='1.3'/%3E%3Ccircle cx='12' cy='7.5' r='1.3'/%3E%3Ccircle cx='15.5' cy='10' r='1.3'/%3E%3Cpath d='M13 16.5a2 2 0 1 1-3 1.5'/%3E%3C/svg%3E");
+  --m-i-ui: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 7h10M18 7h2M4 17h4M12 17h8'/%3E%3Ccircle cx='16' cy='7' r='2'/%3E%3Ccircle cx='10' cy='17' r='2'/%3E%3C/svg%3E");
+  --m-i-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M8 5l11 7-11 7z'/%3E%3C/svg%3E");
+  --m-i-out: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 14v-2a8 8 0 0 1 16 0v2'/%3E%3Crect x='3' y='14' width='4' height='6' rx='1.5'/%3E%3Crect x='17' y='14' width='4' height='6' rx='1.5'/%3E%3C/svg%3E");
+  --m-i-int: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'/%3E%3C/svg%3E");
+  --m-i-data: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8'%3E%3Cellipse cx='12' cy='6' rx='8' ry='2.5'/%3E%3Cpath d='M4 6v12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V6M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5'/%3E%3C/svg%3E");
+  --m-i-queue: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 6h12M4 11h12M4 16h7M19.5 17V9'/%3E%3Ccircle cx='17' cy='17' r='2.5'/%3E%3C/svg%3E");
+  --m-i-lyrics: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6'/%3E%3C/svg%3E");
+  --m-i-together: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='9' cy='9' r='3.2'/%3E%3Cpath d='M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5'/%3E%3Ccircle cx='17' cy='8' r='2.5'/%3E%3Cpath d='M16 13.5c2.4 0 4 1.3 4.6 4'/%3E%3C/svg%3E");
+  --m-i-sleep: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z'/%3E%3C/svg%3E");
+  --m-i-more: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Ccircle cx='5' cy='12' r='1.9'/%3E%3Ccircle cx='12' cy='12' r='1.9'/%3E%3Ccircle cx='19' cy='12' r='1.9'/%3E%3C/svg%3E");
+  --m-i-go: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E");
+  --m-i-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+html.mobile body { overscroll-behavior: none; }
+html.mobile .mpico {
+  flex: none; width: 22px; height: 22px; background: currentColor;
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+}
+html.mobile .i-wa { --ic: var(--m-i-wa); } html.mobile .i-pen { --ic: var(--m-i-pen); } html.mobile .i-ya { --ic: var(--m-i-ya); } html.mobile .i-find { --ic: var(--m-i-find); }
+html.mobile .i-look { --ic: var(--m-i-look); } html.mobile .i-ui { --ic: var(--m-i-ui); } html.mobile .i-play { --ic: var(--m-i-play); }
+html.mobile .i-out { --ic: var(--m-i-out); } html.mobile .i-int { --ic: var(--m-i-int); } html.mobile .i-data { --ic: var(--m-i-data); }
+html.mobile .i-stats { --ic: var(--ly-i-stats); } html.mobile .i-studio { --ic: var(--ly-i-studio); }
+html.mobile .i-queue { --ic: var(--m-i-queue); } html.mobile .i-lyrics { --ic: var(--m-i-lyrics); } html.mobile .i-together { --ic: var(--m-i-together); }
+html.mobile .i-sleep { --ic: var(--m-i-sleep); } html.mobile .i-more { --ic: var(--m-i-more); }
+
+/* лента, которая листается вбок, гаснет у правого края — видно, что там есть ещё (и отступ, чтобы последнюю
+   кнопку можно было докрутить из-под затухания) */
+html.mobile :is(#chips, .plbar, #settingsPage .settabs, .stations .chips, .eqpresets) {
+  flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; touch-action: pan-x;
+  padding-right: 32px; scroll-padding-right: 32px;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+html.mobile :is(#chips, .plbar, #settingsPage .settabs, .stations .chips, .eqpresets)::-webkit-scrollbar { display: none; }
+html.mobile :is(#chips, .plbar, #settingsPage .settabs, .stations .chips, .eqpresets) > * { flex: none !important; }
+
+/* ничего от окна компьютера: рамки, закладок, колонки закреплённых */
+html.mobile #titlebar, html.mobile .tabs, html.mobile #pinRail { display: none !important; }
+
+html.mobile body > .app {
+  padding: calc(8px + var(--m-top)) 8px var(--m-bot) !important;
+  gap: 6px !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  grid-template-areas: none !important;
+}
+
+/* ---------- боковая панель распадается: поиск — строкой сверху, разделы — внизу ---------- */
+html.mobile .app > .side { display: contents !important; }
+html.mobile .app > .side > * { display: none !important; }
+/* поиск layout.js завернул в .sbox > .sinner (плавающий поиск свёрнутой панели) — на телефоне это просто строка */
+html.mobile .app > .side > .sbox {
+  display: block !important; position: static !important; grid-column: 1 / -1; grid-row: 1;
+  width: auto !important; height: auto !important; margin: 0 4px; transform: none !important;
+}
+html.mobile .side .sinner { display: contents !important; }
+html.mobile .side .sgrip { display: none !important; }
+html.mobile .side #search {
+  display: block !important; position: static !important; width: 100% !important; box-sizing: border-box; margin: 0;
+  height: 40px !important; min-height: 0 !important; /* отступы — от стиля: у некоторых слева значок лупы */
+  font-size: 16px !important; /* меньше 16px — Android увеличивает страницу при вводе */
+}
+/* четыре раздела: значок и подпись, без «таблеток»; выбранный — цветом акцента */
+html.mobile .app > .side > :is(#wave, #likes, #friendsBtn, #profile) {
+  display: flex !important; flex-direction: column; grid-row: 4; align-items: center; justify-content: center; gap: 3px;
+  min-width: 0; height: 56px; min-height: 0; margin: 0; padding: 4px 0 6px !important;
+  font-size: 11px !important; line-height: 1.1; letter-spacing: 0 !important; text-align: center; white-space: nowrap;
+  background: none !important; border: 0 !important; box-shadow: none !important; text-shadow: none !important;
+  color: var(--muted) !important; transform: none !important; border-radius: 12px !important;
+}
+html.mobile .app > .side > .nav::before {
+  content: ""; flex: none; width: 24px; height: 24px; background: currentColor !important; filter: none !important;
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+}
+html.mobile .app > .side > .nav.active, html.mobile.m-inprofile .app > .side > #profile { color: var(--accent) !important; font-weight: 600; }
+/* подложка под разделами: на светлых обоях (Неон с картинкой) подписи иначе терялись. Это ::after самой сетки —
+   ячейка 4-й строки под кнопками, лишнего элемента в разметке нет */
+html.mobile body > .app::after {
+  content: ""; grid-column: 1 / -1; grid-row: 4; z-index: 0; margin: 0 -8px calc(0px - var(--m-bot));
+  background: linear-gradient(rgba(6, 4, 12, .55), rgba(6, 4, 12, .8));
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); pointer-events: none;
+}
+html.mobile .app > .side > .nav { position: relative; z-index: 1; }
+html.mobile .side > #wave { grid-column: 1; }
+html.mobile .side > #likes { grid-column: 2; }
+html.mobile .side > #friendsBtn { grid-column: 3; }
+html.mobile .side > #profile { grid-column: 4; }
+
+html.mobile .app > .main {
+  grid-column: 1 / -1 !important; grid-row: 2 !important;
+  padding: 0 var(--m-pad) !important; -webkit-overflow-scrolling: touch;
+  touch-action: pan-y; /* свайпы влево-вправо между разделами (mobile.js) — не прокрутка страницы */
+}
+html.mobile .app > .main { scrollbar-width: none; }
+html.mobile .app > .main::-webkit-scrollbar { width: 0 !important; display: none; }
+
+/* ---------- шапка страницы ---------- */
+html.mobile .head { flex-wrap: wrap; gap: 10px; margin: 6px 0 12px; }
+html.mobile .head h2 { font-size: 32px; line-height: 1.05; overflow-wrap: anywhere; }
+html.mobile .headimg { width: 64px; height: 64px; }
+html.mobile .head .pin { margin-left: 0 !important; }
+html.mobile .head .nav { padding: 8px 14px; font-size: 13.5px; }
+html.mobile .round { flex: none; width: 44px; height: 44px; }
+html.mobile #chips { gap: 8px; margin-bottom: 10px; }
+html.mobile #chips .chip { height: 36px; padding: 0 14px; font-size: 14px; display: inline-flex; align-items: center; }
+html.mobile .plbar { gap: 8px; }
+html.mobile .plbar .nav { padding: 8px 14px; font-size: 13.5px; }
+/* плитки альбомов и плейлистов — по две в ряд */
+html.mobile :is(.plgrid, .simgrid, .friends .fralbums) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* плейлисты — строками, как в макете «Коллекция»: обложка 48px, название (до двух строк) и число треков */
+html.mobile .plgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 2px !important; margin-inline: -10px; }
+html.mobile .plgrid > .plcard {
+  display: grid !important; grid-template-columns: 48px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center;
+  column-gap: 12px; row-gap: 2px; min-height: 60px; padding: 6px 10px !important; text-align: left !important; box-sizing: border-box;
+}
+html.mobile .plgrid > .plcard > .plcover { grid-row: 1 / 3; width: 48px !important; height: 48px !important; align-self: center; }
+html.mobile .plgrid > .plcard > b {
+  font-size: 15px !important; line-height: 1.25; align-self: end; margin: 0 !important; text-align: left;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal;
+}
+html.mobile .plgrid > .plcard > span:not(.plcover) { font-size: 12.5px !important; align-self: start; margin: 0 !important; text-align: left; }
+
+/* ---------- строки треков ---------- */
+/* строка во всю ширину экрана и пониже: 52px, обложка 40px; кнопки «♡» и «⋯» — по 44px и видны всегда;
+   длинное название — в две строки. Список выходит за отступ .main (14px) почти до края окна */
+html.mobile .main > .cols > .list, html.mobile .main > .list { margin-inline: -10px; padding: 2px 0 !important; }
+html.mobile .list li { gap: 10px; min-height: 52px; padding: 4px 4px 4px 8px; box-sizing: border-box; }
+html.mobile .list li > img { width: 40px; height: 40px; flex: none; }
+html.mobile .list li > div { flex: 1 1 auto; min-width: 0; }
+html.mobile .list li .t, html.mobile .list li .a {
+  display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; overflow-wrap: anywhere;
+}
+html.mobile .list li .t { -webkit-line-clamp: 2; font-size: 15px; }
+html.mobile .list li .a { -webkit-line-clamp: 1; font-size: 13px; }
+html.mobile .list li :is(.likebtn, .morebtn) { opacity: 1; flex: none; width: 44px; height: 44px; }
+html.mobile .list li .grip { display: none; }
+
+/* ---------- мини-плеер ----------
+   обложка и название (нажатие — плеер на весь экран) · лайк · назад · пуск · вперёд; под ними — тонкая линия трека.
+   Режимы, громкость, очередь, «Вместе», сон и «⋯» — в плеере на весь экран (mobile.js → .mfacts) */
+html.mobile .app > .player {
+  grid-column: 1 / -1 !important; grid-row: 3 !important;
+  grid-template-columns: minmax(0, 1fr) auto !important; grid-template-rows: auto auto;
+  gap: 2px 4px !important; padding: 8px 8px 6px 10px !important; margin: 0 4px; border-radius: 20px;
+}
+html.mobile .player > .pinfo { grid-column: 1; grid-row: 1; gap: 10px; min-width: 0; }
+html.mobile .player .cover { width: 46px; height: 46px; flex: none; }
+html.mobile .player .meta { min-width: 0; flex: 1; }
+/* название и автор — помельче, чтобы рядом поместились «назад», пуск и «вперёд» */
+html.mobile .player .meta b { font-size: 13.5px !important; line-height: 1.25; }
+html.mobile .player .meta :is(span, small, .a, .artist) { font-size: 12px !important; line-height: 1.25; }
+html.mobile .player .pinfo .likebtn { width: 40px; height: 40px; flex: none; }
+html.mobile .player > .pcenter { display: contents; }
+html.mobile .player .ctrls { grid-column: 2; grid-row: 1; gap: 0; }
+html.mobile .player .ctrls button { width: 40px; height: 44px; }
+html.mobile .player .ctrls .playbtn { width: 44px; height: 44px; }
+/* на «Моей волне», пока играет волна, пуск/пауза — большая кнопка на экране; второй в мини-плеере не нужно
+   (mobile.js → html.m-wavehere). Играет что-то другое — пуск в мини-плеере остаётся */
+html.mobile.m-wavehere .player .ctrls .playbtn { display: none !important; }
+html.mobile .player .seekrow { grid-column: 1 / -1; grid-row: 2; gap: 0; min-width: 0; height: 14px; }
+html.mobile .player .seekrow .time { display: none; }
+html.mobile .player #seek { height: 14px; }
+html.mobile .player :is(#disBtn, #shuffleBtn, #repeatBtn) { display: none !important; }
+html.mobile .player > .pright { display: none !important; }
+/* украшения стилей по краям плеера (розы и бант Lolitta, орнамент) рассчитаны на широкий плеер — в мини-плеере
+   они закрывают кнопки; на панелях страницы они остаются */
+html.mobile .player .lodeco { display: none !important; }
+
+/* ---------- плеер на весь экран ---------- */
+/* border-box: у .fwrap height: 100%, и отступы от системных панелей иначе прибавлялись бы к высоте экрана */
+/* Сетка, а не flex: строки — шапка (обложка / заголовок), текст песни (всё свободное место), управление, кнопки.
+   В flex-колонке WebView отдавал тексту места больше, чем есть, и кнопки внизу уезжали под полоску жестов. */
+html.mobile #full .fwrap {
+  box-sizing: border-box; padding: calc(10px + var(--m-top)) 22px calc(14px + var(--m-bot)); gap: 14px;
+  display: grid !important; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+html.mobile #full[data-mode="cover"] .fwrap { grid-template-rows: minmax(0, 1fr) auto auto; }
+/* «свернуть» — стрелка вниз в левом углу (свайп вниз тоже сворачивает) */
+html.mobile #full .fclose {
+  top: calc(8px + var(--m-top)); left: 12px; right: auto; width: 44px; height: 44px;
+  font-size: 0; display: grid; place-items: center; background: none; box-shadow: none; border: 0;
+}
+html.mobile #full .fclose::before {
+  content: ""; width: 26px; height: 26px; background: var(--text);
+  -webkit-mask: var(--m-i-down) center / contain no-repeat; mask: var(--m-i-down) center / contain no-repeat;
+}
+html.mobile #full .fsrc { position: absolute; top: calc(12px + var(--m-top)); right: 12px; left: auto; z-index: 2; }
+/* обложку подгоняет main.js (fitFull) по высоте .fhead — та должна сжиматься, иначе низ плеера уходит за край */
+html.mobile #full .fhead { padding: 48px 0 0; min-height: 0; }
+html.mobile #full[data-mode="cover"] .fhead { flex-direction: column; align-items: stretch; gap: 14px; }
+html.mobile #full .ftitle { font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; }
+html.mobile #full .fartist { font-size: 15px; }
+html.mobile #full .fctrl { gap: 8px; }
+/* пять клеток: ♡ · назад · ПУСК · вперёд · (пусто) — пуск ровно по центру */
+html.mobile #full .fbtns { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); justify-items: center; gap: 0; }
+html.mobile #full .fbtns .likebtn { position: static; transform: none; grid-column: 1; grid-row: 1; }
+html.mobile #full .fbtns #fPrev { grid-column: 2; grid-row: 1; }
+html.mobile #full .fbtns #fPlay { grid-column: 3; grid-row: 1; }
+html.mobile #full .fbtns #fNext { grid-column: 4; grid-row: 1; }
+html.mobile #full .fbtns button { width: 52px; height: 52px; }
+html.mobile #full .fbtns .playbtn { width: 72px; height: 72px; }
+html.mobile #full .flyrics { font-size: 20px; min-height: 0; }
+/* у синхронного текста сверху и снизу отступы по пол-экрана (текущая строка — по центру); здесь окно текста
+   ниже, и такие отступы растягивали его за край — хватит 140px */
+html.mobile #full .flyrics.synced { padding-block: 140px !important; }
+/* подписанные кнопки под управлением */
+html.mobile .mfacts { flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+html.mobile .mfact {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 56px; padding: 6px 0;
+  font-size: 11.5px; color: var(--text); opacity: .85; background: none; border: 0; border-radius: 14px;
+}
+html.mobile .mfact .mpico { width: 24px; height: 24px; }
+html.mobile .mfact:active { opacity: 1; background: rgba(255,255,255,.08); }
+/* «Караоке» — подсвечена, пока на экране текст песни */
+html.mobile .mfact.on { opacity: 1; color: var(--accent); background: rgba(255,255,255,.08); }
+
+/* ---------- меню трека — лист снизу ----------
+   main.js ставит меню у кнопки (left/top в style) — на телефоне оно выезжает снизу во всю ширину */
+html.mobile .tmenu {
+  left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important;
+  width: auto !important; max-width: none !important; min-width: 0 !important; max-height: 78vh; overflow-y: auto;
+  padding: 18px 12px calc(14px + var(--m-bot)) !important; border-radius: 24px 24px 0 0 !important;
+  box-sizing: border-box; z-index: 70;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .55) !important; /* затемнение страницы под листом — без лишнего элемента */
+}
+html.mobile .tmenu::before {
+  content: ""; position: absolute; top: 7px; left: 50%; width: 40px; height: 4px; margin-left: -20px;
+  border-radius: 2px; background: currentColor; opacity: .25;
+}
+html.mobile .tmenu .mi { min-height: 50px; padding: 0 10px; font-size: 15px; gap: 14px; }
+html.mobile .tmenu .mi svg { width: 22px; height: 22px; }
+html.mobile .tmenu .mhead { padding: 4px 6px 10px; }
+html.mobile .tmenu input[type="range"] { height: 32px; }
+
+/* ---------- «Моя волна» ---------- */
+html.mobile .main.wavemode .head { gap: 8px; }
+html.mobile .stwrap:not([hidden]) { width: 100%; display: flex !important; flex-wrap: wrap; align-items: center; gap: 8px; }
+html.mobile .stbtn { width: auto !important; flex: none; height: 40px; padding: 0 18px !important; font-size: 14px !important; }
+html.mobile .streset { position: static !important; }
+html.mobile #waveQBtn { height: 40px; padding: 0 12px !important; font-size: 14px !important; background: none !important; border: 0 !important; box-shadow: none !important; color: var(--muted) !important; }
+html.mobile #waveQBtn svg { display: none; }
+html.mobile #waveInfo { width: 100%; }
+html.mobile #vizFsBtn { width: 44px; height: 44px; }
+
+/* «Настроить волну» — лист снизу: вкладки лентой, крупные кнопки жанров */
+html.mobile .stations {
+  position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important;
+  width: auto !important; height: 72vh; max-height: none !important; z-index: 70;
+  padding: 22px 14px calc(16px + var(--m-bot)) !important; gap: 12px; border-radius: 24px 24px 0 0 !important;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .55) !important;
+}
+html.mobile .stations::before {
+  content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 4px; margin-left: -20px;
+  border-radius: 2px; background: currentColor; opacity: .25;
+}
+html.mobile .stations .chip { padding: 9px 16px !important; font-size: 14.5px !important; }
+html.mobile .stations .stgrid { gap: 10px; }
+html.mobile .stations .pill { min-height: 44px; padding: 0 18px !important; font-size: 15px !important; display: inline-flex; align-items: center; }
+
+/* ---------- «Профиль» (страница mobile.js: аккаунт, плитки, разделы настроек) ---------- */
+html.mobile .mprofile { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
+html.mobile .mprofile[hidden] { display: none !important; }
+html.mobile .mpgroup { padding: 4px !important; gap: 0 !important; }
+html.mobile .mprow {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 58px; padding: 6px 12px; box-sizing: border-box;
+  background: none; border: 0; border-radius: 12px; color: var(--text); text-align: left; font: inherit;
+}
+html.mobile .mprow + .mprow { border-top: 1px solid rgba(255,255,255,.07); }
+html.mobile .mprow:active { background: rgba(255,255,255,.06); }
+html.mobile .mprow .mpico { color: var(--accent); }
+html.mobile .mptx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+html.mobile .mptx b { font-weight: 500; font-size: 15.5px; }
+html.mobile .mptx small { font-size: 12.5px; color: var(--muted); }
+html.mobile .mpgo { flex: none; width: 18px; height: 18px; background: var(--muted); -webkit-mask: var(--m-i-go) center / contain no-repeat; mask: var(--m-i-go) center / contain no-repeat; }
+html.mobile .mprow.danger { justify-content: center; color: #ff8a9a; min-height: 50px; }
+html.mobile .mptiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
+/* шапка профиля (как в макете): аватар и ник Whisper Archive, карандаш; без архива — пустой кружок и подсказка.
+   Большой заголовок страницы здесь не нужен — его место занимает шапка */
+html.mobile .main[data-page="mprofile"] > .head { display: none !important; }
+html.mobile .mphero { display: flex; align-items: center; gap: 14px; padding: 14px 4px 4px; cursor: pointer; }
+html.mobile .mpav {
+  position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; box-sizing: border-box;
+  display: grid; place-items: center; background: rgba(255,255,255,.08); border: 1px solid var(--accent); color: var(--text);
+}
+html.mobile .mpav.empty { border-style: dashed; border-color: var(--muted); }
+html.mobile .mpav b { font-size: 26px; font-weight: 600; }
+html.mobile .mpav img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+html.mobile .mphero .mptx b { font-family: var(--font-display, inherit); font-size: 26px; font-weight: 600; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.15em; }
+html.mobile .mphero .mptx small { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.mobile .mppen { flex: none; width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; color: var(--text); border-radius: 50%; }
+html.mobile .mppen:active { background: rgba(255,255,255,.08); }
+html.mobile .mppen .mpico { width: 20px; height: 20px; }
+html.mobile .mptile {
+  display: flex !important; flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px !important; min-height: 76px;
+  color: var(--text); font: inherit; font-size: 14.5px; text-align: left;
+}
+html.mobile .mptile .mpico { color: var(--accent); }
+html.mobile.no-studio .mptile[data-src="studioBtn"] { display: none !important; }
+html.mobile .mphead { margin: 8px 4px 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+html.mobile .mpfind {
+  display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border-radius: 22px;
+  background: rgba(255,255,255,.07); color: var(--muted);
+}
+html.mobile .mpfind .mpico { width: 18px; height: 18px; }
+html.mobile .mpfind input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; outline: none; color: var(--text); font: inherit; font-size: 16px; padding: 0; }
+
+/* ---------- окна поверх страницы ---------- */
+html.mobile :is(.modalbox, .login-box, .eqbox, .tlmodal, .rmbox, .prochoose) {
+  width: calc(100vw - 16px) !important; max-width: none !important; box-sizing: border-box;
+  max-height: calc(100vh - var(--m-top) - var(--m-bot) - 16px); overflow-y: auto; padding: 16px;
+}
+html.mobile .modalbox h2 { font-size: 20px; }
+
+/* эквалайзер: крестик — в углу окна, а не в строке с заголовком и выключателем */
+html.mobile .eqbox { position: relative; }
+html.mobile .eqhead { flex-wrap: wrap; gap: 8px 12px; padding-right: 48px; }
+html.mobile .eqhead h2 { flex-basis: 100%; font-size: 20px; }
+html.mobile .eqbox .eqclose { position: absolute; top: 10px; right: 10px; }
+html.mobile .eqgrid { padding: 10px 4px 6px; gap: 2px; }
+html.mobile .eqslot { width: 24px; height: 140px; }
+html.mobile .eqslot input { width: 140px; }
+html.mobile .eqband small, html.mobile .eqv { font-size: 9.5px; }
+
+/* ---------- библиотека тем ---------- */
+html.mobile .tlhead { flex-wrap: wrap; gap: 8px; }
+html.mobile .tlhead .tlfind { flex-basis: 100%; min-width: 0; }
+html.mobile .tlcrumbs { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html.mobile :is(.tlgrid, .tlgrid.tlroot) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+html.mobile .tlcard, html.mobile .tlcard * { min-width: 0; overflow-wrap: anywhere; }
+html.mobile :is(.tlbody, .tlfbody) { padding: 8px 10px 10px; gap: 2px; font-size: 12.5px; }
+html.mobile :is(.tlbody, .tlfbody) :is(h3, h4, b) { font-size: 14px; }
+html.mobile .tlcard .nav { padding: 6px 10px; font-size: 12.5px; }
+
+/* ---------- профиль Whisper Archive, друзья ---------- */
+html.mobile .wpro-head { flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+html.mobile .wpro-head .frav.big.wpro-av { width: 88px; height: 88px; font-size: 34px; }
+html.mobile .wpro-name { font-size: 22px; }
+html.mobile .wpro-acts { justify-content: center; flex-wrap: wrap; }
+html.mobile .wpro-nick { flex-wrap: wrap; }
+html.mobile .wpro-nick .field { min-width: 0; max-width: none; flex-basis: 100%; }
+html.mobile .friends { gap: 14px; padding-bottom: 12px; }
+html.mobile .friends .frhead { flex-wrap: wrap; }
+html.mobile .friends .frhead h3 { font-size: 20px; }
+html.mobile .friends .frav.big { width: 72px; height: 72px; }
+
+/* ---------- «Слушать вместе» ---------- */
+html.mobile .rmstage { flex-direction: column; gap: 8px; max-width: calc(100vw - 16px); max-height: calc(100vh - var(--m-top) - var(--m-bot) - 16px); overflow-y: auto; }
+html.mobile .rmstage > .rmside { width: auto; max-height: 40vh; }
+html.mobile .rmcodebox .rmbig { font-size: 22px; letter-spacing: .14em; }
+html.mobile .rmfrom { max-width: 70px; }
+
+/* ---------- настройки ---------- */
+/* открываются из «Профиля»; одна колонка, поиск — обычной строкой (раньше растягивался на пол-экрана),
+   вкладки — лентой; без того, чего на телефоне нет: окна, трея, клавиш, своего звукового движка, папок для треков
+   и кэша (треки лежат в папке приложения), вкладки «Приложение» */
+html.mobile .settings { columns: 1 !important; max-width: none; padding-bottom: 16px; }
+html.mobile #settingsPage { padding-left: 0 !important; }
+html.mobile #settingsPage .settop {
+  position: static !important; width: auto !important; height: auto !important;
+  display: flex !important; flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 12px;
+}
+html.mobile #settingsPage .settop > * { flex: none !important; }
+html.mobile #settingsPage .setfind {
+  width: 100% !important; height: 40px !important; min-height: 0 !important; max-height: 40px; box-sizing: border-box;
+  padding: 0 14px !important; font-size: 16px !important;
+}
+html.mobile #settingsPage .settabs { flex-direction: row !important; gap: 6px; }
+/* лента вкладок — не шире страницы: иначе она растягивала всю страницу, и вбок листались сами настройки
+   (а свайп по ним уводил в «Друзья»). Листается только лента */
+html.mobile #settingsPage .settabs { width: auto !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box; }
+html.mobile .app > .main { overflow-x: hidden !important; }
+/* плотнее: на экране телефона — несколько карточек, а не одна. Заголовок страницы поменьше, у карточек —
+   меньше отступы, кнопки и поля 36–38px (по высоте всё ещё удобно нажимать) */
+/* большой заголовок «Настройки» не нужен: вкладки сверху и так говорят, где ты (назад — системной кнопкой) */
+html.mobile .main[data-page="settingsBtn"] > .head { display: none !important; }
+html.mobile #settingsPage .settop { margin-top: 0; }
+html.mobile .settings .card p.status:empty { display: none !important; }   /* пустая строка состояния — пустое место внизу карточки */
+/* стили — по три в ряд, кружки поменьше */
+html.mobile .settings .stylepick { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px !important; }
+html.mobile .settings .stylecard { padding: 8px 4px 6px !important; gap: 4px !important; min-width: 0; }
+html.mobile .settings .stylecard .sprev { width: 38px !important; height: 38px !important; }
+html.mobile .settings .stylecard b { font-size: 12.5px !important; text-align: center; overflow-wrap: anywhere; }
+html.mobile .settings { font-size: 14px; }
+html.mobile .settings > .card { padding: 12px !important; margin-bottom: 10px !important; gap: 8px !important; }
+html.mobile .settings .card h3 { font-size: 15px !important; margin: 0 0 4px !important; letter-spacing: normal; }
+html.mobile .settings .card :is(p, small, .note, .hint, .setnote) { font-size: 12.5px !important; line-height: 1.35; }
+html.mobile .settings .card :is(button, .nav):not(.chip):not(.stylecard) { min-height: 36px; padding: 6px 12px !important; font-size: 14px !important; }
+html.mobile .settings .card :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select) {
+  height: 38px !important; min-height: 0 !important; font-size: 14px !important; box-sizing: border-box;
+}
+html.mobile .settings .card .switch { gap: 10px; }
+html.mobile .settings .card .switch > span { font-size: 14px !important; }
+/* фон: зона «Картинка, гиф или видео» — короткой кнопкой (перетаскивать на телефоне нечего), обоев рабочего стола нет */
+html.mobile #drop { flex-direction: row !important; gap: 10px !important; min-height: 0 !important; padding: 10px 12px !important; }
+html.mobile #drop > svg { width: 22px; height: 22px; }
+html.mobile #drop > span, html.mobile #deskBtn { display: none !important; }
+html.mobile #settingsPage .settabs .chip { height: 36px; padding: 0 14px; font-size: 14px; display: inline-flex; align-items: center; }
+html.mobile .settings .card { padding: 14px; gap: 10px; border-radius: 16px; break-inside: avoid; }
+html.mobile .settings .card h3 { font-size: 16px; margin: 0; }
+html.mobile .settings .row, html.mobile .settings .lyrow, html.mobile .settings .lyseg { flex-wrap: wrap; gap: 6px; }
+html.mobile .settings .nav { padding: 9px 14px; font-size: 14px; }
+html.mobile .settings .chip { padding: 7px 12px; font-size: 13.5px; }
+html.mobile .settings .switch { font-size: 14.5px; min-height: 40px; }
+html.mobile .settings .stylecard { min-width: 0; }
+html.mobile :is(#settingsBtn, #layoutCard, #stuCard, #outCard, #dpCard, #trayCard, #ntCard, #webCard, #hkCard, #linkCard, #updCard, #fontCard, #dlCard),
+html.mobile .settings > [data-tab="app"], html.mobile #setTabs .chip[data-tab="app"],
+html.mobile #cacheCard .dlpath, html.mobile #cacheOpen, html.mobile #bgDirBtn,
+html.mobile .card.m-hide { display: none !important; } /* Discord, OBS — помечает mobile.js */
+
+/* подсказка «обнови WebView» (mobile.js → oldWebView). Старый WebView не понимает color-mix — цвета здесь простые */
+.m-oldwv {
+  position: fixed; left: 8px; right: 8px; top: calc(8px + var(--m-top)); z-index: 90;
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px;
+  background: #2a1d4a; color: #fff; font-size: 13px; line-height: 1.3; box-shadow: 0 6px 24px rgba(0,0,0,.5);
+}
+.m-oldwv span { flex: 1; }
+.m-oldwv .nav { flex: none; padding: 8px 12px; background: #7c4dff; color: #fff; }
+.m-oldwv .nav:last-child { background: rgba(255,255,255,.12); }
+
+/* ---------- «Статистика»: три сводки в одну строку (лайки, длительность, жанр) ---------- */
+html.mobile .statcards { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+html.mobile .statcard {
+  display: flex !important; flex-direction: column; align-items: flex-start; gap: 6px !important;
+  padding: 10px !important; min-width: 0; margin: 0 !important;
+}
+html.mobile .statcard > svg { width: 20px !important; height: 20px !important; flex: none; }
+html.mobile .statcard > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+html.mobile .statcard small { font-size: 11px !important; line-height: 1.2; color: var(--muted); }
+html.mobile .statcard b { font-size: 15px !important; line-height: 1.2; overflow-wrap: anywhere; }
+
+/* ---------- динамический фон по обложке ----------
+   на десктопе копия обложки — 82vmin у правого края; в узком окне телефона это треть экрана, и почти вся она
+   за краем. Здесь — крупнее, ближе к середине и чуть заметнее; «эхо» за ней — тоже крупнее */
+html.mobile .dyn-art i { right: -16vmin; top: 44%; width: 112vmin; height: 112vmin; border-radius: 6vmin; opacity: .46; }
+html.mobile .dyn-art i + i { right: 18vmin; width: 84vmin; height: 84vmin; opacity: .24; }

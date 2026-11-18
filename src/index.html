@@ -2,12 +2,14 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Whisper Edition</title>
   <!-- значок вкладки в браузерной версии (окну приложения не нужен) -->
   <link rel="icon" type="image/png" href="favicon.png" />
   <!-- без defer, первым: стиль прошлого запуска и «шторка» до первой отрисовки (boot.js) -->
   <script src="boot.js"></script>
+  <!-- без defer, сразу после boot.js: телефон — класс html.mobile до первой отрисовки (mobile.js, mobile.css) -->
+  <script src="mobile.js"></script>
   <script src="lsguard.js"></script>
   <!-- язык интерфейса: словарь и переводчик, тоже без defer — успеть до первой отрисовки -->
   <script src="i18n/en.js"></script>
@@ -47,6 +49,8 @@
   <link rel="stylesheet" href="core/discord.css" />
   <script src="core/discord.js" defer></script>
   <script src="traymini.js" defer></script>
+  <!-- телефон: уведомление плеера и музыка в фоне (Android — MediaService.kt) -->
+  <script src="mobilemedia.js" defer></script>
   <link rel="stylesheet" href="core/obs.css" />
   <script src="core/obs.js" defer></script>
   <script src="update.js" defer></script>
@@ -115,6 +119,8 @@
   <link rel="stylesheet" href="mascot.css" />
   <script src="mascot.js" defer></script>
   <script src="layout.js"></script>
+  <!-- последним из .css: раскладка для телефона сильнее режимов «Расположения» -->
+  <link rel="stylesheet" href="mobile.css" />
 </head>
 <body>
   <!-- динамический фон лежит внутри #bg: темы задают #bg место и форму (например, экран «Телевизора»),
@@ -620,7 +626,7 @@
         <!-- ===== Данные: Статистика, Резервная копия | Сброс ===== -->
         <div class="card" id="statCard" data-tab="data">
           <h3>Статистика</h3>
-          <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lsOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
+          <label class="switch" title="Время, исполнители, треки, жанры и часы прослушивания — на странице «Статистика». Хранится только на этом компьютере"><input type="checkbox" id="lstOn" /><i></i><span>Записывать статистику прослушиваний</span></label>
           <div class="row"><button type="button" class="nav danger" id="lsClear">Очистить записанное…</button></div>
         </div>
         <div class="card" id="bkCard" data-tab="data">

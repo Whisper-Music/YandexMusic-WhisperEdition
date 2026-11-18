@@ -150,15 +150,24 @@ pub fn remember_one(app: &AppHandle, path: &Path) -> Option<Entry> {
 /// Кнопка «Выбрать папку обоев»: системный диалог выбора папки.
 #[tauri::command]
 pub async fn bg_dir_pick(app: AppHandle) -> Result<Option<Vec<Entry>>, String> {
-    let a = app.clone();
-    let picked = tauri::async_runtime::spawn_blocking(move || {
-        a.dialog().file().set_title("Папка обоев (Wallpaper Engine)").blocking_pick_folder()
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    let Some(fp) = picked else { return Ok(None) };
-    let p = fp.into_path().map_err(|e| e.to_string())?;
-    Ok(Some(remember(&app, &[p])))
+    // на телефоне выбора папки в диалоге нет (и Wallpaper Engine тоже)
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Err("На телефоне папку обоев выбрать нельзя".into())
+    }
+    #[cfg(desktop)]
+    {
+        let a = app.clone();
+        let picked = tauri::async_runtime::spawn_blocking(move || {
+            a.dialog().file().set_title("Папка обоев (Wallpaper Engine)").blocking_pick_folder()
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let Some(fp) = picked else { return Ok(None) };
+        let p = fp.into_path().map_err(|e| e.to_string())?;
+        Ok(Some(remember(&app, &[p])))
+    }
 }
 
 /// «Добавить трек…» (правый щелчок по пустому месту «Лайков», tmenu.js): выбор аудиофайлов с диска. Дальше — как

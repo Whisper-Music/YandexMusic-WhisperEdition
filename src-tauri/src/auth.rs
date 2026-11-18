@@ -1,6 +1,8 @@
 use crate::secret;
 use std::time::Duration;
-use tauri::{webview::NewWindowResponse, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Manager};
+#[cfg(desktop)]
+use tauri::{webview::NewWindowResponse, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const AUTH_URL: &str =
     "https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d";
@@ -136,6 +138,7 @@ fn token_from_url(u: &tauri::Url, expected_state: &str) -> Option<String> {
     }
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("yandex-auth") {
@@ -211,6 +214,94 @@ pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
         Some(_) => Err("Яндекс вернул токен в неожиданном виде".into()),
         None => Err("Окно входа закрыто".into()),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Вход на телефоне. Второго окна там нет, поэтому страница входа Яндекса открывается прямо в главном окне:
+// yandex_login запоминает state и адрес приложения и уходит на oauth.yandex.ru, а nav-guard (lib.rs)
+// пропускает в главном окне только страницы входа (auth_nav_allowed) — и только пока вход начат.
+// Переход на адрес с токеном не выполняется: токен забирается из адреса (та же проверка state и
+// callback_ok), и окно возвращается на страницу приложения — она загрузится заново уже со входом.
+// Кнопка «Назад» на телефоне просто вернёт на страницу приложения без входа.
+// ---------------------------------------------------------------------------
+
+#[cfg(mobile)]
+struct Pending {
+    state: String,
+    back: tauri::Url,
+}
+#[cfg(mobile)]
+static PENDING: std::sync::Mutex<Option<Pending>> = std::sync::Mutex::new(None);
+
+/// Можно ли главному окну телефона перейти на этот адрес (кроме своих страниц — их пропускает lib.rs).
+#[cfg(mobile)]
+pub fn mobile_nav(webview: &tauri::Webview, u: &tauri::Url) -> bool {
+    if u.fragment().is_some_and(|f| f.contains("access_token=")) {
+        mobile_finish(webview.app_handle(), u);
+        return false;
+    }
+    PENDING.lock().map(|p| p.is_some()).unwrap_or(false) && auth_nav_allowed(u)
+}
+
+/// Адрес с токеном: проверить, сохранить и вернуть окно в приложение. true — вход завершён (успешно или нет).
+#[cfg(mobile)]
+fn mobile_finish(app: &AppHandle, u: &tauri::Url) -> bool {
+    let Some(p) = PENDING.lock().ok().and_then(|mut g| g.take()) else { return false };
+    match token_from_url(u, &p.state) {
+        Some(t) if token_looks_valid(&t) => {
+            crate::net::forget_uid();
+            if let Err(e) = secret::set(&t) {
+                eprintln!("Не удалось сохранить токен: {e}");
+            }
+        }
+        _ => eprintln!("Яндекс вернул токен с чужого адреса или без state — вход не принят"),
+    }
+    // уходить со страницы из обработчика перехода нельзя — переход ещё не закончен; делаем это чуть позже
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.navigate(p.back);
+        }
+    });
+    true
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn yandex_login(app: AppHandle) -> Result<(), String> {
+    let w = app.get_webview_window("main").ok_or("Нет главного окна")?;
+    let back = w.url().map_err(|e| e.to_string())?;
+    let state = random_state()?;
+    let url: tauri::Url = format!("{AUTH_URL}&state={state}")
+        .parse()
+        .map_err(|_| "Неверный адрес входа".to_string())?;
+    *PENDING.lock().map_err(|_| "Вход сломался — перезапусти приложение")? = Some(Pending { state, back: back.clone() });
+    w.navigate(url).map_err(|e| e.to_string())?;
+    // Запасной путь, как для Linux в окне входа: переход, который меняет только часть адреса после «#»,
+    // через on_navigation может не пройти — смотрим на текущий адрес окна, пока вход не закончен.
+    tauri::async_runtime::spawn(async move {
+        let mut left = false; // окно уже ушло со страницы приложения на страницу входа
+        loop {
+            tokio_sleep(Duration::from_millis(400)).await;
+            if PENDING.lock().map(|p| p.is_none()).unwrap_or(true) {
+                break;
+            }
+            let Ok(u) = w.url() else { break };
+            if u.fragment().is_some_and(|f| f.contains("access_token=")) && mobile_finish(w.app_handle(), &u) {
+                break;
+            }
+            if !crate::app_page(&u) {
+                left = true;
+            } else if left {
+                // вернулись в приложение кнопкой «Назад» — вход отменён, чужие страницы снова закрыты
+                if let Ok(mut g) = PENDING.lock() {
+                    *g = None;
+                }
+                break;
+            }
+        }
+    });
+    Ok(())
 }
 
 /// Пауза без блокировки потока (async_runtime в Tauri — это tokio, но сам tokio в зависимостях нет).
