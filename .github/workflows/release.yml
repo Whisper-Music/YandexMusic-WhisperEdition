@@ -138,13 +138,12 @@ jobs:
           workspaces: src-tauri
           key: android
 
-      - name: Android SDK и NDK
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37.0'
+      - name: NDK
         shell: bash
-        run: |
-          set -euo pipefail
-          # NDK уже есть в образе GitHub; платформу compileSdk (gen/android/app/build.gradle.kts) ставим сами
-          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37" > /dev/null
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
 
       - name: Ключ подписи
         env:
