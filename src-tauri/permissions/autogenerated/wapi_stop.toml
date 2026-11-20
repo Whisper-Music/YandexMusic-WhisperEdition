@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wapi-stop"
+description = "Enables the wapi_stop command without any pre-configured scope."
+commands.allow = ["wapi_stop"]
+
+[[permission]]
+identifier = "deny-wapi-stop"
+description = "Denies the wapi_stop command without any pre-configured scope."
+commands.deny = ["wapi_stop"]

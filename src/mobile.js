@@ -63,6 +63,150 @@
     return "bg";
   };
 
+  // ---------- надписи «как на компьютере» ----------
+  // Код и разметка общие с компьютером: «удалить с диска», «правый щелчок», «Ctrl+Shift+M». На телефоне
+  // такие куски подменяются на лету (текст и подсказки), и в русском, и в английском словаре — так что и
+  // i18n.js, переводя уже подменённую строку, находит перевод. Порядок важен: сначала длинные куски.
+  const RU = [
+    [/ ?\((?:или )?(?:Esc|Ctrl\+[^)]*|Alt\+[^)]*)\)/g, ""],
+    [/Ctrl\+Shift\+M или д(войной щелчок)/g, "Д$1"],
+    [/\. Esc — закончить/g, ""],
+    [/Esc — выйти · Пробел — пауза/g, "«Назад» — выйти"],
+    [/Esc или щелчок — закрыть/g, "Нажми, чтобы закрыть"],
+    [/Ctrl\+Shift\+Backspace вернёт/g, "зажми экран тремя пальцами на 2 секунды — вернётся"],
+    [/— Ctrl\+Shift\+Backspace/g, "— зажми экран тремя пальцами на 2 секунды"],
+    [/Тяни границы мышью; колесо — точнее \(с Shift — по секунде\)/g, "Тяни границы пальцем"],
+    [/Перетащи файл сюда или выбери/g, "Нажми, чтобы выбрать файл"],
+    [/ — или перетащи файл ниже/g, " — или выбери файл ниже"],
+    [/ или перетащи (?:файл \/ папку Wallpaper Engine|сюда всю папку обоев|сам файл \(не ссылку и не текст\))/g, ""],
+    [/Щелчок или любая клавиша пропускают/g, "Нажатие пропускает"],
+    [/щелчок или клавиша пропускают/g, "нажатие пропускает"],
+    [/Правый щелчок/g, "Долгое нажатие"], [/правым щелчком/g, "долгим нажатием"], [/по правому щелчку/g, "по долгому нажатию"],
+    [/Двойной щелчок/g, "Двойное нажатие"], [/двойной щелчок/g, "двойное нажатие"],
+    [/Щелчок/g, "Нажатие"], [/щелчок/g, "нажатие"], [/Щёлкни/g, "Нажми"],
+    [/при наведении/g, "при касании"], [/При наведении/g, "При касании"],
+    [/(?:этом|другом) компьютере/g, (m) => (m.startsWith("эт") ? "этом телефоне" : "другом устройстве")],
+    // \b в JS не видит границу у кириллицы — поэтому «дальше не буква»
+    [/компьютер(е|а|ом|у)?(?![а-яё])/g, "телефон$1"],
+    [/с диска/g, "с телефона"], [/на диске/g, "на телефоне"], [/на диск(?![а-яё])/g, "на телефон"],
+  ];
+  const EN = [
+    [/ ?\((?:or )?(?:Esc|Ctrl\+[^)]*|Alt\+[^)]*)\)/g, ""],
+    [/Ctrl\+Shift\+M or d(ouble-click)/g, "D$1"],
+    [/\. Esc - finish/g, ""],
+    [/Ctrl\+Shift\+Backspace/g, "hold three fingers on the screen for 2 seconds"],
+    [/(?:a click|A click) or (?:any )?key skips/g, (m) => (m[0] === "A" ? "A tap skips" : "a tap skips")],
+    [/Right-click(ing)?/g, (m, g) => (g ? "Long-pressing" : "Long-press")], [/right-click/g, "long-press"],
+    [/Double-click/g, "Double-tap"], [/double-click/g, "double-tap"],
+    [/\bClick(ing)?\b/g, (m, g) => (g ? "Tapping" : "Tap")], [/\bclick(ing)?\b/g, (m, g) => (g ? "tapping" : "tap")],
+    [/on hover/gi, (m) => (m[0] === "O" ? "On touch" : "on touch")],
+    [/(?:this|your) computer/g, "this phone"], [/(?:another|other) computers?/g, (m) => (m.endsWith("s") ? "other devices" : "another device")],
+    [/disk space/g, "storage space"], [/from disk/g, "from the phone"], [/on disk/g, "on the phone"],
+  ];
+  const fix = (rules, s) => rules.reduce((a, [re, to]) => a.replace(re, to), s);
+  const fixRu = (s) => fix(RU, s), fixEn = (s) => fix(EN, s);
+  window.mobileText = fixRu;
+  // словарь en.js ещё не загружен (mobile.js — раньше него): ловим каждую запись, подменяем английский текст
+  // и кладём перевод и под «телефонную» русскую строку
+  {
+    const wrap = (v) => (typeof v === "string" ? fixEn(v) : typeof v === "function" ? (...a) => { const r = v(...a); return typeof r === "string" ? fixEn(r) : r; } : v);
+    const d = {};
+    window.I18N_EN = new Proxy(d, {
+      set(t, k, v) {
+        const w = wrap(v);
+        t[k] = w;
+        if (typeof k === "string") { const m = fixRu(k); if (m !== k && !(m in t)) t[m] = w; }
+        return true;
+      },
+    });
+  }
+  // страница: текст и подсказки (кроме названий треков, текста песни и полей ввода — как у i18n.js)
+  function mobileWords() {
+    const SKIP = "script, style, textarea, input, [contenteditable], [data-noi18n], #cli, .list li .t, .list li .a, .tartists, #fLyrics, .qpanel li .t, .qpanel li .a";
+    const ATTRS = ["title", "placeholder", "aria-label"];
+    const HIT = /диск|компьютер|щелч|Щелч|Щёлкни|Ctrl\+|Alt\+|Esc|наведени|перетащи|мышью/i;
+    const doText = (n) => { const s = n.data; if (HIT.test(s) && !n.parentElement?.closest(SKIP)) { const v = fixRu(s); if (v !== s) n.data = v; } };
+    const doAttr = (el, a) => { const s = el.getAttribute(a); if (s && HIT.test(s)) { const v = fixRu(s); if (v !== s) el.setAttribute(a, v); } };
+    const walk = (root) => {
+      if (root.nodeType === 3) return doText(root);
+      if (root.nodeType !== 1 || root.matches(SKIP)) return;
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      for (let n = w.currentNode; n; n = w.nextNode()) {
+        if (n.nodeType === 3) doText(n);
+        else for (const a of ATTRS) if (n.hasAttribute(a)) doAttr(n, a);
+      }
+    };
+    walk(document.body);
+    new MutationObserver((recs) => {
+      for (const r of recs) {
+        if (r.type === "childList") r.addedNodes.forEach(walk);
+        else if (r.type === "characterData") doText(r.target);
+        else if (r.type === "attributes") doAttr(r.target, r.attributeName);
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+  }
+
+  // ---------- аварийный выход из сломанного стиля ----------
+  // На компьютере — Ctrl+Shift+Backspace (theme.js). Здесь клавиатуры нет: три пальца на экране 2 секунды
+  // отправляют то же сочетание.
+  function styleRescue() {
+    let t = 0;
+    const stop = () => { clearTimeout(t); t = 0; };
+    document.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 3) return stop();
+      stop();
+      t = setTimeout(() => {
+        t = 0;
+        navigator.vibrate?.(40);
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", ctrlKey: true, shiftKey: true, bubbles: true }));
+      }, 2000);
+    }, { passive: true, capture: true });
+    for (const ev of ["touchend", "touchcancel"]) document.addEventListener(ev, (e) => { if (e.touches.length < 3) stop(); }, { passive: true, capture: true });
+  }
+
+  // ---------- мини-плеер — сам линия трека ----------
+  // Как мини-вид на компьютере (layout.css, data-ly-ui="super"): заполнение идёт по всей панели. Нажатия по панели
+  // остаются кнопкам и открытию плеера, а перематывать — тянуть за верхний край (полоса .mgrab над панелью).
+  function seekBar() {
+    const player = document.querySelector(".app > .player"), seek = document.getElementById("seek");
+    if (!player || !seek) return;
+    const grab = document.createElement("div");
+    grab.className = "mgrab";
+    const tip = document.createElement("b");
+    grab.append(tip);
+    player.append(grab);
+    const mmss = (s) => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+    let on = false;
+    const at = (e) => {
+      const r = player.getBoundingClientRect();
+      const k = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      seek.value = Math.round(+seek.min + k * (seek.max - seek.min));
+      seek.style.setProperty("--p", k * 100 + "%");
+      tip.textContent = mmss(k * (audio?.duration || 0));
+      tip.style.left = k * 100 + "%";
+      seek.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    grab.addEventListener("pointerdown", (e) => {
+      if (seek.disabled || !audio?.duration) return;
+      on = true; try { seekDrag = true; } catch {}
+      grab.setPointerCapture?.(e.pointerId);
+      player.classList.add("m-seeking");
+      at(e);
+      e.preventDefault();
+    });
+    grab.addEventListener("pointermove", (e) => { if (on) at(e); });
+    const end = () => {
+      if (!on) return;
+      on = false; try { seekDrag = false; } catch {}
+      player.classList.remove("m-seeking");
+      seek.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    grab.addEventListener("pointerup", end);
+    grab.addEventListener("pointercancel", end);
+    // свайп по плееру (следующий/предыдущий трек) и открытие плеера на весь экран — не отсюда
+    for (const ev of ["touchstart", "touchend", "click"]) grab.addEventListener(ev, (e) => e.stopPropagation(), { passive: ev !== "click" });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     askInsets();
     // плеер внизу маленький: по названию трека, как и по обложке, открывается плеер на весь экран
@@ -90,6 +234,18 @@
     playerSwipes();
     waveHere();
     incoming();                             // приложение открыли файлом темы (из Telegram и т. п.)
+    rowTap();
+    fullModes();
+    stallGuard();
+    autoDl();
+    toastSpot();
+    backToFull();
+    seekBar();
+    styleRescue();
+    mobileWords();
+    // «Моя волна по артисту» — на странице автора короткой кнопкой со значком (mobile.css), подпись покороче
+    const aw = document.getElementById("artistWaveBtn");
+    if (aw) { aw.textContent = "Моя волна"; aw.title = "Моя волна по артисту"; }
     // режим сна: выключить телефон приложение не может — по истечении времени только останавливаем музыку
     // (строку выбора прячем, по умолчанию там «Выключить компьютер»)
     const slAct = document.getElementById("slAct");
@@ -305,6 +461,184 @@
     }
   }
   window.whisperIncoming = incoming;
+
+  // Приложение ушло в фон / вернулось (MainActivity.kt). В фоне страница для Chromium остаётся «видимой» — иначе он
+  // не грузит следующий трек, — поэтому видеообои останавливаем сами: в фоне их всё равно не видно.
+  window.whisperBg = (bg) => {
+    const v = document.getElementById("bgVideo");
+    if (bg) { if (v && !v.paused) v.pause(); }
+    else { try { syncBgVideo(); } catch {} }
+  };
+
+  // ---------- тосты: над мини-плеером, во всю ширину (mobile.css) ----------
+  // Высота — по верху мини-плеера (или нижней панели, если плеер скрыт) в момент показа: у тем и на разных
+  // телефонах она разная. Нажатие по плашке (не по кнопке действия) — скрыть её сразу.
+  function toastSpot() {
+    const t = document.querySelector("body > .toast") || document.querySelector(".toast");
+    if (!t) return;
+    const place = () => {
+      if (t.hidden) return;
+      const pl = document.querySelector(".app > .player"), nav = document.querySelector(".app > .side");
+      const vis = (e) => { const r = e?.getBoundingClientRect(); return r && r.height > 20 && r.top < innerHeight ? r : null; };
+      // открыт плеер на весь экран — внизу его кнопки: тост сверху, под строкой состояния
+      const full = document.getElementById("full");
+      if (full && !full.hidden) {
+        const top = parseFloat(getComputedStyle(root).getPropertyValue("--sys-top")) || 0;
+        t.style.setProperty("--m-toast-b", Math.round(innerHeight - top - 60 - t.offsetHeight) + "px");
+        return;
+      }
+      const r = vis(pl) || vis(nav);
+      if (r) t.style.setProperty("--m-toast-b", Math.round(innerHeight - r.top + 8) + "px");
+    };
+    new MutationObserver(place).observe(t, { attributes: true, attributeFilter: ["hidden"] });
+    t.addEventListener("click", (e) => { if (!e.target.closest(".tact")) t.hidden = true; });
+  }
+
+  // ---------- из плеера на весь экран к альбому или автору — и обратно ----------
+  // Название и исполнитель в плеере на весь экран — ссылки (main.js: закрыть плеер → navigate к альбому/автору).
+  // «Назад» на открытой так странице возвращает не на прошлую страницу приложения, а в тот же плеер — в том же
+  // виде (обложка или текст песни). Страницу узнаём по номеру перехода main.js (nav): ушли дальше — уже не она.
+  function backToFull() {
+    const full = document.getElementById("full");
+    if (!full) return;
+    let from = null;          // { mode, nav } — откуда и на какой странице
+    full.addEventListener("click", (e) => {
+      if (!e.target.closest("#fTitle, #fArtist .art")) return;
+      const mode = full.dataset.mode || "cover";
+      from = { mode, nav: -1 };
+      setTimeout(() => { try { if (from) from.nav = nav; } catch { from = null; } }, 0);   // navigate() уже прошёл
+    }, true);
+    document.getElementById("back")?.addEventListener("click", () => {
+      let cur = -2;
+      try { cur = nav; } catch {}
+      if (!from || from.nav !== cur) { from = null; return; }
+      const mode = from.mode; from = null;
+      setTimeout(() => {
+        try { openFull(); if (mode !== (full.dataset.mode || "cover")) setFullMode(mode); } catch {}
+      }, 0);
+    }, true);                 // до обработчика main.js: он сразу сменит номер перехода
+  }
+
+  // ---------- строка трека: нажатие — играть ----------
+  // На компьютере название в строке ведёт в альбом, имя исполнителя — к исполнителю. На телефоне по строке целиком
+  // попадают пальцем, и вместо музыки открывалась чужая страница. Здесь любое место строки (кроме ♡ и «⋯») играет
+  // тот список, где строка: лайки, плейлист, альбом — с этого трека (li.onclick из main.js → renderList).
+  // К альбому и исполнителю — из плеера на весь экран (название и исполнитель там — ссылки).
+  function rowTap() {
+    document.addEventListener("click", (e) => {
+      const x = e.target.closest?.(".list li .t, .list li .a");
+      if (!x) return;
+      const li = x.closest("li");
+      if (typeof li?.onclick !== "function") return;     // у строки нет «играть по нажатию» — как было
+      e.stopPropagation(); e.preventDefault();
+      li.click();
+    }, true);
+  }
+
+  // ---------- «Случайный порядок» и «Повтор» в плеере на весь экран ----------
+  // Это те же кнопки нижней панели (#shuffleBtn, #repeatBtn — в мини-плеере их не видно): копия повторяет их вид
+  // и состояние (включена, недоступна в волне) и нажимает оригинал. ♡ переезжает к названию — справа от него.
+  function fullModes() {
+    const box = document.querySelector("#full .fbtns"), sh = document.getElementById("shuffleBtn"), rp = document.getElementById("repeatBtn");
+    if (!box || !sh || !rp || box.querySelector(".mfmode")) return;
+    const mk = (src, id) => {
+      const b = el("button", "modebtn mfmode"); b.type = "button"; b.id = id;
+      const sync = () => {
+        b.innerHTML = src.innerHTML; b.disabled = src.disabled; b.title = src.title;
+        b.classList.toggle("on", src.classList.contains("on"));
+      };
+      sync();
+      new MutationObserver(sync).observe(src, { attributes: true, childList: true, subtree: true });
+      b.onclick = (e) => { e.stopPropagation(); src.click(); };
+      return b;
+    };
+    box.prepend(mk(sh, "fShuffle"));
+    box.append(mk(rp, "fRepeat"));
+    const like = document.getElementById("fLike"), titles = document.getElementById("fTitles");
+    if (like && titles) titles.append(like);
+  }
+
+  // ---------- связь пропала посреди трека ----------
+  // Трек из сети (Яндекс, архив) при обрыве не выдаёт ошибку — плеер просто ждёт данных, и волна молча стоит.
+  // Если позиция не двигается 10 с, а плеер не на паузе, проверяем связь (main.js suspectOffline): её нет —
+  // переходим на скачанное и кэш (offlineFallback: следующий такой трек в очереди или все скачанные).
+  function stallGuard() {
+    let lastT = -1, since = 0, busy = false;
+    setInterval(async () => {
+      let a = null, local = false, loading = false;
+      try { a = audio; local = curLocal; loading = !!loadAt; } catch { return; }
+      if (!a || a.paused || a._native || local || loading || busy) { since = 0; lastT = -1; return; }
+      if (a.currentTime !== lastT) { lastT = a.currentTime; since = 0; return; }
+      since += 2000;
+      if (since < 10000) return;
+      busy = true; since = 0;
+      try {
+        const seq = playSeq;
+        if (await suspectOffline() && seq === playSeq) await offlineFallback(current, seq);
+      } catch {} finally { busy = false; }
+    }, 2000);
+  }
+
+  // ---------- автоскачивание лайков (только телефон) ----------
+  // Выключатель в «Воспроизведение → Кэш»: все лайки сами скачиваются на телефон — без сети играют они (и «Моя волна»
+  // переходит на них). По умолчанию только по Wi-Fi (navigator.connection; тип не известен — не мешаем).
+  // Качает по одному треку тем же dlOne, что «Скачать лайки»; уже скачанные пропускает; новые лайки — через минуту.
+  const ADL_KEY = "ym_m_autodl";
+  let adl = { on: false, wifi: true };
+  try { adl = { ...adl, ...JSON.parse(localStorage.getItem(ADL_KEY) || "{}") }; } catch {}
+  let adlBusy = false, adlTimer = 0, adlNote = null;
+  const adlSave = () => { try { localStorage.setItem(ADL_KEY, JSON.stringify(adl)); } catch {} };
+  const adlNoWifi = () => {
+    const c = navigator.connection;
+    return adl.wifi && !!c?.type && !["wifi", "ethernet", "none", "unknown"].includes(c.type);
+  };
+  const adlSay = (s) => { if (adlNote) adlNote.textContent = s; };
+  async function adlRun() {
+    if (!adl.on || adlBusy) return;
+    try { if (offline || !navigator.onLine || bulk) return; } catch { return; }
+    if (adlNoWifi()) { adlSay("Ждёт Wi-Fi — по мобильной сети лайки не скачиваются"); return; }
+    adlBusy = true;
+    let done = 0;
+    try {
+      const all = await loadAllLikes(() => {});
+      if (!all) return;
+      const todo = all.filter((t) => dlOk(t) && !got.has(String(t.id)) && !downloading.has(String(t.id)));
+      if (!todo.length) { adlSay(`Все лайки скачаны (${all.length})`); return; }
+      for (const t of todo) {
+        if (!adl.on || offline || adlNoWifi() || bulk) break;
+        adlSay(`Скачивается: ${done} из ${todo.length}`);
+        try { await dlOne(t); done++; syncGot(); }
+        catch (e) { if (isNetErr(e)) break; }
+      }
+      const left = all.filter((t) => dlOk(t) && !got.has(String(t.id))).length;
+      adlSay(left ? `Скачано ${all.length - left} из ${all.length} — остальные докачаются позже` : `Все лайки скачаны (${all.length})`);
+    } catch {} finally { adlBusy = false; }
+  }
+  const adlLater = (ms) => { clearTimeout(adlTimer); adlTimer = setTimeout(adlRun, ms); };
+  function autoDl() {
+    const card = document.getElementById("cacheCard");
+    if (card && !document.getElementById("mAutoDl")) {
+      const sw = (id, text, on) => {
+        const l = el("label", "switch"), i = el("input"); i.type = "checkbox"; i.id = id; i.checked = on;
+        l.append(i, el("i"), el("span", "", text));
+        return [l, i];
+      };
+      const [l1, c1] = sw("mAutoDl", "Автоскачивание лайков", adl.on);
+      const [l2, c2] = sw("mAutoDlWifi", "Только по Wi-Fi", adl.wifi);
+      l1.title = "Все лайки сами скачиваются на телефон — без интернета играют они. Займёт место в памяти";
+      adlNote = el("p", "status");
+      const paint = () => { l2.hidden = !adl.on; adlNote.hidden = !adl.on; };
+      c1.onchange = () => { adl.on = c1.checked; adlSave(); paint(); if (adl.on) { adlSay("Скоро начнётся…"); adlLater(500); } };
+      c2.onchange = () => { adl.wifi = c2.checked; adlSave(); adlLater(500); };
+      paint();
+      card.append(l1, l2, adlNote);
+    }
+    adlLater(15000);                                   // после запуска — когда лайки уже подгрузились
+    setInterval(adlRun, 10 * 60000);
+    window.addEventListener("online", () => adlLater(5000));
+    navigator.connection?.addEventListener?.("change", () => adlLater(5000));
+    window.Whisper?.on?.("like", () => adlLater(60000));   // новый лайк — скачается через минуту
+  }
 
   // ---------- мини-плеер на «Моей волне» ----------
   // открыта «Моя волна» и играет она — пуск/пауза уже есть большой кнопкой на экране, в мини-плеере её прячем

@@ -157,6 +157,8 @@ const OPS: &[Op] = &[
     op("likes", false, Verb::Get, "/users/{uid}/likes/tracks", Id::No, &[], Body::None),
     op("dislikes", false, Verb::Get, "/users/{uid}/dislikes/tracks", Id::No, &[], Body::None),
     op("likes_artists", false, Verb::Get, "/users/{uid}/likes/artists", Id::No, &["with-timestamps"], Body::None),
+    // «Не рекомендовать автора»: такие авторы не должны попадаться в «Моей волне» (main.js — ещё и свой фильтр)
+    op("dislikes_artists", false, Verb::Get, "/users/{uid}/dislikes/artists", Id::No, &["with-timestamps"], Body::None),
     op("tracks", false, Verb::Post, "/tracks", Id::No, &[], Body::Form(TRACK_IDS)),
     op("track_download_info", false, Verb::Get, "/tracks/{id}/download-info", Id::Item, &[], Body::None),
     op("track_lyrics", false, Verb::Get, "/tracks/{id}/lyrics", Id::Item, &["format", "timeStamp", "sign"], Body::None),
@@ -179,6 +181,9 @@ const OPS: &[Op] = &[
     op("dislike_remove", true, Verb::Post, "/users/{uid}/dislikes/tracks/remove", Id::No, &[], Body::Form(TRACK_IDS)),
     op("artist_like_add", true, Verb::Post, "/users/{uid}/likes/artists/add-multiple", Id::No, &[], Body::Form(ARTIST_IDS)),
     op("artist_like_remove", true, Verb::Post, "/users/{uid}/likes/artists/remove", Id::No, &[], Body::Form(ARTIST_IDS)),
+    // дизлайк автора Яндекс сам снимает и лайк этого автора
+    op("artist_dislike_add", true, Verb::Post, "/users/{uid}/dislikes/artists/add-multiple", Id::No, &[], Body::Form(ARTIST_IDS)),
+    op("artist_dislike_remove", true, Verb::Post, "/users/{uid}/dislikes/artists/remove", Id::No, &[], Body::Form(ARTIST_IDS)),
     op("rotor_feedback", true, Verb::Post, "/rotor/session/{id}/feedback", Id::Session, &[], Body::Json),
     op("playlist_create", true, Verb::Post, "/users/{uid}/playlists/create", Id::No, &[], Body::Form(&["title", "visibility"])),
     op("playlist_rename", true, Verb::Post, "/users/{uid}/playlists/{id}/name", Id::Kind, &[], Body::Form(&["value"])),
@@ -769,6 +774,8 @@ mod tests {
         assert!(find_op("like_add").unwrap().write);
         assert!(find_op("playlist_delete").unwrap().write);
         assert!(find_op("play_audio").unwrap().write);
+        assert!(find_op("artist_dislike_add").unwrap().write && find_op("artist_dislike_remove").unwrap().write);
+        assert!(!find_op("dislikes_artists").unwrap().write);
         assert!(!find_op("likes").unwrap().write);
         assert!(find_op("http_request").is_none());
         let r = tauri::async_runtime::block_on(run_op(false, "like_add".into(), None, None, None, None));
@@ -837,7 +844,8 @@ mod tests {
             r("wave_settings", None, &[("language", "ru")]).await.unwrap();
             r("playlists", None, &[]).await.unwrap();
             r("dislikes", None, &[]).await.unwrap();
-            println!("genres/wave/playlists/dislikes ok");
+            let da = r("dislikes_artists", None, &[("with-timestamps", "true")]).await.unwrap();
+            println!("genres/wave/playlists/dislikes ok; dislikes_artists: {}", &da[..da.len().min(300)]);
             let tracks = run_op(false, "tracks".into(), None, None, Some(HashMap::from([("track-ids".to_string(), tid.clone())])), None).await.unwrap();
             assert!(tracks.contains(&tid));
             let nw = run_op(false, "rotor_new".into(), None, None, None, Some(serde_json::json!({"seeds": ["user:onyourwave"], "includeTracksInResponse": true}))).await.unwrap();

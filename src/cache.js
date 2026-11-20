@@ -14,14 +14,31 @@
   const ids = new Set();
   let limitMb = 1024, keepPl = true;
 
+  // Описание треков из кэша (название, исполнители, обложка — как у скачанных, main.js trackMin): Rust хранит только
+  // файлы, а без сети «Лайки» и очередь «играть скачанное» (offlineLikes) показывают и кэш. localStorage ym_cache_meta,
+  // лишнее (трек ушёл из кэша) чистится при загрузке списка.
+  const MKEY = "ym_cache_meta";
+  let meta = {};
+  try { meta = JSON.parse(localStorage.getItem(MKEY) || "{}") || {}; } catch { meta = {}; }
+  const saveMeta = () => { try { localStorage.setItem(MKEY, JSON.stringify(meta)); } catch {} };
+  const pruneMeta = () => {
+    let ch = false;
+    for (const k of Object.keys(meta)) if (!ids.has(k)) { delete meta[k]; ch = true; }
+    if (ch) saveMeta();
+  };
+
   window.appCache = {
     has: (id) => limitMb > 0 && ids.has(String(id)),
-    forget: (id) => { ids.delete(String(id)); invoke("cache_forget", { id: String(id) }).catch(() => {}); },
+    forget: (id) => { ids.delete(String(id)); delete meta[String(id)]; saveMeta(); invoke("cache_forget", { id: String(id) }).catch(() => {}); },
     ids: () => [...ids],
+    // треки кэша с описанием — новые сверху (без описания не показываем: не знаем даже названия)
+    tracks: () => limitMb > 0
+      ? [...ids].filter((id) => meta[id]?.title).map((id) => ({ ...meta[id], id })).sort((a, b) => (b._at || 0) - (a._at || 0))
+      : [],
   };
 
   async function loadIds() {
-    try { ids.clear(); for (const id of await invoke("cache_ids")) ids.add(String(id)); } catch {}
+    try { ids.clear(); for (const id of await invoke("cache_ids")) ids.add(String(id)); pruneMeta(); } catch {}
   }
 
   // ---------- что слушается: ключ плейлиста ----------
@@ -38,7 +55,11 @@
 
   // ---------- дослушан ли трек ----------
   let started = null, reported = "", source = "";
-  W.on("start", ({ track: t }) => { started = t ? String(t.id) : null; reported = ""; });
+  W.on("start", ({ track: t }) => {
+    started = t ? String(t.id) : null; reported = "";
+    // трек уже в кэше, а описания нет (попал туда до того, как описание стали сохранять) — дописываем
+    if (started && ids.has(started) && !meta[started] && t.title && typeof trackMin === "function") { meta[started] = { ...trackMin(t), _at: Date.now() }; saveMeta(); }
+  });
   W.on("source", ({ source: s }) => { source = s || ""; });
   setInterval(() => {
     if (!started || reported === started) return;      // считаем и при выключенном кэше: счётчик «популярных» пригодится
@@ -51,8 +72,15 @@
     if (!/^\d{1,20}$/.test(id)) return;                    // не трек Яндекса
     // скачан или играет из архива — в кэш не нужен (но прослушивание посчитается для «популярных»)
     const downloaded = (typeof got !== "undefined" && got.has(id)) || source === "archive" || source === "local";
+    const tr = s.track;
     invoke("cache_played", { id, ctx: keepPl ? ctxKey() : null, wave: isWave(), downloaded })
-      .then((inCache) => { if (inCache) ids.add(id); else if (!downloaded) ids.delete(id); refreshInfo(); })
+      .then((inCache) => {
+        if (inCache) {
+          ids.add(id);
+          if (tr?.title && typeof trackMin === "function") { meta[id] = { ...trackMin(tr), _at: Date.now() }; saveMeta(); }
+        } else if (!downloaded) { ids.delete(id); if (meta[id]) { delete meta[id]; saveMeta(); } }
+        refreshInfo();
+      })
       .catch(() => {});
   }, 3000);
 

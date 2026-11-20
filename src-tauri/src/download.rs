@@ -886,7 +886,13 @@ pub fn download_delete(app: AppHandle, id: String) -> Result<(), String> {
 use std::io::{Seek, SeekFrom};
 use tauri::http::{header, Request, Response, StatusCode};
 
+#[cfg(desktop)]
 const LOCAL_CHUNK: u64 = 2 * 1024 * 1024;
+// Android: следующий кусок по Range встроенный браузер запрашивает, но ответа на него уже не дожидается — трек
+// замолкал на конце первого куска (~50 с). Отдаём файл целиком одним ответом (64 МБ хватает и FLAC):
+// дальше плееру ничего догружать не нужно, перемотка идёт по уже загруженному.
+#[cfg(mobile)]
+const LOCAL_CHUNK: u64 = 64 * 1024 * 1024;
 
 fn audio_ctype(p: &Path) -> &'static str {
     match p.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {

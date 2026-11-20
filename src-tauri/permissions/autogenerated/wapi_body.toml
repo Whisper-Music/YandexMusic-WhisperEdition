@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wapi-body"
+description = "Enables the wapi_body command without any pre-configured scope."
+commands.allow = ["wapi_body"]
+
+[[permission]]
+identifier = "deny-wapi-body"
+description = "Denies the wapi_body command without any pre-configured scope."
+commands.deny = ["wapi_body"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wapi-reply"
+description = "Enables the wapi_reply command without any pre-configured scope."
+commands.allow = ["wapi_reply"]
+
+[[permission]]
+identifier = "deny-wapi-reply"
+description = "Denies the wapi_reply command without any pre-configured scope."
+commands.deny = ["wapi_reply"]

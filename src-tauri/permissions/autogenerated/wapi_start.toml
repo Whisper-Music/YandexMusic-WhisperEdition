@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-wapi-start"
+description = "Enables the wapi_start command without any pre-configured scope."
+commands.allow = ["wapi_start"]
+
+[[permission]]
+identifier = "deny-wapi-start"
+description = "Denies the wapi_start command without any pre-configured scope."
+commands.deny = ["wapi_start"]

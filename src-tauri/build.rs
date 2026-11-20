@@ -166,6 +166,13 @@ const COMMANDS: &[&str] = &[
     "obs_config",
     "obs_state",
     "obs_theme",
+    "wapi_start",
+    "wapi_stop",
+    "wapi_body",
+    "wapi_reply",
+    "wapi_apps",
+    "wapi_send",
+    "wapi_fetch",
     "update_check",
     "update_install",
 ];

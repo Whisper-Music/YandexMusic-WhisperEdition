@@ -124,6 +124,44 @@ class MainActivity : TauriActivity() {
     return j.toString()
   }
 
+  // Музыка в фоне. WryActivity.onPause зовёт WebView.onPause() — страница считается скрытой, а скрытой странице
+  // Chromium не начинает грузить новый трек: следующий не включался до возвращения в приложение. Музыкальному
+  // плееру пауза страницы не нужна — сразу снимаем её. Рисование в фоне от этого не идёт: экрана нет.
+  // (Скачанный трек на Android отдаётся одним ответом целиком — download.rs LOCAL_CHUNK: продолжение по Range
+  // встроенный браузер не дожидался, и трек замолкал на конце первого куска.)
+  override fun onPause() {
+    super.onPause()
+    keepPageAwake()
+  }
+
+  // Экран выключили или ушли в другое приложение: окно приложения скрывается, и WebView сообщает странице
+  // «не видно». Скрытой странице Chromium не грузит новые треки (src у <audio> не начинает загружаться, пока
+  // страницу снова не покажут) — следующий трек не включался до возвращения в приложение. Говорим WebView,
+  // что окно видно (так же делают плагины фонового режима Cordova); кадры всё равно не рисуются — экрана нет.
+  override fun onStop() {
+    super.onStop()
+    keepPageAwake()
+  }
+
+  private fun keepPageAwake() {
+    val wv = webView ?: return
+    val wake = Runnable {
+      wv.onResume()
+      wv.dispatchWindowVisibilityChanged(android.view.View.VISIBLE)
+    }
+    wake.run()
+    // окно прячется не сразу, а уже после onStop (и при выключении экрана — ещё позже): WebView получает
+    // «окно скрыто» позже нас — повторяем, когда это уже случилось
+    for (ms in longArrayOf(300, 1000, 3000)) wv.postDelayed(wake, ms)
+    // страница теперь «видна» и в фоне — видеообои ей останавливать самой (mobile.js → whisperBg)
+    wv.evaluateJavascript("window.whisperBg&&window.whisperBg(true)", null)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    webView?.evaluateJavascript("window.whisperBg&&window.whisperBg(false)", null)
+  }
+
   override fun onDestroy() {
     MediaService.onAction = null
     MediaService.stop(this)
@@ -159,6 +197,11 @@ class MainActivity : TauriActivity() {
 
   override fun onWebViewCreate(webView: WebView) {
     this.webView = webView
+    // Процесс страницы (renderer) по умолчанию теряет приоритет, когда окна не видно, — Android может его
+    // заморозить или выгрузить вместе с играющей музыкой. Держим его важным и в фоне (Android 8+).
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+    }
     // Мост к странице. В нём только безопасное: отступы панелей и «что играет» для уведомления — он виден любой
     // странице в окне, в том числе странице входа Яндекса (худшее, что она может, — поменять текст уведомления).
     webView.addJavascriptInterface(Bridge(), "WhisperAndroid")

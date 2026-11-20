@@ -129,6 +129,13 @@
     "allow-obs-config",
     "allow-obs-state",
     "allow-obs-theme",
+    "allow-wapi-start",
+    "allow-wapi-stop",
+    "allow-wapi-body",
+    "allow-wapi-reply",
+    "allow-wapi-apps",
+    "allow-wapi-send",
+    "allow-wapi-fetch",
     "allow-update-check",
     "allow-update-install"
   ]

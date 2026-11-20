@@ -5,6 +5,10 @@
 // На телефоне часть помощников общих модулей не нужна (перетаскивание файлов в окно, Discord, OBS, keyring) —
 // это не ошибка, поэтому предупреждения о неиспользуемом там выключены; на компьютере они работают как обычно.
 #![cfg_attr(mobile, allow(dead_code, unused_imports, unused_mut))]
+// Whisper API — общая, из ядра: другие программы Whisper (микшер, клиент VK) ставят сюда тему и берут текущую
+#[cfg(desktop)]
+#[path = "../../src/core/rust/api.rs"]
+mod api;
 #[cfg(desktop)]
 mod audiodev;
 mod auth;
@@ -302,6 +306,13 @@ pub fn run() {
         obs::obs_config,
         obs::obs_state,
         obs::obs_theme,
+        api::wapi_start,
+        api::wapi_stop,
+        api::wapi_body,
+        api::wapi_reply,
+        api::wapi_apps,
+        api::wapi_send,
+        api::wapi_fetch,
         update::update_check,
         update::update_install,
         winstate::app_ready
@@ -360,6 +371,8 @@ pub fn run() {
         .run(|_app, event| {
             // приложение закрывается совсем (не «свернуть в трей») — друзья сразу видят «не в сети», а не через 70 с
             if let tauri::RunEvent::Exit = event {
+                #[cfg(desktop)]
+                api::shutdown(); // убрать себя из реестра приложений Whisper
                 tauri::async_runtime::block_on(whisper::rooms::presence_offline());
             }
         });

@@ -152,6 +152,10 @@ let artistWaveItem = null;
 // сам список — у Яндекса (likes_artists), «Лайки» → «Авторы»
 let artistLikeItem = null, likedArtistsList = null;
 const likedArtists = new Set(lsJSON("ym_liked_artists", [], Array.isArray).map(String));
+// «Не рекомендовать автора»: номера — так же в памяти и в localStorage ym_disliked_artists, список — у Яндекса
+// (dislikes_artists), «Лайки» → «Не рекомендуются». Волна такого автора пропускает сама (artistBanned).
+let dislikedArtistsList = null;
+const dislikedArtists = new Set(lsJSON("ym_disliked_artists", [], Array.isArray).map(String));
 let playAlbum = null;
 const heard = new Set(lsJSON("ym_heard", [], Array.isArray).filter((x) => typeof x === "string" || typeof x === "number").slice(-600));
 { const sv = lsJSON("ym_wave_seed", null, (v) => typeof v === "object"); if (typeof sv?.seed === "string" && /^[\w-]+:[\w.-]+$/.test(sv.seed)) { wave.seed = sv.seed; wave.name = typeof sv.name === "string" ? sv.name.slice(0, 100) : ""; } }
@@ -281,7 +285,8 @@ document.getElementById("offlineNotice")?.addEventListener("click", probeOnline)
 // Яндекс Музыка. Интерфейс называет только операцию и её параметры; адрес, метод, заголовки и токен
 // знает Rust (src-tauri/src/net.rs, список OPS). Чтение и изменение данных аккаунта — разные команды
 // (ym_read / ym_write) с разными разрешениями (capabilities/yandex-read.json и yandex-write.json).
-const YM_WRITE = new Set(["like_add", "like_remove", "dislike_add", "dislike_remove", "artist_like_add", "artist_like_remove", "rotor_feedback",
+const YM_WRITE = new Set(["like_add", "like_remove", "dislike_add", "dislike_remove", "artist_like_add", "artist_like_remove",
+  "artist_dislike_add", "artist_dislike_remove", "rotor_feedback",
   "playlist_create", "playlist_rename", "playlist_change", "playlist_change_rel", "playlist_delete", "play_audio"]);
 const strMap = (o) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])) : null);
 async function ym(op, { id = null, query = null, form = null, json = null } = {}) {
@@ -1708,7 +1713,7 @@ async function logoutYandex() {
 }
 // Всё, что относится к аккаунту: очередь и место в треке, лайки, закладки, станция волны, «уже слышал», история
 // прослушивания и поиска, свои обложки плейлистов. Настройки приложения, стили и скачанные треки остаются.
-const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_wave_pins", "ym_liked_artists", "ym_search_hist", "ym_search_picks", "ym_history"];
+const ACCOUNT_KEYS = ["ym_uid", "ym_last", "ym_liked_ids", "ym_pins", "ym_heard", "ym_wave_seed", "ym_wave_pins", "ym_liked_artists", "ym_disliked_artists", "ym_search_hist", "ym_search_picks", "ym_history"];
 async function forgetAccountData() {
   for (const k of [...ACCOUNT_KEYS, LEGACY_TOKEN_KEY]) { try { localStorage.removeItem(k); } catch {} }
   try {
@@ -1897,21 +1902,31 @@ async function loadLikedArtists(force = false) {
   return list;
 }
 function updateArtistLikeBtn() {
-  const b = $("#artistLikeBtn");
-  b.hidden = !artistLikeItem;
+  const b = $("#artistLikeBtn"), d = $("#artistDisBtn");
+  b.hidden = d.hidden = !artistLikeItem;
   if (!artistLikeItem) return;
-  const on = likedArtists.has(String(artistLikeItem.id));
+  const id = String(artistLikeItem.id), on = likedArtists.has(id), off = dislikedArtists.has(id);
   b.textContent = on ? "♥ Нравится" : "♡ Нравится";
   b.title = on ? "Убрать автора из лайков" : "Добавить автора в лайки: «Лайки» → «Авторы»";
   b.classList.toggle("active", on);
+  d.textContent = off ? "⊘ Не рекомендуется" : "⊘ Не рекомендовать";
+  d.title = off ? "Снова пускать автора в «Мою волну»" : "Автор больше не попадётся в «Моей волне»";
+  d.classList.toggle("active", off);
 }
 async function toggleArtistLike(a) {
-  const id = String(a.id), on = !likedArtists.has(id);
-  const flip = (v) => { v ? likedArtists.add(id) : likedArtists.delete(id); updateArtistLikeBtn(); };
+  const id = String(a.id), on = !likedArtists.has(id), wasOff = dislikedArtists.has(id);
+  // лайк снимает «Не рекомендовать» (как у треков: лайк снимает «Не нравится»)
+  const flip = (v) => {
+    v ? likedArtists.add(id) : likedArtists.delete(id);
+    if (v) dislikedArtists.delete(id); else if (wasOff) dislikedArtists.add(id);
+    updateArtistLikeBtn();
+  };
   flip(on);
   try {
+    if (on && wasOff) await ym("artist_dislike_remove", { form: { "artist-ids": id } }).catch(() => {});
     await ym(on ? "artist_like_add" : "artist_like_remove", { form: { "artist-ids": id } });
-    saveLikedArtists();
+    saveLikedArtists(); saveDislikedArtists();
+    if (on && wasOff && dislikedArtistsList) dislikedArtistsList = dislikedArtistsList.filter((x) => String(x.id) !== id);
     if (likedArtistsList) {
       likedArtistsList = likedArtistsList.filter((x) => String(x.id) !== id);
       if (on) likedArtistsList.unshift({ id: a.id, name: a.name, cover: a.cover, _ts: Date.now() });
@@ -1922,6 +1937,60 @@ async function toggleArtistLike(a) {
   }
 }
 $("#artistLikeBtn").onclick = () => { if (artistLikeItem) toggleArtistLike(artistLikeItem); };
+
+// ---------- «Не рекомендовать автора» ----------
+// Яндекс сам убирает такого автора из рекомендаций (и снимает его лайк), но волна всё равно иногда приносит его треки
+// (совместные, сборники, уже собранная очередь) — поэтому волна ещё и сама их пропускает (artistBanned).
+// Исключение — волна по самому этому автору: её включили нарочно.
+const saveDislikedArtists = () => { try { localStorage.setItem("ym_disliked_artists", JSON.stringify([...dislikedArtists])); } catch {} };
+async function loadDislikedArtists() {
+  const r = await ym("dislikes_artists", { query: { "with-timestamps": "true" } });
+  // как у лайков: с отметками времени — { artist, timestamp }, без них — сами артисты
+  const all = (Array.isArray(r) ? r : []).map((x) => ({ ...(x?.artist || x), _ts: Date.parse(x?.timestamp) || 0 })).filter((a) => a.id != null);
+  all.sort((a, b) => b._ts - a._ts);
+  const list = all.filter((a) => a.name);                 // в списке — с именем; пропускает волна всех
+  dislikedArtistsList = list;
+  dislikedArtists.clear(); for (const a of all) dislikedArtists.add(String(a.id));
+  saveDislikedArtists();
+  updateArtistLikeBtn();
+  return list;
+}
+const seedArtist = () => /^artist:(\d+)$/.exec(wave.seed || "")?.[1] || "";
+// трек нельзя ставить в волну: у него есть автор из «Не рекомендуются» (кроме автора, по которому эта волна)
+const artistBanned = (t) => { const s = seedArtist(); return (t?.artists || []).some((a) => a?.id != null && String(a.id) !== s && dislikedArtists.has(String(a.id))); };
+// автор только что попал в «Не рекомендуются»: его треки впереди в волне убираются, играющий — переключается
+function waveDropBanned() {
+  if (!wave.on || queue !== wave.queue) return;
+  let cut = false;
+  for (let i = queue.length - 1; i > current; i--) if (artistBanned(queue[i])) { queue.splice(i, 1); cut = true; }
+  if (cut) wReport({ queue: true });
+  if (queue[current] && artistBanned(queue[current])) $("#next").click();     // «дальше» заодно скажет волне skip
+}
+async function toggleArtistDislike(a) {
+  const id = String(a.id), off = !dislikedArtists.has(id), wasLiked = likedArtists.has(id), name = a.name || "Автор";
+  const flip = (v) => {
+    v ? dislikedArtists.add(id) : dislikedArtists.delete(id);
+    if (v) likedArtists.delete(id); else if (wasLiked) likedArtists.add(id);
+    updateArtistLikeBtn();
+  };
+  flip(off);
+  if (off) waveDropBanned();
+  try {
+    await ym(off ? "artist_dislike_add" : "artist_dislike_remove", { form: { "artist-ids": id } });
+    saveDislikedArtists(); saveLikedArtists();
+    if (off && likedArtistsList) likedArtistsList = likedArtistsList.filter((x) => String(x.id) !== id);
+    if (dislikedArtistsList) {
+      dislikedArtistsList = dislikedArtistsList.filter((x) => String(x.id) !== id);
+      if (off) dislikedArtistsList.unshift({ id: a.id, name: a.name, cover: a.cover, _ts: Date.now() });
+    }
+    if (off) showToast(`${name} больше не попадётся в «Моей волне»`, 5000, { kind: "ok", action: { label: "Отменить", fn: () => { if (dislikedArtists.has(id)) toggleArtistDislike(a); } } });
+    else showToast(`${name} снова может попадаться в «Моей волне»`, 3500, { kind: "ok" });
+  } catch (e) {
+    flip(!off);
+    showToast((off ? "Не удалось убрать автора из рекомендаций: " : "Не удалось вернуть автора: ") + e.message, 5000, { kind: "err" });
+  }
+}
+$("#artistDisBtn").onclick = () => { if (artistLikeItem) toggleArtistDislike(artistLikeItem); };
 
 function setHead({ title = "", img = "", round = true, back = false, sub = null, pin = null, artistWave = null, artistLike = null }) {
   artistWaveItem = artistWave; $("#artistWaveBtn").hidden = !artistWave;
@@ -2162,12 +2231,16 @@ $("#back").onclick = () => { const p = hist.pop(); if (p) { view = p; p(); } els
 
 async function showLikes(tab = likesTab) {
   const my = ++nav;
-  likesTab = tab === "playlists" || tab === "artists" ? tab : "likes";
+  // «Не рекомендуются» — только когда такие авторы есть (или эта вкладка уже открыта: последнего вернули)
+  likesTab = ["playlists", "artists", "banned"].includes(tab) ? tab : "likes";
   setHead({ title: "Лайки" }); setActive("likes"); renderTabs("likes"); resetView();
   $("#search").value = "";
-  setChips([["likes", "♥ Лайки"], ["artists", "★ Авторы"], ["playlists", "≡ Мои плейлисты"]], likesTab, (t) => { if (t !== likesTab) { view = () => showLikes(t); view(); } });
+  const chips = [["likes", "♥ Лайки"], ["artists", "★ Авторы"], ["playlists", "≡ Мои плейлисты"]];
+  if (dislikedArtists.size || likesTab === "banned") chips.push(["banned", "⊘ Не рекомендуются"]);
+  setChips(chips, likesTab, (t) => { if (t !== likesTab) { view = () => showLikes(t); view(); } });
   if (likesTab === "playlists") return showMyPlaylists(my);
   if (likesTab === "artists") return showLikedArtists(my);
+  if (likesTab === "banned") return showBannedArtists(my);
   lkFindShow();
   if (offline) return showOfflineLikes(my);           // офлайн — только скачанные
   dlSetup({ key: "likes", label: "⤓ Скачать лайки", tracks: () => (likes.done ? likes.tracks : null), all: () => loadAllLikes(() => {}, () => false) });
@@ -2223,6 +2296,23 @@ async function showLikedArtists(my) {
   } catch (e) {
     if (my !== nav) return;
     $("#status").textContent = had ? "" : isNetErr(e) ? "Нет связи — список авторов не загрузился" : "Ошибка: " + e.message;
+  }
+}
+
+// «Лайки» → «Не рекомендуются»: авторы, которых волна пропускает. Вернуть — на странице автора («⊘ Не рекомендуется»).
+async function showBannedArtists(my) {
+  if (offline) { $("#status").textContent = "Офлайн-режим — список появится, когда вернётся связь"; return; }
+  const had = dislikedArtistsList;
+  if (had) renderArtists(had); else $("#status").textContent = "Загрузка…";
+  try {
+    const list = await loadDislikedArtists();
+    if (my !== nav) return;
+    if (!had || had.length !== list.length || had.some((a, i) => String(a.id) !== String(list[i].id))) { $("#list").innerHTML = ""; renderArtists(list); }
+    $("#status").textContent = list.length ? "Эти авторы не попадаются в «Моей волне». Вернуть — на странице автора кнопкой «⊘ Не рекомендуется»"
+      : "Таких авторов нет — на странице автора есть кнопка «⊘ Не рекомендовать»";
+  } catch (e) {
+    if (my !== nav) return;
+    $("#status").textContent = had ? "" : isNetErr(e) ? "Нет связи — список не загрузился" : "Ошибка: " + e.message;
   }
 }
 
@@ -2459,7 +2549,10 @@ async function offlineLikes() {
     if (ra !== undefined || rb !== undefined) return (ra ?? Infinity) - (rb ?? Infinity) || 0;
     return (b.ts || 0) - (a.ts || 0);
   });
-  return items.map(offlineTrack);
+  // за скачанными — треки из кэша приложения (cache.js хранит их описание): без сети они играют так же
+  const out = items.map(offlineTrack), seen = new Set(out.map((t) => String(t.id)));
+  for (const t of window.appCache?.tracks?.() || []) if (!seen.has(String(t.id))) { seen.add(String(t.id)); out.push(t); }
+  return out;
 }
 async function showOfflineLikes(my) {
   const [tracks, off] = await Promise.all([offlineLikes(), suspectOffline()]);
@@ -2786,7 +2879,7 @@ async function waveMoreRun() {
           wave.session = r.radioSessionId;
         }
         wave.batch = r.batchId;
-        const incoming = trackList(r).filter((t) => !have.has(String(t.id)) && !dislikedIds.has(String(t.id)));
+        const incoming = trackList(r).filter((t) => !have.has(String(t.id)) && !dislikedIds.has(String(t.id)) && !artistBanned(t));
         const fresh = incoming.filter((t) => !heard.has(String(t.id)));
         const add = fresh.length ? fresh : incoming;
         if (wave.queue !== q) return false;
@@ -2804,12 +2897,15 @@ async function waveMoreRun() {
 async function waveStart(autoplay = true) {
   const r = await ym("rotor_new", { json: { seeds: [wave.seed], includeTracksInResponse: true } });
   const session = r.radioSessionId;
-  const okT = (t) => !dislikedIds.has(String(t.id));
+  const okT = (t) => !dislikedIds.has(String(t.id)) && !artistBanned(t);       // и без авторов из «Не рекомендуются»
   let batch = r.batchId, tracks = trackList(r).filter(okT);
+  // продолжаем от последнего присланного трека, а не от последнего подходящего: пачка могла целиком отсеяться
+  let lastId = trackList(r).at(-1)?.id;
   let fresh = tracks.filter((t) => !heard.has(String(t.id)));
-  for (let k = 0; k < 3 && fresh.length < 3 && tracks.length; k++) {
-    const more = await ym("rotor_tracks", { id: session, json: { queue: [String(tracks[tracks.length - 1].id)] } });
+  for (let k = 0; k < 3 && fresh.length < 3 && lastId != null; k++) {
+    const more = await ym("rotor_tracks", { id: session, json: { queue: [String(lastId)] } });
     batch = more.batchId;
+    lastId = trackList(more).at(-1)?.id ?? lastId;
     const have = new Set(tracks.map((t) => String(t.id)));
     tracks = tracks.concat(trackList(more).filter((t) => okT(t) && !have.has(String(t.id))));
     fresh = tracks.filter((t) => !heard.has(String(t.id)));
@@ -3554,6 +3650,7 @@ function rememberDislikes(lib) {
   try { localStorage.setItem("ym_disliked_ids", JSON.stringify(ids)); } catch {}
 }
 async function loadDislikedIds() {
+  loadDislikedArtists().catch(() => {});        // заодно — авторы из «Не рекомендуются» (волна их пропускает)
   try { rememberDislikes(await ym("dislikes")); refreshPlayerBtns(); } catch {}
 }
 function saveDislikes() { try { localStorage.setItem("ym_disliked_ids", JSON.stringify([...dislikedIds])); } catch {} }
@@ -4109,6 +4206,12 @@ function trackMenuBuild(t, ctx) {
     if (cover(t)) menuItem(ICON.image, "Сделать обложкой плейлиста", () => plCoverFromTrack(ctx.kind, t));
     menuItem(ICON.remove, "Удалить из плейлиста", () => plRemoveTrack(ctx.kind, ctx.index, t), { danger: true });
   }
+  // «Не рекомендовать автора»: один автор — сразу, несколько (совместный трек) — выбор, кого именно
+  const arts = (t.artists || []).filter((a) => a?.id != null && a.name);
+  if (arts.length === 1) {
+    const a = arts[0], off = dislikedArtists.has(String(a.id));
+    menuItem(ICON.dislike, off ? "Снова рекомендовать автора" : "Не рекомендовать автора", () => toggleArtistDislike(a));
+  } else if (arts.length > 1) menuItem(ICON.dislike, "Не рекомендовать автора", () => trackMenuArtists(t, ctx, arts), { keep: true, arrow: true });
   // звук одной группой: эквалайзер, устройство вывода, «Звук и формат»
   menuSep();
   if (window.eqOpen) menuItem(ICON.eq || "", "Эквалайзер", () => window.eqOpen());    // eq.js
@@ -4121,6 +4224,17 @@ function trackMenuBuild(t, ctx) {
   window.Whisper?.ui.trackMenu.build(t, ctx, "bottom");
   menuItem(got.has(String(t.id)) ? ICON.got : ICON.download, got.has(String(t.id)) ? "Уже скачан" : "Скачать трек", () => downloadTrack(t));
   if (got.has(String(t.id))) menuItem(ICON.remove, "Удалить с диска", () => deleteDownload(t), { danger: true });
+  placeMenu();
+}
+// у совместного трека — какого из авторов больше не рекомендовать (уже скрытого — вернуть)
+function trackMenuArtists(t, ctx, arts) {
+  menuReset();
+  menuHead("Не рекомендовать автора", () => trackMenuMain(t, ctx));
+  for (const a of arts.slice(0, 8)) {
+    const off = dislikedArtists.has(String(a.id));
+    menuItem(ICON.dislike, off ? `${a.name} — вернуть` : a.name, () => toggleArtistDislike(a));
+  }
+  menuNote("Автор больше не попадётся в «Моей волне»");
   placeMenu();
 }
 async function trackMenuPlaylists(t, ctx) {
@@ -5012,7 +5126,8 @@ async function play(i, resumeAt = 0, isRetry = false, hold = false) {
     // своя версия из «Студии» (studio.js, studio-…) — файл на диске, как скачанный. Чужая (гость «Слушать вместе»:
     // её нет в своём списке студии, studioHas) — у нас её нет: играет то, чем поделился ведущий (источники ядра, архив)
     const studio = !!rep || (isStudio(t.id) && !t._room && window.studioHas?.(String(t.id)) !== false);
-    let local = studio || got.has(String(t.id)) || (inCache && !navigator.onLine) ? LOCAL_URL : "";
+    // без сети (или уже известно, что Яндекс и архив недоступны — офлайн-режим) кэш играет сразу, без попыток сети
+    let local = studio || got.has(String(t.id)) || (inCache && (!navigator.onLine || offline)) ? LOCAL_URL : "";
     // интернета нет совсем — не ждём таймаутов сетевых запросов, сразу к скачанному
     if (!local && !navigator.onLine) throw new Error("network: нет подключения к интернету");
     if (local && !inCache && !studio) backfillMeta([t]);
@@ -5157,7 +5272,8 @@ function stopForRetry(pos = 0) {
 let offQueue = null;
 async function offlineFallback(i, my) {
   for (let k = i + 1; k < queue.length; k++) {
-    if (got.has(String(queue[k].id))) {
+    const id = String(queue[k].id);
+    if (got.has(id) || window.appCache?.has(id)) {           // скачанный или из кэша приложения (cache.js)
       $("#status").textContent = offline ? "" : "Трек не загрузился — играет следующий скачанный";
       play(k);
       return true;
