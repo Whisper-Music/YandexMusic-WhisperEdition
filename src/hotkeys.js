@@ -125,7 +125,7 @@
     if (!mods.length && code === "Escape") { recording = null; paintRows(); return; }
     if (!mods.length && (code === "Backspace" || code === "Delete")) { hk.binds[recording] = ""; recording = null; save(); paintRows(); return; }
     if (!SUPPORTED.test(code)) { m.hint.textContent = "Эту клавишу назначить нельзя"; return; }
-    if (!mods.length && !SOLO.test(code)) { m.hint.textContent = "Нужен Alt, Shift или Ctrl — одиночные клавиши мешали бы в играх и при наборе текста"; return; }
+    if (!mods.length && !SOLO.test(code)) { m.hint.textContent = "Нужен Alt, Shift или Ctrl"; return; }
     const accel = canon([...mods, code].join("+"));
     // то же сочетание у другого действия — переносим его сюда
     for (const [a] of ACTIONS) if (a !== recording && hk.binds[a] === accel) hk.binds[a] = "";
@@ -158,7 +158,7 @@
     // общее окно «Подробнее» (details.js); Esc во время записи — отмена записи, а не закрытие
     const d = openDetails({
       title: "Горячие клавиши", wide: true,
-      sub: "Работают везде: в свёрнутом окне, в трее и в играх. Нажми на сочетание, чтобы назначить новое.",
+      sub: "Нажми на сочетание, чтобы назначить новое",
       body: (b) => b.append(list, hint), foot: [reset],
       escape: () => !recording,
       onClose: () => {

@@ -50,7 +50,7 @@
 
   function openSettings() {
     $("#settingsBtn")?.click();
-    document.querySelector('#settingsPage .chip[data-tab="app"]')?.click();
+    document.querySelector(`#settingsPage .chip[data-tab="${$u("updCard")?.dataset.tab || "app"}"]`)?.click();
     $u("updBox")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
@@ -60,8 +60,19 @@
     const bar = $u("updBar");
     bar.hidden = false; bar.style.setProperty("--p", "0");
     note(`Скачивается версия ${info.version}…`);
+    if (window.isMobile) showToast(`Скачивается версия ${info.version}…`, 4000);
     try {
       await invoke("update_install");          // при успехе приложение перезапускается само
+      // телефон: Rust (apkupdate.rs) только скачал APK — поставить его просит система, через мост Android
+      if (window.isMobile) {
+        const r = window.WhisperAndroid?.installUpdate?.() || "missing";
+        busy = false; bar.hidden = true; paint();
+        if (r === "ok") note("Подтверди установку в окне Android — приложение обновится и откроется заново.");
+        else if (r === "perm") {
+          note("Разреши установку из этого приложения в открывшихся настройках, вернись и нажми «Обновить» ещё раз.", true);
+          showToast("Разреши установку из этого приложения и нажми «Обновить» ещё раз", 8000);
+        } else note("Не удалось открыть установку: " + (r === "missing" ? "файл обновления не нашёлся" : r), true);
+      }
     } catch (e) {
       busy = false; bar.hidden = true; paint();
       note("Обновление не установлено: " + (e?.message || e), true);

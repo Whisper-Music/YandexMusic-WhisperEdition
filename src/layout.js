@@ -63,15 +63,7 @@
     document.getElementById("layoutCard")?.classList.toggle("lylock", locked);
     document.getElementById("layoutCard")?.classList.toggle("lysuper", isSuper());
     // в свёрнутой панели подписей не видно — показываем их подсказкой
-    const fold = document.getElementById("sideFold");
     const sbMini = eff("sb") === "mini";
-    if (fold) fold.hidden = locked;
-    if (fold) {
-      fold.textContent = "Свернуть";
-      // в мини-вид эта кнопка возвращает обычный вид
-      fold.title = isSuper() ? "Обычный вид (Ctrl+Shift+M)" : sbMini ? "Развернуть панель" : "Свернуть панель";
-      fold.setAttribute("aria-expanded", sbMini ? "false" : "true");
-    }
     document.querySelectorAll(".side > .nav:not(.sidefold)").forEach((b) => {
       if (sbMini) { if (!b.title) { b.title = b.textContent.trim(); b.dataset.lyTitle = "1"; } }
       else if (b.dataset.lyTitle) { b.removeAttribute("title"); delete b.dataset.lyTitle; }
@@ -450,13 +442,13 @@
       initSearchFloat(box, inner, grip, s);
     }
 
-    // кнопка сворачивания прямо на панели — в самом низу
+    // под «Профилем» — небольшой пустой отступ (раньше здесь была кнопка «Свернуть»: свернуть панель можно
+    // перетаскиванием края, выйти из мини-вида — Ctrl+Shift+M или двойным щелчком по пустому месту панели)
     const side = document.querySelector(".side");
-    if (side && !document.getElementById("sideFold")) {
-      const b = document.createElement("button");
-      b.className = "nav sidefold"; b.id = "sideFold"; b.type = "button";
-      b.onclick = () => (isSuper() ? set("ui", "normal") : set("sb", ly.sb === "mini" ? "full" : "mini"));
-      side.append(b);
+    if (side && !side.querySelector(":scope > .sidegap")) {
+      const g = document.createElement("div");
+      g.className = "sidegap"; g.setAttribute("aria-hidden", "true");
+      side.append(g);
     }
 
     document.querySelectorAll(".lyseg[data-k]").forEach((g) => {

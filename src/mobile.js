@@ -88,6 +88,7 @@
     [/(?:этом|другом) компьютере/g, (m) => (m.startsWith("эт") ? "этом телефоне" : "другом устройстве")],
     // \b в JS не видит границу у кириллицы — поэтому «дальше не буква»
     [/компьютер(е|а|ом|у)?(?![а-яё])/g, "телефон$1"],
+    [/Обновить и перезапустить/g, "Скачать и установить"],
     [/с диска/g, "с телефона"], [/на диске/g, "на телефоне"], [/на диск(?![а-яё])/g, "на телефон"],
   ];
   const EN = [
@@ -124,7 +125,7 @@
   function mobileWords() {
     const SKIP = "script, style, textarea, input, [contenteditable], [data-noi18n], #cli, .list li .t, .list li .a, .tartists, #fLyrics, .qpanel li .t, .qpanel li .a";
     const ATTRS = ["title", "placeholder", "aria-label"];
-    const HIT = /диск|компьютер|щелч|Щелч|Щёлкни|Ctrl\+|Alt\+|Esc|наведени|перетащи|мышью/i;
+    const HIT = /диск|компьютер|щелч|Щелч|Щёлкни|Ctrl\+|Alt\+|Esc|наведени|перетащи|мышью|перезапустить/i;
     const doText = (n) => { const s = n.data; if (HIT.test(s) && !n.parentElement?.closest(SKIP)) { const v = fixRu(s); if (v !== s) n.data = v; } };
     const doAttr = (el, a) => { const s = el.getAttribute(a); if (s && HIT.test(s)) { const v = fixRu(s); if (v !== s) el.setAttribute(a, v); } };
     const walk = (root) => {
@@ -224,6 +225,9 @@
     // настройки: вкладки всегда сверху; «Приложения» на телефоне нет — была открыта она, переходим на первую
     const sp = document.getElementById("settingsPage");
     if (sp) sp.dataset.tabs = "top";
+    // «Обновления» живут во вкладке «Приложение», которой на телефоне нет, — переносим в «Данные»
+    const upd = document.getElementById("updCard");
+    if (upd) { upd.dataset.tab = "data"; upd.classList.remove("colbreak"); }
     const appTab = document.querySelector('#setTabs .chip[data-tab="app"]');
     if (appTab?.classList.contains("active")) document.querySelector("#setTabs .chip:not([data-tab=\"app\"])")?.click();
     navBar();

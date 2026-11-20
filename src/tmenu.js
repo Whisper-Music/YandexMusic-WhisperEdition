@@ -313,7 +313,7 @@
     reset.onclick = () => { st.hide.clear(); save(); list.querySelectorAll(".tmrow").forEach(paintRow); note(); };
     window.openDetails?.({
       title: "Меню трека",
-      sub: "Какие действия показывать в меню «⋯» и по правому щелчку. Пункт появляется, только когда он к месту: «Удалить из плейлиста» — в своём плейлисте, «Удалить с диска» — у скачанного трека.",
+      sub: "Какие действия показывать в меню «⋯»",
       body: list,
       foot: [reset],
     });

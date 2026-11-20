@@ -150,7 +150,7 @@
       const box = document.createElement("form"); box.className = "panel login-box modalbox bkbox"; box.noValidate = true;
       box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Резервная копия");
       const h = document.createElement("h2"); h.textContent = "Резервная копия";
-      const p = document.createElement("p"); p.textContent = "Настройки, цвета, закреплённые, горячие клавиши и расположение попадут в копию всегда. Токены входа — никогда.";
+      const p = document.createElement("p"); p.textContent = "Токены входа в копию не попадают";
       box.append(h, p);
       const checks = [];
       for (const g of GROUPS) {
@@ -295,7 +295,7 @@
     // общее окно «Подробнее» (details.js)
     const d = openDetails({
       title: "Автокопии",
-      sub: "Whisper сам сохраняет настройки и список скачанных треков. Если что-то сломалось или пропало — выбери, на какой момент вернуть.",
+      sub: "Выбери, на какой момент вернуть настройки",
     });
     const box = d.body, st = d.note, close = d.close;
     const section = (title, list, empty, fn) => {

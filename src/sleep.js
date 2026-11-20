@@ -199,7 +199,7 @@
   let slDt = null;
   $("#slWavePick").onclick = async () => {
     if (slDt) { slDt.close(); return; }
-    slDt = openDetails({ title: "Моя волна для сна", sub: "Под какую волну засыпать. Последние 3 минуты музыка плавно затихает.", wide: true, adopt: [$("#slStations")], onClose: () => { slDt = null; } });
+    slDt = openDetails({ title: "Моя волна для сна", sub: "Под какую волну засыпать", wide: true, adopt: [$("#slStations")], onClose: () => { slDt = null; } });
     $("#slChips").innerHTML = ""; $("#slGrid").textContent = "Список загружается…";
     try { await loadStations(); renderPicker(); await resolveCalm(); renderPicker(); }
     catch (e) { $("#slGrid").textContent = "Не удалось загрузить список: " + e.message; }

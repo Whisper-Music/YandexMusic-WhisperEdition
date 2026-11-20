@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Значок Android 8+. Картинка ic_launcher_foreground — весь значок целиком (квадрат с буквой W), а лаунчер
+     показывает только середину слоя (72 из 108 dp) — буква обрезалась по краям. Отступ 1/6 с каждой стороны
+     ужимает картинку ровно в видимую часть: значок виден целиком, вокруг W остаётся воздух.
+     npx tauri icon перезаписывает этот файл — после него верни inset. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+  <foreground>
+    <inset android:drawable="@mipmap/ic_launcher_foreground" android:inset="16.7%" />
+  </foreground>
   <background android:drawable="@color/ic_launcher_background"/>
 </adaptive-icon>

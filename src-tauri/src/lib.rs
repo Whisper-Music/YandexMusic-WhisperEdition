@@ -59,6 +59,9 @@ mod themelib;
 mod thumbbar;
 #[cfg(desktop)]
 mod update;
+// на телефоне обновление — новый APK с GitHub (те же команды update_check / update_install)
+#[cfg(mobile)]
+mod apkupdate;
 // Whisper Archive: общая часть приходит с ядром (подмодуль whisper-core в src/core), своё у приложения —
 // whisper_host (хранилище ключа, семафор, Origin, подпись) и whisper_yandex (что архив делает с треками Яндекса)
 #[path = "../../src/core/rust/whisper/mod.rs"]
@@ -318,7 +321,7 @@ pub fn run() {
         winstate::app_ready
     ]);
     #[cfg(mobile)]
-    let builder = builder.invoke_handler(commands![]);
+    let builder = builder.invoke_handler(commands![apkupdate::update_check, apkupdate::update_install]);
     builder
         // Whisper Archive: потоковое воспроизведение треков архива (wa://localhost/track/<id>,
         // на Windows и Android — http://wa.localhost/...). Только для главного окна: окно входа Яндекса
@@ -358,6 +361,8 @@ pub fn run() {
             secret::init(app.handle());
             deeplink::init(app.handle()); // ссылки whisper://room/КОД (приглашения в комнату) и whisper://track|album|artist/…
             app.manage(bg::Picked::default());
+            #[cfg(mobile)]
+            app.manage(apkupdate::Pending::default());
             #[cfg(desktop)]
             shell::setup(app)?;
             Ok(())

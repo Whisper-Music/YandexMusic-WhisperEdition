@@ -98,7 +98,7 @@
   let dt = null;
   async function open() {
     if (dt) { dt.close(); return; }
-    dt = openDetails({ title: "Шрифт интерфейса", sub: "Каждое название показано своим шрифтом. Щёлкни — и он сразу применится.", adopt: [box, note], onClose: () => { dt = null; } });
+    dt = openDetails({ title: "Шрифт интерфейса", sub: "Щёлкни — шрифт сразу применится", adopt: [box, note], onClose: () => { dt = null; } });
     if (!fonts) {
       note.textContent = "Читаю список шрифтов…";
       await loadFonts();

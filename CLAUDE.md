@@ -198,6 +198,8 @@ src-tauri/
   src/*.rs                net (запросы к Яндексу), auth/secret (токен в keyring), download, engine (WASAPI),
                           theme/themelib, hotkeys,
                           fonts (список шрифтов), desktop (обои), power (экономия в трее), update,
+                          apkupdate (телефон: те же update_check/update_install — APK последнего выпуска с GitHub в кэш,
+                          ставит система через мост MainActivity.installUpdate; карточка «Обновления» на телефоне — во «Данных»),
                           mixer (Windows: имя и значок приложения у звуковых сеансов WebView2 в микшере громкости), …
                           backup (файл .wbak через диалог; автокопии в <папка настроек>/backups: settings, downloaded,
                           downloads — последние 8; download.rs сам восстанавливает из них повреждённый индекс и папки)

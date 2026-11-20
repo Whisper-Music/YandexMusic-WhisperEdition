@@ -296,7 +296,7 @@ async function ym(op, { id = null, query = null, form = null, json = null } = {}
 }
 
 const STYLE_DEF = {
-  neon:  { accent: "#a66bff", accent2: "#e060ff", glow: 22, panel: 70, dim: 10, bg: "" },
+  neon:  { accent: "#a66bff", accent2: "#ffffff", glow: 22, panel: 70, dim: 10, bg: "" },
   royal: { accent: "#c9a24b", accent2: "#8b1e2d", glow: 6, panel: 92, dim: 10, bg: "" },
   steam: { accent: "#c58a4b", accent2: "#8c4f24", glow: 4, panel: 90, dim: 10, bg: "" },
   lolitta: { accent: "#e2aab4", accent2: "#8c4a5c", glow: 4, panel: 94, dim: 10, bg: "" },
@@ -325,7 +325,7 @@ function feature(name, st = cfg.style) {
   return name === "glow" ? baseOf(st) === "neon" : true;
 }
 // style: "neon" — первый стиль, который видит новый пользователь (и после «Сбросить оформление»)
-const freshCfg = () => ({ style: "neon", blur: 6, viz: true, vizStyle: "circle", anim: true, bg: "", themes: [], s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k], cc: {} }])) });
+const freshCfg = () => ({ style: "neon", blur: 6, viz: true, vizStyle: "bars", anim: true, bg: "", themes: [], s: Object.fromEntries(Object.keys(STYLE_DEF).map((k) => [k, { ...STYLE_DEF[k], cc: {} }])) });
 function loadCfg() {
   let saved = null, old = null;
   try { saved = JSON.parse(localStorage.getItem("ym_cfg3") || "null"); } catch {}
@@ -348,7 +348,7 @@ function loadCfg() {
     for (const k of STYLE_KEYS) if (old[k] !== undefined) c.s.neon[k] = old[k];
   }
   if (!c.s[c.style]) c.style = "neon";
-  if (!VIZ_STYLES.includes(c.vizStyle)) c.vizStyle = "circle";
+  if (!VIZ_STYLES.includes(c.vizStyle)) c.vizStyle = "bars";        // по умолчанию — столбцами
   return c;
 }
 let cfg = loadCfg();

@@ -247,6 +247,32 @@ class MainActivity : TauriActivity() {
       incomingFile().delete()
     }
 
+    /**
+     * Поставить скачанное обновление (apkupdate.rs кладёт его в кэш как update.apk): системное окно «Обновить?».
+     * Путь не передаётся — мост виден и странице входа Яндекса, ставить она может только этот файл, а Android
+     * примет его, лишь если он подписан тем же ключом, что и приложение.
+     * "ok" — окно открыто; "perm" — сначала надо разрешить установку из приложения (открыты настройки);
+     * "missing" — файла нет; иначе — текст ошибки.
+     */
+    @JavascriptInterface fun installUpdate(): String {
+      val f = java.io.File(cacheDir, "update.apk")
+      if (!f.exists()) return "missing"
+      return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+          startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+          return "perm"
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", f)
+        startActivity(Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(uri, "application/vnd.android.package-archive")
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+        "ok"
+      } catch (e: Exception) {
+        e.message ?: "error"
+      }
+    }
+
     /** Что играет: { title, artist, cover, duration, position (мс), playing } — mobilemedia.js. Пустой title — трека нет. */
     @JavascriptInterface fun media(json: String) {
       val j = try { JSONObject(json) } catch (_: Exception) { return }

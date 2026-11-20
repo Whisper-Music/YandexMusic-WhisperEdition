@@ -243,28 +243,10 @@ html:root[data-ly-sb="mini"] .side .nav:hover:not(.active) { transform: none; }
 .side > #studioBtn { --ic: var(--ly-i-studio); }
 .side > #friendsBtn { --ic: var(--ly-i-friends); }
 .side > #profile { --ic: var(--ly-i-user); }
-/* кнопка «Свернуть» внизу панели: неброская, со стрелками к краю (в полосе — от края, «развернуть») */
-.side > #sideFold { --ic: var(--ly-i-fold); }
-html:root .side > .nav.sidefold {
-  display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 6px 12px; min-height: 0;
-  font-size: 13px; color: var(--muted); background: transparent; border-color: transparent; box-shadow: none; text-shadow: none;
-}
-html:root .side > .nav.sidefold:hover { color: var(--text); background: rgba(255,255,255,.08); filter: none; transform: none; }
-/* у «Lolitta» панель светлая — нужен тёмный текст */
-html:root[data-style="lolitta"] .side > .nav.sidefold { color: var(--l-ink2, var(--muted)); font-family: var(--font-display, inherit); }
-html:root[data-style="lolitta"] .side > .nav.sidefold:hover { color: var(--l-ink, var(--text)); background: rgba(255,255,255,.35); }
-html:root[data-style="lolitta"] .side > .nav.sidefold::before { background: currentColor; }
-:where(html:root) .side > .sidefold::before {
-  content: ""; flex: none; width: 16px; height: 16px; background: currentColor;
-  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
-}
-html:root .side > .nav.sidefold::before { width: 16px; height: 16px; filter: none; }
-html:root[data-ly-side="left"][data-ly-sb="mini"] .side > .sidefold::before,
-html:root[data-ly-side="right"]:not([data-ly-sb="mini"]) .side > .sidefold::before { transform: scaleX(-1); }
-html:root[data-ly-side="right"]:not([data-ly-sb="mini"]) .side > .nav.sidefold { flex-direction: row-reverse; }
-/* gap: 0 — подпись «Свернуть» спрятана (font-size: 0), но как элемент остаётся, и промежуток до неё сдвигал значок влево */
-html:root[data-ly-sb="mini"] .side > .nav.sidefold { justify-content: center; gap: 0; padding: 0; font-size: 0; height: 36px; width: 46px; align-self: center; }
-html:root[data-ly-sb="mini"] .side > .sidefold::before { width: 18px; height: 18px; }
+/* под «Профилем» — небольшой пустой отступ (layout.js; кнопки «Свернуть» здесь больше нет):
+   в обычном виде, в свёрнутой панели и в мини-виде нижняя кнопка не прилипает к краю */
+.side > .sidegap { flex: none; height: 10px; pointer-events: none; }
+html:root[data-ly-ui="super"] .side > .sidegap { height: 6px; }
 
 :where(html:root[data-ly-sb="mini"]) .side .nav::before {
   content: ""; flex: none; width: 22px; height: 22px; background: currentColor;
@@ -382,7 +364,6 @@ html:root[data-ly-ui="super"] .side { gap: 6px; }
 html:root[data-ly-ui="super"] .side .nav:not(.sidefold), html:root[data-ly-ui="super"] .sbox,
 html:root[data-ly-ui="super"] .sbox .search:not(:focus) { width: 42px; height: 42px; }
 html:root[data-ly-ui="super"] .side .nav:not(.sidefold)::before { width: 22px; height: 22px; }
-html:root[data-ly-ui="super"] .side > .nav.sidefold { height: 30px; width: 42px; }
 html:root[data-ly-ui="super"][data-style="royal"] .side { padding-top: 34px !important; padding-bottom: 34px !important; }
 
 /* плеер: обёртка без своего фона — плитка и таблетка как отдельные панели */

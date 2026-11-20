@@ -91,7 +91,7 @@
   if (WEB) {
     if (back) { back.hidden = false; back.onclick = goBack; }
     if (btn) { btn.textContent = "Вернуться в приложение"; btn.onclick = goBack; }
-    if (note) note.textContent = "Сейчас Whisper открыт во вкладке браузера. Вернёшься — настройки перенесутся в окно";
+    if (note) { note.textContent = "Открыт во вкладке браузера"; note.title = "Вернёшься — настройки перенесутся в окно"; }
     window.addEventListener("whisper:web-gone", showGone);
     setInterval(() => sync(), 20000);
     setTimeout(() => sync(true), 3000);           // первая отметка «как сейчас» (и всё, что поменялось при запуске)

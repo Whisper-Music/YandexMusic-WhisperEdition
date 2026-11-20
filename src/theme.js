@@ -306,13 +306,13 @@
       }
       const fx = fxOf(id), it = introOf(id), animOff = document.documentElement.dataset.anim === "off";
       if (!fx.length && !it) {
-        body.append(el("p", "thsetempty", "У этой темы нет своих эффектов и интро. Они бывают у тем из библиотеки, а в своей теме их можно описать в файле .wmt — см. «Темы оформления» в документации."));
+        body.append(el("p", "thsetempty", "У этой темы нет своих эффектов и интро"));
       }
       if (fx.length) {
         const sec = el("div", "thsetsec");
         sec.append(el("h4", "", "Эффекты"));
         for (const o of fx) sec.append(sw(o.label, themeFx(o.k, o.def, id), (v) => { themeFxSet(id, o.k, v); paintIntro(); }, { hint: o.hint, raw: true }));
-        if (animOff) sec.append(el("p", "status", "Анимации интерфейса выключены — эффекты стоят неподвижно (если тема это умеет)."));
+        if (animOff) sec.append(el("p", "status", "Анимации выключены — эффекты неподвижны"));
         body.append(sec);
       }
       if (it) {
@@ -338,16 +338,16 @@
       const sec = el("div", "thsetsec");
       sec.append(el("h4", "", "Исходный вид"));
       const row = el("div", "thsetrow");
-      row.append(el("span", "status", BUILTIN.includes(id)
-        ? "Цвета, свечение, затемнение и прозрачность — как изначально, без своего фона."
-        : "Фон, цвета, свечение, затемнение, прозрачность и эффекты — как в файле темы."));
+      const rs = el("span", "status", BUILTIN.includes(id) ? "Как изначально" : "Как в файле темы");
+      rs.title = BUILTIN.includes(id) ? "Цвета, свечение, затемнение и прозрачность — без своего фона" : "Фон, цвета, свечение, затемнение, прозрачность и эффекты";
+      row.append(rs);
       const rb = el("button", "nav", "↺ Вернуть"); rb.type = "button";
       rb.onclick = () => { thDt?.close(); window.resetStyle?.(id); };
       row.append(rb);
       sec.append(row);
       body.append(sec);
     };
-    thDt = openDetails({ title: "Настроить тему", sub: "Эффекты темы и интро при запуске — их можно выключить, не трогая остальное оформление.", body: paint, onClose: () => { thDt = null; } });
+    thDt = openDetails({ title: "Настроить тему", sub: "Эффекты темы и интро при запуске", body: paint, onClose: () => { thDt = null; } });
   }
   window.openThemeSetup = openThemeSetup;
   document.getElementById("thSetBtn")?.addEventListener("click", () => openThemeSetup());

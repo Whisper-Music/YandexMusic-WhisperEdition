@@ -409,7 +409,6 @@
         <div class="card" id="layoutCard" data-tab="ui">
           <h3>Расположение</h3>
           <div class="lyrow lyrow-ui"><span>Вид интерфейса</span><div class="lyseg" data-k="ui"><button class="chip" data-v="normal">Обычный</button><button class="chip" data-v="super" title="Боковая панель — колонка значков, плеер — компактная панель снизу. Переключить: Ctrl+Shift+M или двойной щелчок по пустому месту панели">Мини</button></div></div>
-          <p class="status lysuper-note">Мини: Ctrl+Shift+M или двойной щелчок по пустому месту панели — переключить вид.</p>
           <!-- свернуть боковую и нижнюю панели можно перетаскиванием края — в настройках этих переключателей нет -->
           <div class="lyrow"><span>Боковая панель</span><div class="lyseg" data-k="side"><button class="chip" data-v="left">Слева</button><button class="chip" data-v="right" title="Закреплённые альбомы и артисты тоже переедут вправо">Справа</button></div></div>
           <div class="lyrow"><span>Время трека</span><div class="lyseg" data-k="time"><button class="chip" data-v="always">Всегда</button><button class="chip" data-v="hover" title="Время появляется при наведении на линию воспроизведения">При наведении</button></div></div>
@@ -420,7 +419,6 @@
           <h3>Панели <i class="hint" title="Перетаскивай кнопки, чтобы поменять порядок. Глазик — показать или скрыть кнопку. Галочка — стартовая страница: она откроется при запуске приложения; выбрать можно только одну">i</i></h3>
           <label class="switch" id="pinHideCard" title="Закладки или колонка закреплённых прячутся. Наведи на верхний край (или на край со стороны боковой панели) — они выедут"><input type="checkbox" id="pinHide" /><i></i><span>Скрывать закреплённые</span></label>
           <div class="sbl" id="sideList" role="list" aria-label="Кнопки боковой панели"></div>
-          <p class="status sblnote">✓ — стартовая страница: открывается при запуске, выбрать можно одну</p>
           <!-- флажки модулей (listenstats.js, studio.js): переключает глазик в списке выше -->
           <input type="checkbox" id="statsBtnOn" hidden />
           <input type="checkbox" id="stuOn" hidden />
@@ -591,15 +589,15 @@
         </div>
         <!-- браузерная версия (webmode.js / webmode.rs): в окне — «Открыть в браузере», во вкладке — «Вернуться в приложение» -->
         <div class="card" id="webCard" data-tab="app">
-          <h3>Браузерная версия <i class="hint" title="Интерфейс откроется во вкладке браузера по умолчанию, а окно спрячется в трей. Настройки, темы и фоны переносятся. Работает только на этом компьютере">i</i></h3>
-          <div class="dcline"><span class="dcnote" id="webNote">Тот же Whisper во вкладке браузера. Музыка играет во вкладке</span><button type="button" class="nav" id="webBtn">Открыть в браузере</button></div>
+          <h3>Браузерная версия <i class="hint" title="Интерфейс откроется во вкладке браузера по умолчанию, музыка будет играть там, а окно спрячется в трей. Настройки, темы и фоны переносятся. Работает только на этом компьютере">i</i></h3>
+          <div class="dcline"><span class="dcnote" id="webNote"></span><button type="button" class="nav" id="webBtn">Открыть в браузере</button></div>
           <p id="webStatus" class="status"></p>
         </div>
         <div class="card colbreak" id="hkCard" data-tab="app">
           <h3>Горячие клавиши</h3>
           <label class="switch" title="Сочетания работают везде: в свёрнутом окне, в трее и в играх"><input type="checkbox" id="hkOn" /><i></i><span>Глобальные сочетания клавиш</span></label>
           <div class="dcline"><span class="dcnote" id="hkNote"></span><button class="nav" id="hkSetup">Настроить…</button></div>
-          <div class="dcline"><span class="dcnote">Клавиши внутри окна: стрелки, Пробел, Ctrl+F и другие</span><button class="nav" id="kbHelpBtn">Список (F1)</button></div>
+          <div class="dcline"><span class="dcnote" title="Стрелки, Пробел, Ctrl+F и другие">Клавиши в окне</span><button class="nav" id="kbHelpBtn">Список (F1)</button></div>
         </div>
         <div class="card" id="linkCard" data-tab="app">
           <h3>Треки по ссылке <i class="hint" title="YouTube, SoundCloud, видео и клипы ВКонтакте: скачивается только звук (m4a или mp3), дальше — то же окно, что при перетаскивании файла. Качает бесплатная программа yt-dlp: официальный выпуск с GitHub, контрольная сумма сверяется, раз в неделю обновляется сама. Ссылка вставляется и через Ctrl+V прямо в окне.">i</i></h3>
@@ -633,16 +631,14 @@
           <div class="row"><button type="button" class="nav danger" id="lsClear">Очистить записанное…</button></div>
         </div>
         <div class="card" id="bkCard" data-tab="data">
-          <h3>Резервная копия <i class="hint" title="Вход в Яндекс и ключ Whisper Archive в копию не попадают — на другом компьютере войди заново.">i</i></h3>
-          <p class="status">Настройки, закреплённые, темы, фоны и статистика — одним файлом .wbak.</p>
+          <h3>Резервная копия <i class="hint" title="Настройки, закреплённые, темы, фоны и статистика — одним файлом .wbak. Вход в Яндекс и ключ Whisper Archive в копию не попадают — на другом компьютере войди заново">i</i></h3>
           <div class="row"><button type="button" class="nav" id="bkSave">Сохранить копию…</button><button type="button" class="nav" id="bkLoad">Восстановить из файла…</button></div>
           <div class="dcline"><span class="dcnote" id="bkAuto" title="Whisper сам сохраняет настройки и список скачанных треков на случай повреждения">Автокопии: —</span><button type="button" class="nav" id="bkAutoBtn">Автокопии…</button></div>
           <p class="status" id="bkNote"></p>
         </div>
         <div class="card colbreak" id="resetCard" data-tab="data">
           <h3>Сброс</h3>
-          <p class="status">Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся.</p>
-          <div class="row"><button class="nav danger" id="cfgReset">Сбросить оформление…</button></div>
+          <div class="row"><button class="nav danger" id="cfgReset" title="Стиль, цвета, фон и визуализатор вернутся к начальным. Загруженные темы останутся">Сбросить оформление…</button></div>
         </div>
       </section>
     </main>
